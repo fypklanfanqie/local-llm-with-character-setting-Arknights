@@ -1,0 +1,10 @@
+<resources>
+    <!-- PRTS 终端深色主题色板 -->
+    <color name="prts_bg_primary">#FF0A0A0F</color>
+    <color name="prts_bg_secondary">#FF0E0E16</color>
+    <color name="prts_gold">#FFC9A87C</color>
+    <color name="prts_gold_dim">#FF8A7355</color>
+    <color name="prts_text_primary">#FFE8E4E0</color>
+    <color name="prts_text_secondary">#FF9A9690</color>
+    <color name="prts_text_dim">#FF5A5650</color>
+</resources>

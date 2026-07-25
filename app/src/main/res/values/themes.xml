@@ -1,0 +1,8 @@
+<resources>
+    <style name="Theme.RhodesIslandTerminal" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">@color/prts_bg_primary</item>
+        <item name="android:navigationBarColor">@color/prts_bg_primary</item>
+        <item name="android:windowBackground">@color/prts_bg_primary</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>

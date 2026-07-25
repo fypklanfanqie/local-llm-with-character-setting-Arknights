@@ -1,0 +1,31 @@
+# Android / Gradle
+*.iml
+.gradle/
+local.properties
+.idea/
+.DS_Store
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# Kotlin
+*.kotlin_metadata
+.kotlin/
+
+# Release artifacts
+app/release/
+
+# Native build artifacts (compiled by CMake/externalNativeBuild, not prebuilt)
+app/src/main/jniLibs/*/libllama_jni.so
+
+# Backup / legacy files
+_elf_backup/
+
+# Python cache
+__pycache__/
+*.pyc

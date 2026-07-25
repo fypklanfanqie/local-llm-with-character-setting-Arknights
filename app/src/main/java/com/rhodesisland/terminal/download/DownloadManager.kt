@@ -1,0 +1,413 @@
+package com.rhodesisland.terminal.download
+
+import android.content.Context
+import android.util.Log
+import com.rhodesisland.terminal.data.model.DownloadState
+import com.rhodesisland.terminal.data.model.ModelInfo
+import com.rhodesisland.terminal.provider.local.ModelPathResolver
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.json.Json
+import okhttp3.Call
+import okhttp3.EventListener
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.io.File
+import java.io.IOException
+import java.io.RandomAccessFile
+
+/**
+ * 模型下载管理器（MNN 多文件目录）
+ *
+ * 功能：
+ * - 下载 / 暂停 / 恢复 / 删除
+ * - 后台下载
+ * - 断点续传（HTTP Range）
+ * - 自动重试
+ * - 分片合并
+ *
+ * 下载目录：Android/data/<package>/files/models/<id>/
+ */
+class DownloadManager(private val context: Context) {
+
+    companion object {
+        private const val TAG = "DownloadManager"
+        private const val MAX_RETRY = 3
+        private const val CHUNK_SIZE = 8192L
+
+        /** HF 仓库里无需下载的辅助文件（非模型本体） */
+        private val SKIP_FILES = setOf(
+            ".gitattributes", ".gitignore", "README.md", "README", "LICENSE",
+        )
+    }
+
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+        .writeTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+        .eventListenerFactory(EventListener.Factory { EventListener.NONE })
+        .build()
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /** 各模型下载状态流 */
+    private val _states = MutableStateFlow<Map<String, DownloadState>>(emptyMap())
+    val states: StateFlow<Map<String, DownloadState>> = _states
+
+    /** 下载任务句柄（用于暂停/取消）-- 并发安全 */
+    private val jobs = java.util.concurrent.ConcurrentHashMap<String, Job>()
+    private val pauseFlags = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+
+    /** 当前活跃的 OkHttp Call，用于 pause/delete 时真正中断阻塞式 source.read()。
+     *  仅靠 Job.cancel() 无法打断 native 阻塞 IO，必须 call.cancel() 关闭底层连接。 */
+    private val calls = java.util.concurrent.ConcurrentHashMap<String, Call>()
+
+    /** 标记模型为已安装（扫描到本地文件时调用） */
+    fun markInstalled(modelId: String, path: String) {
+        updateState(modelId, DownloadState.Completed(path))
+    }
+
+    fun getState(modelId: String): DownloadState =
+        _states.value[modelId] ?: DownloadState.NotDownloaded
+
+    private fun updateState(modelId: String, state: DownloadState) {
+        _states.update { it + (modelId to state) }
+    }
+
+    /**
+     * 开始下载
+     */
+    fun startDownload(model: ModelInfo) {
+        if (jobs[model.id]?.isActive == true) return
+        pauseFlags[model.id] = false
+
+        val job = scope.launch {
+            var retry = 0
+            while (retry < MAX_RETRY && pauseFlags[model.id] != true) {
+                try {
+                    // MNN 模型为多文件目录 + 分片合并，共用暂停/取消/状态机制。
+                    downloadMnnModel(model)
+                    return@launch
+                } catch (e: CancellationException) {
+                    // 协程被取消（pause 或 delete 触发），不重试
+                    throw e
+                } catch (e: Exception) {
+                    if (pauseFlags[model.id] == true || !currentCoroutineContext().isActive) return@launch
+                    retry++
+                    Log.w(TAG, "Download ${model.id} failed (attempt $retry): ${e.message}")
+                    if (retry >= MAX_RETRY) {
+                        updateState(model.id, DownloadState.Failed(e.message ?: "下载失败"))
+                        return@launch
+                    }
+                    delay(2000L * retry)
+                }
+            }
+        }
+        jobs[model.id] = job
+    }
+
+    // ===== MNN 多文件目录下载 =====
+
+    /** HuggingFace 仓库文件列表 API 响应（仅取 siblings[].rfilename） */
+    @Serializable
+    private data class HfModelInfo(val siblings: List<HfSibling> = emptyList())
+
+    @Serializable
+    private data class HfSibling(val rfilename: String = "")
+
+    /** ModelScope 仓库文件列表 API 响应（国内可访问；取 Data.Files[].Path，过滤 Type=="tree" 目录） */
+    @Serializable
+    private data class MsRepoFiles(@SerialName("Data") val data: MsRepoData? = null)
+
+    @Serializable
+    private data class MsRepoData(@SerialName("Files") val files: List<MsRepoFile>? = null)
+
+    @Serializable
+    private data class MsRepoFile(@SerialName("Path") val path: String = "", @SerialName("Type") val type: String = "")
+
+    private val mnnJson = Json { ignoreUnknownKeys = true; isLenient = true }
+
+    /** 下载 MNN 模型整个仓库到 `<models>/<id>/`，完成后合并分片并校验。 */
+    private suspend fun downloadMnnModel(model: ModelInfo) {
+        val dir = ModelPathResolver.getModelDir(context, model.id)
+        if (!dir.exists()) dir.mkdirs()
+        val total = model.size
+
+        val files = listMnnRepoFiles(model)
+        if (files.isEmpty()) throw Exception("无法获取 MNN 模型文件列表: ${model.repo}")
+        Log.i(TAG, "MNN 模型 ${model.id}: ${files.size} 个文件 -> ${dir.absolutePath}")
+
+        updateState(model.id, DownloadState.Downloading(0L, total))
+        var aggregate = 0L
+        for (file in files) {
+            if (pauseFlags[model.id] == true || !currentCoroutineContext().isActive) return
+            val target = File(dir, file)
+            target.parentFile?.mkdirs()
+            val urls = buildMnnFileUrls(model, file)
+            var ok = false
+            var was404 = false
+            var lastErr: Exception? = null
+            for (url in urls) {
+                try {
+                    ok = downloadMnnFile(url, target, model.id, aggregate, total)
+                    if (ok) break
+                    if (pauseFlags[model.id] == true || !currentCoroutineContext().isActive) return
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    if (e.message?.contains(" 404") == true) was404 = true
+                    lastErr = e
+                    continue
+                }
+            }
+            if (!ok) {
+                if (was404) {
+                    // 可选文件缺失（如某些模型无独立 embeddings/tokenizer），跳过
+                    Log.w(TAG, "MNN 文件缺失(404)，跳过: $file")
+                } else {
+                    throw lastErr ?: Exception("下载失败: $file")
+                }
+            }
+            aggregate += target.length()
+            updateState(model.id, DownloadState.Downloading(aggregate, total))
+        }
+
+        finishMnnDownload(model, dir)
+    }
+
+    /**
+     * 下载 MNN 仓库中的单个文件（支持断点续传）。
+     * - 416：文件已完整（Range 越界），跳过。
+     * - 206：服务端支持 Range，从 [startBytes] 续传。
+     * - 200：不支持 Range，从头重写。
+     * 进度按 [aggregateBefore] + 本文件已写字节累加进总进度 [total]。
+     */
+    private suspend fun downloadMnnFile(
+        url: String,
+        target: File,
+        modelId: String,
+        aggregateBefore: Long,
+        total: Long,
+    ): Boolean {
+        val startBytes = if (target.exists()) target.length() else 0L
+        val builder = Request.Builder().url(url).header("User-Agent", "RhodesIslandTerminal/1.0")
+        if (startBytes > 0) builder.header("Range", "bytes=$startBytes-")
+        val call = client.newCall(builder.build())
+        calls[modelId] = call
+        val response = call.execute()
+        try {
+            if (response.code == 416) return true // 文件已完整
+            if (!response.isSuccessful) throw Exception("HTTP ${response.code} @ $url")
+            val body = response.body ?: throw Exception("响应体为空")
+            val supportRange = response.code == 206
+            val currentStart = if (supportRange) startBytes else 0L
+            if (!supportRange && target.exists()) target.delete()
+
+            val raf = RandomAccessFile(target, "rw")
+            try {
+                raf.seek(currentStart)
+                val source = body.byteStream()
+                val buffer = ByteArray(CHUNK_SIZE.toInt())
+                var currentBytes = currentStart
+                var lastReport = System.currentTimeMillis()
+                while (true) {
+                    if (!currentCoroutineContext().isActive || pauseFlags[modelId] == true) return false
+                    val read = try {
+                        source.read(buffer)
+                    } catch (e: IOException) {
+                        if (!currentCoroutineContext().isActive) return false
+                        throw e
+                    }
+                    if (read <= 0) break
+                    raf.write(buffer, 0, read)
+                    currentBytes += read
+                    val now = System.currentTimeMillis()
+                    if (now - lastReport > 200) {
+                        updateState(modelId, DownloadState.Downloading(aggregateBefore + currentBytes, total))
+                        lastReport = now
+                    }
+                }
+            } finally {
+                raf.close()
+            }
+        } finally {
+            response.close()
+            calls.remove(modelId)
+        }
+        return true
+    }
+
+    /** 构造 MNN 单文件的多镜像下载地址。source-major 排序：先 ModelScope（国内，命中 MNN/<id>），
+     *  再 hf-mirror（国内，命中 taobao-mnn/<id>），最后 HF 原站（非国内兜底）。国内用户由此完全不
+     *  触碰被墙的 huggingface.co，且可靠的 ModelScope MNN/ 命中靠前，减少无效 404。 */
+    private fun buildMnnFileUrls(model: ModelInfo, file: String): List<String> {
+        val list = mutableListOf<String>()
+        val repos = (listOf(model.repo) + model.altRepos)
+            .map { it.trim().trimEnd('/') }
+            .filter { it.isNotBlank() }
+            .distinct()
+        val f = file.trimStart('/')
+        for (repo in repos) {
+            list.add("https://www.modelscope.cn/models/$repo/resolve/master/$f")
+        }
+        for (repo in repos) {
+            list.add("https://hf-mirror.com/$repo/resolve/main/$f")
+        }
+        for (repo in repos) {
+            list.add("https://huggingface.co/$repo/resolve/main/$f")
+        }
+        return list.distinct()
+    }
+
+    /** 枚举 MNN 仓库文件列表。按国内可访问性优先：ModelScope API -> hf-mirror API -> HuggingFace API，
+     *  均失败才回退内置文件集。国内 huggingface.co 被墙，必须优先用 ModelScope/hf-mirror，否则永远
+     *  回退硬编码列表（漏 visual.mnn / 文件名对不上如 tokenizer.mtok、embeddings_int4.bin）导致下载不完整。 */
+    private fun listMnnRepoFiles(model: ModelInfo): List<String> {
+        val repos = (listOf(model.repo) + model.altRepos)
+            .map { it.trim().trimStart('/') }
+            .filter { it.isNotBlank() }
+            .distinct()
+
+        // 1) ModelScope 文件列表 API（国内可访问；命中 MNN/<id>）
+        for (repo in repos) {
+            val files = tryModelscopeFileList(repo)
+            if (files.isNotEmpty()) {
+                Log.i(TAG, "MNN 文件列表(ModelScope $repo): ${files.size} 个")
+                return files
+            }
+        }
+        // 2) hf-mirror 文件列表 API（国内可访问；命中 taobao-mnn/<id>）
+        for (repo in repos) {
+            val files = tryHfFileList("https://hf-mirror.com/api/models/$repo")
+            if (files.isNotEmpty()) {
+                Log.i(TAG, "MNN 文件列表(hf-mirror $repo): ${files.size} 个")
+                return files
+            }
+        }
+        // 3) HuggingFace 原站 API（非国内用户兜底；国内被墙会超时失败）
+        for (repo in repos) {
+            val files = tryHfFileList("https://huggingface.co/api/models/$repo")
+            if (files.isNotEmpty()) {
+                Log.i(TAG, "MNN 文件列表(HF $repo): ${files.size} 个")
+                return files
+            }
+        }
+        // 4) 兜底：核心文件集（所有 API 不可达时；分片模型此路径会因缺 weight 失败校验，提示重试）
+        Log.w(TAG, "MNN 文件列表 API 全部失败，使用内置文件集兜底")
+        return listOf(
+            "config.json", "llm_config.json", "llm.mnn", "llm.mnn.weight",
+            "embeddings_bf16.bin", "tokenizer.txt", "splits_info.json",
+        )
+    }
+
+    /** ModelScope 文件列表 API（国内可访问）。返回过滤后的文件相对路径；失败/空返回空表。 */
+    private fun tryModelscopeFileList(repo: String): List<String> = try {
+        client.newCall(
+            Request.Builder().url("https://www.modelscope.cn/api/v1/models/$repo/repo/files").build()
+        ).execute().use { resp ->
+            if (!resp.isSuccessful) emptyList()
+            else {
+                val body = resp.body?.string() ?: ""
+                runCatching {
+                    mnnJson.decodeFromString(MsRepoFiles.serializer(), body)
+                        .data?.files
+                        ?.filter { it.type != "tree" && it.path.isNotBlank() && it.path !in SKIP_FILES && !it.path.startsWith(".git") }
+                        ?.map { it.path }
+                        ?: emptyList()
+                }.getOrDefault(emptyList())
+            }
+        }
+    } catch (e: Exception) {
+        Log.w(TAG, "ModelScope 文件列表失败 $repo: ${e.message}")
+        emptyList()
+    }
+
+    /** HuggingFace 兼容文件列表 API（hf-mirror / huggingface.co）。返回过滤后的文件相对路径；失败/空返回空表。 */
+    private fun tryHfFileList(apiUrl: String): List<String> = try {
+        client.newCall(Request.Builder().url(apiUrl).build()).execute().use { resp ->
+            if (!resp.isSuccessful) emptyList()
+            else {
+                val body = resp.body?.string() ?: ""
+                runCatching {
+                    mnnJson.decodeFromString(HfModelInfo.serializer(), body)
+                        .siblings.map { it.rfilename }
+                        .filter { it.isNotBlank() && it !in SKIP_FILES && !it.startsWith(".git") }
+                }.getOrDefault(emptyList())
+            }
+        }
+    } catch (e: Exception) {
+        Log.w(TAG, "HF 文件列表失败 $apiUrl: ${e.message}")
+        emptyList()
+    }
+
+    /** MNN 下载完成：合并分片 + 校验入口文件 + 标记完成 */
+    private fun finishMnnDownload(model: ModelInfo, dir: File) {
+        updateState(model.id, DownloadState.Verifying(0f))
+        if (FileSplitter.needsMerging(dir)) {
+            updateState(model.id, DownloadState.Verifying(0.3f))
+            val merged = FileSplitter.mergeAllSplitFiles(dir)
+            if (!merged) {
+                updateState(model.id, DownloadState.Failed("模型分片合并失败，文件可能损坏"))
+                return
+            }
+        }
+        val config = File(dir, ModelPathResolver.MNN_CONFIG_FILE)
+        val llm = File(dir, ModelPathResolver.MNN_MODEL_FILE)
+        if (!config.exists() || !llm.exists()) {
+            updateState(model.id, DownloadState.Failed("模型文件不完整：缺 config.json 或 llm.mnn"))
+            return
+        }
+        // llm.mnn.weight 缺失告警：多数 taobao-mnn 模型权重与图分离，缺 weight 会在 MNN
+        // PipelineModule::load 反序列化时原生崩溃（try/catch 拦不住 SIGSEGV）。少数模型权重内嵌
+        // 于 llm.mnn 则无此文件，故仅告警不阻断（真实完整性以下载逐文件完成保证）。
+        if (!File(dir, "llm.mnn.weight").exists()) {
+            Log.w(TAG, "MNN 模型 ${model.id} 缺 llm.mnn.weight（可能内嵌；若加载崩溃请重新下载）")
+        }
+        updateState(model.id, DownloadState.Completed(config.absolutePath))
+    }
+
+    /** 暂停下载：先置状态，再 call.cancel() 中断阻塞 read，最后取消协程。
+     *  必须调用 call.cancel()，否则 source.read() 不响应协程取消，旧任务会继续写入。 */
+    fun pause(modelId: String) {
+        pauseFlags[modelId] = true
+        updateState(modelId, DownloadState.Paused)
+        calls[modelId]?.cancel()
+        jobs[modelId]?.cancel()
+    }
+
+    /** 恢复下载 */
+    fun resume(model: ModelInfo) {
+        pauseFlags[model.id] = false
+        startDownload(model)
+    }
+
+    /** 删除已下载 MNN 模型（整个目录） */
+    fun delete(modelId: String) {
+        pauseFlags[modelId] = true
+        calls[modelId]?.cancel() // 中断可能正在阻塞的 source.read()
+        jobs[modelId]?.cancel()
+
+        // MNN：整个目录
+        val dir = ModelPathResolver.getModelDir(context, modelId)
+        if (dir.exists()) dir.deleteRecursively()
+
+        updateState(modelId, DownloadState.NotDownloaded)
+    }
+
+    /** 扫描 models 目录，返回已安装 MNN 模型 ID 集合（目录含 config.json + llm.mnn） */
+    fun scanInstalledModels(): Set<String> {
+        val dir = ModelPathResolver.getModelsDirectory(context)
+        val ids = mutableSetOf<String>()
+        // MNN 目录（含 config.json + llm.mnn）
+        dir.listFiles { f -> f.isDirectory }
+            ?.forEach { d ->
+                if (File(d, ModelPathResolver.MNN_CONFIG_FILE).exists() &&
+                    File(d, ModelPathResolver.MNN_MODEL_FILE).exists()
+                ) {
+                    ids.add(d.name)
+                }
+            }
+        return ids
+    }
+}
