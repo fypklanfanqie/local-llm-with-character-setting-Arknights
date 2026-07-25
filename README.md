@@ -18,21 +18,30 @@
 ### Overview
 
 Rhodes Island Terminal is a fan-made Android app that lets you chat with AI-powered Arknights characters. Originally migrated from a WeChat Mini Program, this native Android version features 20 fully-voiced operators, multiple AI backends (cloud + local), TTS, BGM player, and a PRTS-style sci-fi terminal UI.
+<img width="1080" height="2400" alt="Screenshot_2026-07-25-14-55-13-225_com rhodesisl" src="https://github.com/user-attachments/assets/4ea3ea8e-2b50-4433-9a05-af4d20c31466" />
 
 ### Features
 
 - 🤖 **Cloud AI** — Direct API connection to DeepSeek, OpenAI, Qwen (通义千问), and GLM (智谱). SSE streaming with configurable endpoints.
 - 📱 **Local AI** — MNN engine with QNN NPU (Qualcomm HTP) acceleration for offline inference. Supports `.mnn` models. Low-memory optimized.
+- <img width="1080" height="2400" alt="Screenshot_2026-07-25-14-58-36-685_com rhodesisl" src="https://github.com/user-attachments/assets/8ee0870b-d23b-401a-80d8-2b3996291a99" />
+
 - 🔄 **Model Switching** — One-tap toggle between cloud API and local MNN inference on the chat screen.
 - ⬇️ **Model Management** — Download/pause/resume/delete local models from a remote server, with SHA256 integrity verification.
+- <img width="1080" height="2400" alt="Screenshot_2026-07-25-14-57-48-347_com rhodesisl" src="https://github.com/user-attachments/assets/6d081ad8-e333-40a3-8fc6-5e62d23fe421" />
+
 - 🎙️ **Volcano Engine TTS** — ByteDance Doubao voice synthesis (Chinese + Japanese), text-to-speech for character voice lines.
 - 🎵 **BGM Player** — 26 Arknights original soundtrack tracks as background music.
+- <img width="1080" height="2400" alt="Screenshot_2026-07-25-14-57-39-734_com rhodesisl" src="https://github.com/user-attachments/assets/3acd6ae2-7aec-42eb-8a92-be45388fa374" />
+
 - 📝 **Markdown Rendering** — Full Markdown support with VS Code Dark+ code highlighting and mathematical formula blocks.
 - 🎨 **PRTS Terminal UI** — Dark sci-fi themed interface with iOS Liquid Glass frosted-glass bottom navigation.
 - 📊 **Performance Overlay** — Real-time CPU/GPU/NPU usage and temperature monitoring via Liquid Glass overlay (non-root, system overlay permission required).
 - 🆓 **Completely Free** — All payment, credit, and ad features have been removed.
 
 ### Characters (20 Operators)
+<img width="1080" height="2400" alt="Screenshot_2026-07-25-14-57-44-111_com rhodesisl" src="https://github.com/user-attachments/assets/a7436538-5e69-4b1a-9407-283561db1beb" />
+
 
 | # | Character | Race | Role |
 |---|-----------|------|------|
