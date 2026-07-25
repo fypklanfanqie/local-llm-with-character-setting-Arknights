@@ -474,37 +474,30 @@ private fun ChatTopBar(
 
                 Spacer(Modifier.width(6.dp))
 
-                // 会话入口（带未读角标显示会话数）
-                Box(
+                // 会话入口：对话气泡图标 + COUNT 标签，清晰可辨
+                Row(
                     modifier = Modifier
-                        .size(32.dp)
-                        .clip(CircleShape)
+                        .height(32.dp)
+                        .clip(RoundedCornerShape(50))
                         .background(PrtsColors.BgInput)
-                        .clickable(onClick = onOpenConversations),
-                    contentAlignment = Alignment.Center,
+                        .clickable(onClick = onOpenConversations)
+                        .padding(horizontal = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(
                         Icons.Filled.Chat,
                         contentDescription = "会话记录",
                         tint = PrtsColors.Gold,
-                        modifier = Modifier.size(18.dp),
+                        modifier = Modifier.size(16.dp),
                     )
                     if (conversationCount > 0) {
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .offset(x = 4.dp, y = (-4).dp)
-                                .size(14.dp)
-                                .background(PrtsColors.Gold, CircleShape),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                if (conversationCount > 9) "9+" else conversationCount.toString(),
-                                color = PrtsColors.BgPrimary,
-                                fontSize = 8.sp,
-                                fontWeight = FontWeight.Bold,
-                            )
-                        }
+                        Spacer(Modifier.width(5.dp))
+                        Text(
+                            "${conversationCount}",
+                            color = PrtsColors.GoldDim,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                        )
                     }
                 }
             }

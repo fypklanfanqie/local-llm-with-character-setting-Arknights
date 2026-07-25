@@ -460,15 +460,37 @@ class ChatViewModel(
                     }
                 }
 
-                // 流式完成 -> 移除临时消息，存储正式回复
+                // 流式完成 -> 移除临时 streaming 消息，落库持久化
                 termReason = "完成: $genTokens tokens"
                 val assistantMessage = ChatMessage(role = "assistant", content = response)
                 container.chatRepository.addMessage(charId, convId, assistantMessage)
                 // 刷新会话 updatedAt，把它顶到列表最前
                 container.conversationRepository.touch(convId)
 
+                // 同步构建 assistant DisplayMessage 替换 streaming 气泡，确保 UI 即时显示完整回复。
+                // 不依赖异步 Room Flow 回填——本地模型 prefill 完成到 DB invalidation 到达之间有可感知
+                // 延迟，若仅移除 streaming 而不补 assistant，用户会看到消息短暂消失（首次对话尤其明显）。
+                val finalShowThink = _uiState.value.deepThinkingEnabled
+                val assistantSrc = if (finalShowThink) response else MarkdownParser.stripThink(response)
+                val assistantDisplay = DisplayMessage(
+                    id = "msg-assistant-${assistantMessage.timestamp}",
+                    role = "assistant",
+                    content = response,
+                    segments = MarkdownParser.parseWithThink(assistantSrc, isStreaming = false),
+                    sender = state.characterName.ifEmpty { "OPERATOR" },
+                )
                 _uiState.update { s ->
-                    val msgs = s.messages.filterNot { it.id == "streaming" }.toMutableList()
+                    val msgs = s.messages.toMutableList()
+                    val streamIdx = msgs.indexOfFirst { it.id == "streaming" }
+                    // 若 DB Flow 已抢先回填了 assistant（msgs 中有 role=="assistant" 的非 streaming 消息），
+                    // 则仅移除 streaming 避免重复气泡；否则原地替换为刚构建的 assistant 消息。
+                    val alreadyHasAssistant = msgs.any { it.role == "assistant" && it.id != "streaming" }
+                    if (streamIdx >= 0) {
+                        if (alreadyHasAssistant) msgs.removeAt(streamIdx)
+                        else msgs[streamIdx] = assistantDisplay
+                    } else if (!alreadyHasAssistant) {
+                        msgs.add(assistantDisplay)
+                    }
                     s.copy(messages = msgs, isStreaming = false, showTyping = false)
                 }
             } catch (e: CancellationException) {
