@@ -89,6 +89,10 @@ class MnnBackend(
     override val currentModelPath: String?
         get() = loadedConfigPath
 
+    @Volatile
+    override var lastErrorMessage: String? = null
+        private set
+
     override suspend fun initialize(
         modelPath: String,
         contextLength: Int,
@@ -98,13 +102,16 @@ class MnnBackend(
         topP: Float,
         repeatPenalty: Float,
     ): Boolean = mutex.withLock {
+        lastErrorMessage = null  // 清旧值，避免跨调用残留误导诊断
         if (!MnnBridge.nativeAvailable) {
-            Log.e(TAG, "MNN native 不可用（libMNN/libmnn_jni 未加载）")
+            lastErrorMessage = "MNN native 不可用（libMNN/libmnn_jni 未加载）"
+            Log.e(TAG, lastErrorMessage!!)
             return@withLock false
         }
         val configFile = File(modelPath)
         if (!configFile.exists()) {
-            Log.e(TAG, "MNN config 不存在: $modelPath")
+            lastErrorMessage = "config.json 不存在: $modelPath"
+            Log.e(TAG, lastErrorMessage!!)
             return@withLock false
         }
         // 先释放已有实例
@@ -116,15 +123,21 @@ class MnnBackend(
         val h = try {
             bridge.nativeCreate(modelPath, mode.mnnBackendType, threads, contextLength, lookahead, temperature, topP, repeatPenalty)
         } catch (e: Throwable) {
-            Log.e(TAG, "nativeCreate 异常: ${e.message}")
+            lastErrorMessage = "nativeCreate 异常: ${e.message}"
+            Log.e(TAG, lastErrorMessage!!)
             0L
         }
         if (h == 0L) {
-            Log.e(TAG, "MNN 模型加载失败 (backend=${mode.mnnBackendType})，将回退")
+            // nativeCreate 返回 0：取 native 侧真实失败原因（含 CPU 安全配置重试结果），供 BackendManager 汇总上报
+            val nativeErr = runCatching { bridge.nativeGetLastError() }.getOrDefault("").orEmpty()
+            lastErrorMessage = "模型加载失败 (backend=${mode.mnnBackendType})" +
+                (if (nativeErr.isNotBlank()) ": $nativeErr" else "")
+            Log.e(TAG, lastErrorMessage!!)
             return@withLock false
         }
         handle = h
         loadedConfigPath = modelPath
+        lastErrorMessage = null
         Log.i(TAG, "MNN 后端就绪 (${mode.displayName})")
         true
     }

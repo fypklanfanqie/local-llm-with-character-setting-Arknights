@@ -97,15 +97,46 @@ fun ChatScreen(
     val focusManager = LocalFocusManager.current
 
     // 自动滚动到底部：消息数量变化或最后一条内容增长（流式输出）时触发。
-    // 仅在已贴近底部时跟随，避免流式输出时把用户向上翻看历史的操作强制拉回底部；
-    // 用即时 scrollToItem 而非 animateScrollToItem：流式 ~30fps 重建会不断取消动画导致抖动。
+    // 仅在已贴近底部时跟随，避免流式输出时把用户向上翻看历史的操作强制拉回底部。
+    //
+    // 使用 scrollToItem（瞬时，非动画），因为 animateScrollToItem 在流式输出期间
+    // lastContent 频繁变化（~30ms 节流）导致 LaunchedEffect 反复取消/重启，动画被中断
+    // 后 LazyColumn 的 layoutInfo 可能处于不一致状态，造成 animateScrollToItem(-1)
+    // 跳到顶部。scrollToItem 无动画、不产生中间态，配合 snapshotFlow 追踪用户是否
+    // 主动滚离底部，只在用户贴底时才跟随。
+    //
+    // didInitialScroll 标记本次 composition 是否已执行过首次滚动：
+    // 从其他 Tab 切回时 listState 被重建（position=0），若仅按「贴近底部才跟」条件会跳过滚动，
+    // 导致用户回到通讯时看到的是列表顶部而非最新消息。
+    var didInitialScroll by remember { mutableStateOf(false) }
+    var userAtBottom by remember { mutableStateOf(true) }
+
+    // 持续追踪用户是否在底部：仅在非滚动中更新，避免滚动过程中瞬时状态误判
+    LaunchedEffect(Unit) {
+        snapshotFlow {
+            val info = listState.layoutInfo
+            val lastIdx = info.visibleItemsInfo.lastOrNull()?.index ?: -1
+            val total = info.totalItemsCount
+            Triple(lastIdx, total, listState.isScrollInProgress)
+        }.collect { (lastIdx, total, isScrolling) ->
+            if (total > 0 && !isScrolling) {
+                userAtBottom = lastIdx >= total - 2
+            }
+        }
+    }
+
+    val messagesSize = state.messages.size
     val lastContent = state.messages.lastOrNull()?.content
-    LaunchedEffect(state.messages.size, lastContent) {
+    LaunchedEffect(messagesSize, lastContent) {
         if (state.messages.isEmpty()) return@LaunchedEffect
-        val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index
-        // 首帧 layoutInfo 为空（lastVisible==null）时默认滚动，确保进入聊天/收到首条消息时贴底
-        if (lastVisible == null || lastVisible >= state.messages.size - 2) {
-            listState.scrollToItem(state.messages.size - 1)
+        // 给 LazyColumn 一帧时间完成布局，避免 layoutInfo 为空时读到 totalItemsCount=0
+        kotlinx.coroutines.delay(16)
+        val totalItems = listState.layoutInfo.totalItemsCount
+        if (totalItems <= 0) return@LaunchedEffect
+        val atBottom = !didInitialScroll || userAtBottom
+        if (atBottom && !listState.isScrollInProgress) {
+            listState.scrollToItem(totalItems - 1)
+            didInitialScroll = true
         }
     }
 
@@ -832,9 +863,9 @@ private fun ScienceBlockView(seg: MessageSegment.Science) {
 
 @Composable
 private fun ThinkBlockView(seg: MessageSegment.Think) {
-    // 流式时默认展开（实时观察思考），完成后自动折叠；用户可随时切换。
-    // 以 seg.streaming 为 key：思考段闭合（streaming=false）时重置为折叠态。
-    var folded by remember(seg.streaming) { mutableStateOf(!seg.streaming) }
+    // 默认折叠：思考过程可能很长，流式时展开会逐帧重渲染长文本、阻塞界面滚动（拖不动）。
+    // 以 seg.streaming 为 key：思考段闭合（streaming=false）时重置折叠态。用户可随时点展开查看。
+    var folded by remember(seg.streaming) { mutableStateOf(true) }
     Surface(
         color = PrtsColors.CodeBg,
         shape = RoundedCornerShape(ThumbRadius),
@@ -846,7 +877,7 @@ private fun ThinkBlockView(seg: MessageSegment.Think) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    if (seg.streaming) "💭 思考中…" else "💭 思考过程",
+                    if (seg.streaming) "💭 思考中…（${seg.content.length}字）" else "💭 思考过程",
                     color = PrtsColors.GoldDim,
                     fontSize = 11.sp,
                     fontFamily = FontFamily.Monospace,

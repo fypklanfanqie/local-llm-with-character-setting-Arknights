@@ -3,7 +3,6 @@ package com.rhodesisland.terminal.data.repository
 import com.rhodesisland.terminal.config.Characters
 import com.rhodesisland.terminal.data.model.Character
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 /**
@@ -22,7 +21,8 @@ class CharacterRepository(private val settings: SettingsRepository) {
 
     suspend fun getNow(id: String): Character? {
         Characters.ALL[id]?.let { return it }
-        return settings.customCharacters.first().firstOrNull { it.id == id }
+        // 使用超时保护：国产 ROM DataStore 文件 I/O 可能被拦截导致 .first() 永久挂起
+        return settings.getCustomCharactersNow().firstOrNull { it.id == id }
     }
 
     suspend fun addCustom(character: Character) {
@@ -50,5 +50,5 @@ class CharacterRepository(private val settings: SettingsRepository) {
         }
     }
 
-    suspend fun exportCustom(): List<Character> = settings.customCharacters.first()
+    suspend fun exportCustom(): List<Character> = settings.getCustomCharactersNow()
 }

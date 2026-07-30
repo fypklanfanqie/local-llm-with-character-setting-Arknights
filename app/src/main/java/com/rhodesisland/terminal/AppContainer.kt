@@ -4,7 +4,6 @@ import android.content.Context
 import com.rhodesisland.terminal.config.AppConfig
 import com.rhodesisland.terminal.data.local.AppDatabase
 import com.rhodesisland.terminal.data.local.SettingsStore
-import com.rhodesisland.terminal.data.remote.CloudRunApi
 import com.rhodesisland.terminal.data.remote.DirectLlmClient
 import com.rhodesisland.terminal.data.remote.RetrofitClient
 import com.rhodesisland.terminal.data.repository.AssetRepository
@@ -50,13 +49,11 @@ class AppContainer(private val context: Context) {
     }
 
     // ===== 网络 API =====
-    val cloudRunApi: CloudRunApi get() = RetrofitClient.cloudRunApi
-
     /** 直连对话商 OpenAI 兼容 API 客户端（云端对话/翻译/文档提取，不经代理） */
     val directLlmClient: DirectLlmClient by lazy { DirectLlmClient(RetrofitClient.streamingClient) }
 
     // ===== TTS =====
-    val ttsClient: VolcTtsClient by lazy { VolcTtsClient(cloudRunApi) }
+    val ttsClient: VolcTtsClient by lazy { VolcTtsClient(AppConfig.TTS_PROXY_URL, RetrofitClient.okHttpClient) }
     val ttsManager: TtsManager by lazy { TtsManager(context, ttsClient, settingsRepository) }
 
     // ===== 音频 =====

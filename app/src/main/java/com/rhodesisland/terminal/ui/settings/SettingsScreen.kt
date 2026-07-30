@@ -21,6 +21,10 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
+import android.Manifest
+import android.content.Intent
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import coil.compose.AsyncImage
@@ -37,8 +41,12 @@ import com.rhodesisland.terminal.config.Characters
 import com.rhodesisland.terminal.config.ModelProvider
 import com.rhodesisland.terminal.config.PresetModel
 import com.rhodesisland.terminal.config.PRESET_PROVIDERS
+import com.rhodesisland.terminal.config.AppConfig
+import com.rhodesisland.terminal.data.model.ChatProviderType
 import com.rhodesisland.terminal.data.model.VoicePair
 import com.rhodesisland.terminal.data.model.Character
+import com.rhodesisland.terminal.util.BackgroundSurvivalHelper
+import com.rhodesisland.terminal.work.GreetingScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -236,6 +244,9 @@ fun SettingsScreen(
                 onCheckedChange = { scope.launch { container.settingsRepository.setDeepThinking(it) } },
             )
         }
+
+        // ===== 角色问候 =====
+        GreetingSection(container = container, scope = scope)
 
         // ===== 聊天背景 =====
         ChatBackgroundSection(container = container, scope = scope)
@@ -478,6 +489,309 @@ private fun ChatBackgroundSection(container: AppContainer, scope: CoroutineScope
             },
             dismissButton = {
                 TextButton(onClick = { showClearConfirm = false }) { Text("取消", color = PrtsColors.TextDim) }
+            },
+        )
+    }
+}
+
+@Composable
+private fun GreetingSection(container: AppContainer, scope: CoroutineScope) {
+    val context = LocalContext.current
+    val settings = container.settingsRepository
+
+    val enabled by settings.greetingEnabled.collectAsState(initial = false)
+    val charIds by settings.greetingCharacterIds.collectAsState(initial = emptySet())
+    val dailyCount by settings.greetingDailyCount.collectAsState(initial = AppConfig.Greeting.DEFAULT_DAILY_COUNT)
+    val provider by settings.activeProvider.collectAsState(initial = ChatProviderType.CLOUD)
+    val characters by container.characterRepository.characters.collectAsState(initial = emptyList())
+    val isCloud = provider == ChatProviderType.CLOUD
+
+    var showCharPicker by remember { mutableStateOf(false) }
+    var sliderValue by remember(dailyCount) { mutableStateOf(dailyCount.toFloat()) }
+    var testScheduled by remember { mutableStateOf(false) }
+    LaunchedEffect(testScheduled) {
+        if (testScheduled) { delay(12_000); testScheduled = false }
+    }
+
+    // 通知权限状态（Android 13+）。修复原先空回调丢失授权结果的问题：回调更新 notifGranted；
+    // 拒绝时显示「去开启」按钮（跳应用通知设置）。从系统设置返回后 ON_RESUME 重新核验，避免状态过期。
+    var notifGranted by remember {
+        mutableStateOf(
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) ==
+                    android.content.pm.PackageManager.PERMISSION_GRANTED
+            } else true
+        )
+    }
+    val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        notifGranted = granted
+    }
+    // 电池优化白名单状态：ON_RESUME 重新核验（用户从系统设置返回后刷新）。
+    var ignoringBattery by remember {
+        mutableStateOf(BackgroundSurvivalHelper.isIgnoringBatteryOptimizations(context))
+    }
+    // 精确闹钟授权状态（Android 12+）：ON_RESUME 重新核验。
+    var exactAlarmGranted by remember {
+        mutableStateOf(BackgroundSurvivalHelper.canScheduleExactAlarms(context))
+    }
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                notifGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) ==
+                        android.content.pm.PackageManager.PERMISSION_GRANTED
+                } else true
+                ignoringBattery = BackgroundSurvivalHelper.isIgnoringBatteryOptimizations(context)
+                exactAlarmGranted = BackgroundSurvivalHelper.canScheduleExactAlarms(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    SectionDivider("角色问候")
+
+    // 开关行
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("💬", fontSize = 16.sp)
+        Spacer(Modifier.width(8.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text("角色主动问候", color = PrtsColors.TextPrimary, fontSize = 13.sp)
+            Text(
+                if (isCloud) "开启后，所选角色会在白天随机时间主动给你发消息（早安/晚安/开话题）。仅云端 AI 可用。"
+                else "仅云端 AI 模式可用，请先切换为云端 AI。",
+                color = PrtsColors.TextDim,
+                fontSize = 10.sp,
+            )
+        }
+        Switch(
+            checked = enabled,
+            enabled = isCloud,
+            onCheckedChange = { on ->
+                scope.launch {
+                    settings.setGreetingEnabled(on)
+                    if (on && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                    GreetingScheduler.reschedule(context, settings)
+                }
+            },
+        )
+    }
+
+    // 通知权限未授予（Android 13+）：显示警告 + 「去开启」跳应用通知设置。
+    if (enabled && isCloud && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !notifGranted) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("⚠️", fontSize = 14.sp)
+            Spacer(Modifier.width(8.dp))
+            Text(
+                "通知权限未开启，收不到主动消息提醒",
+                color = PrtsColors.DangerBright,
+                fontSize = 11.sp,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = {
+                val intent = Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                    putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
+                }
+                runCatching { context.startActivity(intent) }
+            }) { Text("去开启", color = PrtsColors.Gold, fontSize = 12.sp) }
+        }
+    }
+
+    if (isCloud) {
+        // 测试按钮：10 秒后触发一次主动问候预览（不计配额、不依赖开关）
+        Button(
+            onClick = {
+                GreetingScheduler.scheduleTest(context)
+                testScheduled = true
+            },
+            colors = ButtonDefaults.buttonColors(containerColor = PrtsColors.Gold.copy(alpha = 0.15f)),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("🔔 测试主动问候（10 秒后）", color = PrtsColors.Gold)
+        }
+        if (testScheduled) {
+            Text("✓ 已触发，约 10 秒后收到问候通知", color = PrtsColors.Success, fontSize = 11.sp)
+        }
+    }
+
+    if (enabled && isCloud) {
+        // 角色多选
+        val selectedNames = characters.filter { it.id in charIds }.map { it.name }
+        val preview = when {
+            selectedNames.isEmpty() -> "未选择"
+            selectedNames.size <= 3 -> selectedNames.joinToString("、")
+            else -> "${selectedNames.take(3).joinToString("、")} 等 ${selectedNames.size} 个"
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { showCharPicker = true }
+                .padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("问候角色（已选 ${charIds.size} 个，可多选）", color = PrtsColors.TextDim, fontSize = 10.sp, letterSpacing = 1.sp)
+                Text(preview, color = PrtsColors.GoldBright, fontSize = 13.sp, maxLines = 1)
+            }
+            Text("▾", color = PrtsColors.TextDim, fontSize = 12.sp)
+        }
+
+        // 每日次数滑块
+        Text(
+            "每日主动消息条数：${sliderValue.toInt()}",
+            color = PrtsColors.TextPrimary,
+            fontSize = 12.sp,
+        )
+        Slider(
+            value = sliderValue,
+            onValueChange = { sliderValue = it },
+            onValueChangeFinished = {
+                val v = sliderValue.toInt().coerceIn(
+                    AppConfig.Greeting.MIN_DAILY_COUNT,
+                    AppConfig.Greeting.MAX_DAILY_COUNT,
+                )
+                scope.launch {
+                    settings.setGreetingDailyCount(v)
+                    GreetingScheduler.reschedule(context, settings)
+                }
+            },
+            valueRange = AppConfig.Greeting.MIN_DAILY_COUNT.toFloat()..
+                AppConfig.Greeting.MAX_DAILY_COUNT.toFloat(),
+            steps = AppConfig.Greeting.MAX_DAILY_COUNT - AppConfig.Greeting.MIN_DAILY_COUNT - 1,
+        )
+
+        Text(
+            "部分国产 ROM 需手动允许后台运行 / 自启动，否则可能收不到主动消息：",
+            color = PrtsColors.TextDim,
+            fontSize = 10.sp,
+        )
+        // 电池优化白名单
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("🔋", fontSize = 14.sp)
+            Spacer(Modifier.width(8.dp))
+            Text(
+                if (ignoringBattery) "后台运行：已允许" else "后台运行：未允许（可能被省电冻结）",
+                color = if (ignoringBattery) PrtsColors.Success else PrtsColors.DangerBright,
+                fontSize = 11.sp,
+                modifier = Modifier.weight(1f),
+            )
+            if (!ignoringBattery) {
+                TextButton(onClick = { BackgroundSurvivalHelper.requestIgnoreBatteryOptimizations(context) }) {
+                    Text("去允许", color = PrtsColors.Gold, fontSize = 12.sp)
+                }
+            }
+        }
+        // 厂商自启动设置（仅当厂商入口可达时显示）
+        val autostartIntent = remember { BackgroundSurvivalHelper.manufacturerAutostartIntent(context) }
+        if (autostartIntent != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("📱", fontSize = 14.sp)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "自启动管理（厂商设置）",
+                    color = PrtsColors.TextPrimary,
+                    fontSize = 11.sp,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = { runCatching { context.startActivity(autostartIntent) } }) {
+                    Text("去设置", color = PrtsColors.Gold, fontSize = 12.sp)
+                }
+            }
+        }
+        // 精确闹钟（Android 12+）：未授权时显示「去授权」，提升后台触发可靠性
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !exactAlarmGranted) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("⏰", fontSize = 14.sp)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "精确闹钟：未授权（开启可提升后台触发可靠性）",
+                    color = PrtsColors.DangerBright,
+                    fontSize = 11.sp,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = { BackgroundSurvivalHelper.requestScheduleExactAlarm(context) }) {
+                    Text("去授权", color = PrtsColors.Gold, fontSize = 12.sp)
+                }
+            }
+        }
+    }
+
+    if (showCharPicker) {
+        AlertDialog(
+            onDismissRequest = { showCharPicker = false },
+            title = { Text("选择问候角色（可多选）", color = PrtsColors.GoldBright) },
+            text = {
+                Column {
+                    // 全选 / 清空
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        TextButton(onClick = {
+                            scope.launch {
+                                settings.setGreetingCharacterIds(characters.map { it.id }.toSet())
+                                GreetingScheduler.reschedule(context, settings)
+                            }
+                        }) { Text("全选", color = PrtsColors.Gold, fontSize = 12.sp) }
+                        TextButton(onClick = {
+                            scope.launch {
+                                settings.setGreetingCharacterIds(emptySet())
+                                GreetingScheduler.reschedule(context, settings)
+                            }
+                        }) { Text("清空", color = PrtsColors.DangerBright, fontSize = 12.sp) }
+                    }
+                    Column(
+                        modifier = Modifier
+                            .verticalScroll(rememberScrollState())
+                            .heightIn(max = 360.dp),
+                    ) {
+                        characters.forEach { c ->
+                            val checked = c.id in charIds
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        scope.launch {
+                                            val next = if (checked) charIds - c.id else charIds + c.id
+                                            settings.setGreetingCharacterIds(next)
+                                            GreetingScheduler.reschedule(context, settings)
+                                        }
+                                    }
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    c.name,
+                                    color = if (checked) PrtsColors.GoldBright else PrtsColors.TextPrimary,
+                                    fontSize = 13.sp,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                if (checked) Text("✓", color = PrtsColors.Gold, fontSize = 14.sp)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showCharPicker = false }) { Text("完成", color = PrtsColors.TextDim) }
             },
         )
     }

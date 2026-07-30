@@ -7,9 +7,12 @@ import com.rhodesisland.terminal.data.model.ChatProviderType
 import com.rhodesisland.terminal.data.model.TtsConfig
 import com.rhodesisland.terminal.data.model.TtsLanguage
 import com.rhodesisland.terminal.data.model.VoicePair
+import com.rhodesisland.terminal.config.AppConfig
+import com.rhodesisland.terminal.config.Characters
 import com.rhodesisland.terminal.llm.backend.BackendPreference
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * 设置仓库
@@ -44,6 +47,20 @@ class SettingsRepository(private val store: SettingsStore) {
     /** 推理参数是否相对上次成功加载已变更（供设置页展示"将自动重载"横幅）*/
     val llmConfigChanged: Flow<Boolean> = store.llmConfigChanged
 
+    // ===== 角色问候（角色主动消息，仅云端可用）=====
+    /** 角色问候开关。 */
+    val greetingEnabled: Flow<Boolean> = store.greetingEnabled
+    /** 主动发消息的角色 id 集合（可多选）。 */
+    val greetingCharacterIds: Flow<Set<String>> = store.greetingCharacterIds
+    /** 每天主动消息条数。 */
+    val greetingDailyCount: Flow<Int> = store.greetingDailyCount
+    /** 当日配额（日期 -> 已发条数）。 */
+    val greetingQuota: Flow<Pair<String, Int>> = store.greetingQuota
+    /** 上一次主动问候的角色 id（多角色轮换用）。 */
+    val greetingLastCharId: Flow<String?> = store.greetingLastCharId
+    /** 下一次该投递问候的目标时间（epoch ms；0=未设置）。 */
+    val greetingNextFireAt: Flow<Long> = store.greetingNextFireAt
+
     suspend fun setApiConfig(config: ApiConfig) = store.setApiConfig(config)
     suspend fun setTtsConfig(config: TtsConfig) = store.setTtsConfig(config)
     suspend fun setTtsLanguage(lang: TtsLanguage) = store.setTtsLanguage(lang)
@@ -55,7 +72,7 @@ class SettingsRepository(private val store: SettingsStore) {
         store.setActiveConversation(characterId, conversationId)
     suspend fun clearActiveConversation(characterId: String) = store.clearActiveConversation(characterId)
     suspend fun getActiveConversationNow(characterId: String): Long? =
-        activeConversations.first()[characterId]
+        withTimeoutOrNull(DATASTORE_TIMEOUT_MS) { activeConversations.first() }?.get(characterId)
     suspend fun setCustomCharacters(list: List<Character>) = store.setCustomCharacters(list)
     suspend fun updateCustomCharacters(transform: (List<Character>) -> List<Character>) =
         store.updateCustomCharacters(transform)
@@ -81,23 +98,96 @@ class SettingsRepository(private val store: SettingsStore) {
 
     suspend fun setLiquidGlass(enabled: Boolean) = store.setLiquidGlass(enabled)
 
+    suspend fun setGreetingEnabled(enabled: Boolean) = store.setGreetingEnabled(enabled)
+    suspend fun setGreetingCharacterIds(ids: Set<String>) = store.setGreetingCharacterIds(ids)
+    suspend fun setGreetingDailyCount(count: Int) = store.setGreetingDailyCount(count)
+    suspend fun setGreetingQuota(date: String, count: Int) = store.setGreetingQuota(date, count)
+    suspend fun setGreetingLastCharId(id: String?) = store.setGreetingLastCharId(id)
+    suspend fun setGreetingNextFireAt(epochMs: Long) = store.setGreetingNextFireAt(epochMs)
+
     /** 一次成功推理后写回本次生效的用户配置，使 [llmConfigChanged] 归 false */
     suspend fun acknowledgeLlmConfig(
         threads: Int, contextLen: Int, backend: BackendPreference, lookahead: Boolean, temperature: Float,
     ) = store.acknowledgeLlmConfig(threads, contextLen, backend, lookahead, temperature)
 
-    /** 同步获取当前 API 配置（阻塞读取 Flow 首值） */
-    suspend fun getApiConfigNow(): ApiConfig = apiConfig.first()
+    /** 同步获取当前 API 配置（阻塞读取 Flow 首值，5s 超时返回默认配置）。
+     *  国产 ROM（MIUI/EMUI/ColorOS）的电池优化可能拦截 DataStore 文件 I/O 导致 .first() 永久挂起；
+     *  withTimeoutOrNull 保证 UI 不卡死。 */
+    suspend fun getApiConfigNow(): ApiConfig = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
+        apiConfig.first()
+    } ?: ApiConfig(baseUrl = "", apiKey = "", model = "")
 
-    suspend fun getTtsConfigNow(): TtsConfig = ttsConfig.first()
+    suspend fun getTtsConfigNow(): TtsConfig = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
+        ttsConfig.first()
+    } ?: TtsConfig(apiKey = "", appId = "", accessKey = "")
 
-    suspend fun getTtsLanguageNow(): TtsLanguage = ttsLanguage.first()
+    suspend fun getTtsLanguageNow(): TtsLanguage = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
+        ttsLanguage.first()
+    } ?: TtsLanguage.ZH
 
-    suspend fun getTtsVoiceMapNow(): Map<String, VoicePair> = ttsVoiceMap.first()
+    suspend fun getTtsVoiceMapNow(): Map<String, VoicePair> = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
+        ttsVoiceMap.first()
+    } ?: emptyMap()
 
-    suspend fun getActiveProviderNow(): ChatProviderType = activeProvider.first()
+    suspend fun getActiveProviderNow(): ChatProviderType = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
+        activeProvider.first()
+    } ?: ChatProviderType.CLOUD
 
-    suspend fun getActiveLocalModelIdNow(): String? = activeLocalModelId.first()
+    suspend fun getActiveLocalModelIdNow(): String? = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
+        activeLocalModelId.first()
+    }  // 超时返回 null（无模型），上游 LocalChatProvider 会抛出「未选择模型」
 
-    suspend fun getDeepThinkingNow(): Boolean = deepThinking.first()
+    suspend fun getDeepThinkingNow(): Boolean = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
+        deepThinking.first()
+    } ?: false
+
+    /** 同步获取活跃角色（5s 超时回退默认角色），供 CharacterRepository 使用 */
+    suspend fun getActiveCharacterNow(): String = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
+        activeCharacter.first()
+    } ?: Characters.DEFAULT_CHARACTER_ID
+
+    /** 同步获取自定义角色（5s 超时返回空列表，等同无自定义角色） */
+    suspend fun getCustomCharactersNow(): List<Character> = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
+        customCharacters.first()
+    } ?: emptyList()
+
+    // ===== 角色问候同步读取（供 GreetingWorker 用）=====
+    // 关键：DataStore 冷启动（尤其国产 ROM 拦截文件 I/O）时 .first() 可能超时。
+    // `OrNull` 变体超时返回 null，让 Worker 区分「已关闭(false)」与「没读到(null)」——
+    // 后者必须保留自延续链稍后重试，而非误判为关闭把链条掐断。
+
+    suspend fun getGreetingEnabledNow(): Boolean = getGreetingEnabledOrNull() ?: false
+
+    suspend fun getGreetingEnabledOrNull(): Boolean? = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
+        greetingEnabled.first()
+    }
+
+    suspend fun getGreetingCharacterIdsNow(): Set<String> = getGreetingCharacterIdsOrNull() ?: emptySet()
+
+    suspend fun getGreetingCharacterIdsOrNull(): Set<String>? = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
+        greetingCharacterIds.first()
+    }
+
+    suspend fun getGreetingDailyCountNow(): Int = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
+        greetingDailyCount.first()
+    } ?: AppConfig.Greeting.DEFAULT_DAILY_COUNT
+
+    suspend fun getGreetingQuotaNow(): Pair<String, Int> = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
+        greetingQuota.first()
+    } ?: "" to 0
+
+    /** 上一次主动问候的角色 id；超时或未发过均返回 null（轮换降级为纯随机）。 */
+    suspend fun getLastGreetingCharIdNow(): String? = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
+        greetingLastCharId.first()
+    }
+
+    /** 下一次该投递问候的目标时间（epoch ms）；超时或未设置均返回 0。 */
+    suspend fun getGreetingNextFireAtNow(): Long = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
+        greetingNextFireAt.first()
+    } ?: 0L
+
+    companion object {
+        /** DataStore .first() 超时阈值（ms）。国产 ROM 文件 I/O 被拦截时避免永久挂起。 */
+        private const val DATASTORE_TIMEOUT_MS = 5000L
+    }
 }

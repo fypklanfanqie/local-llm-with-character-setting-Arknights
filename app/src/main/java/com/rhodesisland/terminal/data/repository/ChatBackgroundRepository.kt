@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 
 /** 通讯界面背景配置：是否启用自定义 + 自定义图片内部存储路径列表（有序）。 */
@@ -44,7 +45,9 @@ class ChatBackgroundRepository(
             ChatBackgroundConfig(enabled, paths)
         }
 
-    suspend fun getConfigNow(): ChatBackgroundConfig = config.first()
+    suspend fun getConfigNow(): ChatBackgroundConfig = withTimeoutOrNull(5000) {
+        config.first()
+    } ?: ChatBackgroundConfig(enabled = false, paths = emptyList())
 
     suspend fun setEnabled(enabled: Boolean) = settingsStore.setChatBgEnabled(enabled)
 
@@ -65,7 +68,7 @@ class ChatBackgroundRepository(
      */
     suspend fun addUris(uris: List<Uri>): List<String> {
         if (uris.isEmpty()) return emptyList()
-        val current = settingsStore.chatBgPaths.first()
+        val current = withTimeoutOrNull(5000) { settingsStore.chatBgPaths.first() } ?: emptyList()
         val room = MAX_BACKGROUNDS - current.size
         if (room <= 0) return emptyList()
         val added = copyToInternal(uris.take(room))
@@ -83,7 +86,7 @@ class ChatBackgroundRepository(
 
     /** 删除全部自定义背景文件并清空列表（开关不动）。 */
     suspend fun clearAll() {
-        val current = settingsStore.chatBgPaths.first()
+        val current = withTimeoutOrNull(5000) { settingsStore.chatBgPaths.first() } ?: emptyList()
         settingsStore.setChatBgPaths(emptyList())
         current.forEach { runCatching { File(it).takeIf { f -> f.exists() }?.delete() } }
     }

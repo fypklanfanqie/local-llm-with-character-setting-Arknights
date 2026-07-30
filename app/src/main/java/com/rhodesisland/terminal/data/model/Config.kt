@@ -15,11 +15,15 @@ data class ApiConfig(
 
 /**
  * TTS 配置（火山引擎）
- * 对应小程序 storage.getTtsConfig()
+ * 对齐网页版 storage.getTtsConfig()
+ * apiKey 为火山引擎控制台 API Key 管理中的 key；
+ * appId + accessKey 为旧版账号体系的备选鉴权方式。
  */
 @Serializable
 data class TtsConfig(
     val apiKey: String = "",
+    val appId: String = "",
+    val accessKey: String = "",
 )
 
 /**

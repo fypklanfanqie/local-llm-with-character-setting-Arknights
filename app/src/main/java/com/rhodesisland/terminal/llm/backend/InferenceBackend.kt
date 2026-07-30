@@ -33,6 +33,13 @@ interface InferenceBackend {
     val currentModelPath: String?
 
     /**
+     * 最近一次初始化或推理失败的原因（供 [BackendManager] 收集后上报），
+     * 解决「所有后端均初始化失败」无诊断信息、无法定位部分芯片失败原因的问题。
+     * 成功加载后清空（但生成为同一会话复用，不重 alloc，故不影响）。
+     */
+    val lastErrorMessage: String?
+
+    /**
      * 加载模型并初始化后端。
      * @param modelPath `.mnn` 目录的 `config.json` 路径
      * @param contextLength 上下文长度

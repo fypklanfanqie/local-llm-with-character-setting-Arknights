@@ -173,4 +173,13 @@ class MnnBridge {
      * （1=本轮复用了 KV 前缀/0=否/-1=取不到），用于验证多轮前缀复用是否生效。
      */
     external fun nativeGetMetrics(handle: Long): FloatArray
+
+    /**
+     * 最近一次 [nativeCreate] 的加载失败原因（对应 C 层 g_last_load_error）。
+     * 在 [nativeCreate] 返回 0 后立即调用，取真实失败原因（如 `Llm::load 异常: ...`、
+     * `Llm::load() 失败 (backend=cpu)`，含 CPU 安全配置重试的结果）填入 [MnnBackend.lastErrorMessage]，
+     * 再由 [BackendManager] 汇总上报，定位「所有后端均加载失败」的芯片相关根因。
+     * 空串表示无错误/上次加载成功。
+     */
+    external fun nativeGetLastError(): String
 }

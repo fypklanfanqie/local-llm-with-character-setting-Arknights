@@ -64,6 +64,11 @@ static jclass    g_bridge_cls       = nullptr;
 static jmethodID g_callback_mid     = nullptr;
 static jmethodID g_should_abort_mid = nullptr;
 
+// 最近一次 nativeCreate 的加载失败原因（供 nativeGetLastError 回传 Kotlin，定位「所有后端加载失败」根因）。
+// nativeCreate 由 MnnBackend.mnnMutex 串行（三类 MNN 后端共享），且 nativeGetLastError 紧随 nativeCreate
+// 失败返回后立即调用，无并发覆盖。load 成功时清空。
+static std::string g_last_load_error;
+
 static void ensure_jni_cache(JNIEnv *env) {
     if (g_bridge_cls) return;
     jclass local = env->FindClass("com/rhodesisland/terminal/llm/backend/MnnBridge");
@@ -319,7 +324,8 @@ Java_com_rhodesisland_terminal_llm_backend_MnnBridge_nativeCreate(
 
     Llm *llm = Llm::createLLM(config_str);
     if (!llm) {
-        MNN_LOGE("Llm::createLLM 返回 null（config 解析失败）");
+        g_last_load_error = "Llm::createLLM 返回 null（config.json 解析失败）";
+        MNN_LOGE("%s", g_last_load_error.c_str());
         return 0;
     }
 
@@ -415,19 +421,72 @@ Java_com_rhodesisland_terminal_llm_backend_MnnBridge_nativeCreate(
     }
 
     bool ok = false;
+    std::string load_err;
     try {
         ok = llm->load();
     } catch (const std::exception &e) {
-        MNN_LOGE("Llm::load 异常: %s", e.what());
+        load_err = std::string("Llm::load 异常: ") + e.what();
+        MNN_LOGE("%s", load_err.c_str());
         ok = false;
     }
+    // CPU 安全配置重试：激进配置 precision:"low"(fp16/ARM82) 与 memory:"low"(运行时量化) 在不支持该
+    // 指令集/量化核的芯片上会导致 load() 失败。CPU 是 AUTO 回退链的末端兜底（恒在列），其失败即
+    // 「所有后端均加载失败」-> 本地模型完全不可用。此处销毁失败实例后用「最小兼容配置」重建重试一次：
+    //   丢 precision/memory（回退模型默认 fp32/无运行时量化，最兼容），
+    //   保留 attention_mode=8/dynamic_option=0（防 KV int8 乱码/激活动态量化拖慢）、
+    //       cache_path（防相对路径不可写崩在 PipelineModule::load）、
+    //       mixed_samplers+penalty（防小模型复读循环）、use_mmap/reuse_kv（控内存/多轮复用）。
+    // 仅 CPU 重试（GPU/NPU 失败本就回退 CPU；OpenCL/QNN 可用性问题换配置无益）。
+    bool used_safe_retry = false;
+    if (!ok && backend_str == "cpu") {
+        MNN_LOGW("CPU 首次 load 失败，销毁后用安全配置(无 fp16/运行时量化)重建重试");
+        Llm::destroy(llm);
+        llm = Llm::createLLM(config_str);
+        if (!llm) {
+            g_last_load_error = "安全配置重试: Llm::createLLM 返回 null";
+            MNN_LOGE("%s", g_last_load_error.c_str());
+            return 0;
+        }
+        std::string safe_conf = "{\"backend_type\":\"cpu\""
+            ",\"thread_num\":" + std::to_string(thread_num) +
+            ",\"cache_path\":\"" + cache_path + "\"" +
+            ",\"use_mmap\":true"
+            ",\"reuse_kv\":true"
+            ",\"attention_mode\":8"
+            ",\"dynamic_option\":0"
+            ",\"power\":\"high\""
+            ",\"temperature\":" + std::to_string((double)temperature) +
+            ",\"topP\":" + std::to_string((double)top_p) +
+            ",\"repetition_penalty\":" + std::to_string((double)repeat_penalty) +
+            ",\"mixed_samplers\":[\"penalty\",\"topK\",\"tfs\",\"typical\",\"topP\",\"min_p\",\"temperature\"]";
+        if (context_len > 0) {
+            safe_conf += ",\"kv_max_length\":" + std::to_string((int)context_len);
+        }
+        safe_conf += "}";
+        MNN_LOGI("安全配置 set_config: %s", safe_conf.c_str());
+        if (!llm->set_config(safe_conf)) {
+            MNN_LOGW("安全配置 set_config 失败（继续用模型默认）");
+        }
+        try {
+            ok = llm->load();
+            if (ok) { load_err.clear(); used_safe_retry = true; }
+        } catch (const std::exception &e) {
+            load_err = std::string("安全配置 Llm::load 异常: ") + e.what();
+            MNN_LOGE("%s", load_err.c_str());
+            ok = false;
+        }
+    }
     if (!ok) {
-        MNN_LOGE("Llm::load 失败（backend=%s），可能 OpenCL/QNN 运行时不可用", backend_str.c_str());
+        if (load_err.empty()) load_err = std::string("Llm::load() 失败 (backend=") + backend_str + ")";
+        g_last_load_error = load_err;
+        MNN_LOGE("%s", g_last_load_error.c_str());
         Llm::destroy(llm);
         return 0;
     }
 
-    MNN_LOGI("MNN 模型加载成功 backend=%s", backend_str.c_str());
+    g_last_load_error.clear();
+    MNN_LOGI("MNN 模型加载成功 backend=%s%s", backend_str.c_str(),
+             (used_safe_retry ? " (经安全配置重试: 已回退 fp32/无运行时量化)" : ""));
     return (jlong)llm;
 }
 
@@ -642,6 +701,16 @@ Java_com_rhodesisland_terminal_llm_backend_MnnBridge_nativeGetMetrics(
     jfloatArray result = env->NewFloatArray(6);
     if (result) env->SetFloatArrayRegion(result, 0, 6, metrics);
     return result;
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_rhodesisland_terminal_llm_backend_MnnBridge_nativeGetLastError(
+        JNIEnv *env, jobject thiz) {
+    // 返回最近一次 nativeCreate 的加载失败原因（g_last_load_error）。空串=无错误/上次成功。
+    // 供 MnnBackend.initialize 在 nativeCreate 返回 0 时取真实原因填 lastErrorMessage，再由
+    // BackendManager 汇总上报，定位「所有后端均加载失败」的芯片相关根因。
+    (void)thiz;
+    return env->NewStringUTF(g_last_load_error.c_str());
 }
 
 }  // extern "C"

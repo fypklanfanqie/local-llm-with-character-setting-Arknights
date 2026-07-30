@@ -19,6 +19,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * 本地聊天 Provider
@@ -83,22 +84,31 @@ class LocalChatProvider(
             ensureThermalMonitoring()
 
             // 3. 读取推理参数（contextLen/threads 仅在加载时生效，但 BackendManager 内部决定加载时机，
-            //    故每轮读取并传入；DataStore.first() 有缓存，开销可忽略）
-            val contextLen = settings.llmContextLen.first()
-            val userThreads = settings.llmThreads.first()
-            val temperature = settings.llmTemperature.first()
-            val maxTokens = settings.llmMaxTokens.first()
-            val preference = settings.llmBackend.first()
-            val lookahead = settings.llmLookahead.first()
+            //    故每轮读取并传入；DataStore.first() 有缓存，开销可忽略）。
+            //    国产 ROM DataStore I/O 可能被拦截导致 .first() 挂起，加超时返回默认值。
+            val contextLen = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) { settings.llmContextLen.first() }
+                ?: AppConfig.LLM.DEFAULT_CONTEXT_LEN
+            val userThreads = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) { settings.llmThreads.first() }
+                ?: AppConfig.LLM.DEFAULT_THREADS
+            val temperature = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) { settings.llmTemperature.first() }
+                ?: AppConfig.LLM.DEFAULT_TEMPERATURE
+            val maxTokens = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) { settings.llmMaxTokens.first() }
+                ?: AppConfig.LLM.DEFAULT_MAX_TOKENS
+            val preference = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) { settings.llmBackend.first() }
+                ?: com.rhodesisland.terminal.llm.backend.BackendPreference.AUTO
+            val lookahead = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) { settings.llmLookahead.first() } ?: false
             // 同步 CPU 提频开关到 controller（MnnBackend 据此决定是否开 hint session）
-            cpuBoostController.enabled = settings.llmCpuBoost.first()
+            cpuBoostController.enabled = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
+                settings.llmCpuBoost.first()
+            } ?: true
             // 深度思考开关：透传给 MNN jinja context enable_thinking（运行时生效，无需重载）。
             // 关闭时推理模型跳过 <think> 推理段直接作答（修复「关闭开关仍深度思考」）。
-            val deepThinking = settings.deepThinking.first()
-            // 仅推理模型（Think 标签）的输出需要折叠包装：其 chat 模板把起始 <think> 放在 generation
-            // prompt 前缀（非输出流），故 native 输出缺起始 <think>，parseWithThink 无法折叠（修复「本地
-            // 思考过程不可折叠」）。非推理模型（Llama/Gemma/SmolLM）不产生 <think>，无需包装。
-            val shouldFoldThink = deepThinking && isThinkingModel(activeModelId)
+            val deepThinking = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
+                settings.deepThinking.first()
+            } ?: false
+            // 推理模型判定：其 chat 模板把起始 <think> 放在 generation prompt 前缀（非输出流），故 native
+            // 输出缺起始 <think>，parseWithThink 无法折叠；renderLocalThink 据此补回。非推理模型不产生 <think>。
+            val isThinkModel = isThinkingModel(activeModelId)
 
             // 有效线程数 = min(用户设定, 大核数, 温度上限)。
             // - 不超过大核数：多了会跑到小核，反而变慢且更耗电发热。
@@ -135,7 +145,8 @@ class LocalChatProvider(
             }
             val accumulated = StringBuilder()
             var truncated = false  // onToken 截断后置位，后续 token 不再累积、持续返回 false 让 native abort
-            var seenCloseThink = false  // 本轮输出是否出现过 </think>（用于最终是否保留折叠包装）
+            // 折叠开关：开思考 + 推理模型时补起始 <think> 显示「思考中」（否则会把正常回复困在思考块）。
+            val foldIfNoClose = deepThinking && isThinkModel
             val result = backendManager.generate(
                 modelPath = modelPath,
                 messages = enhancedMessages,
@@ -151,9 +162,6 @@ class LocalChatProvider(
                 onToken = { token ->
                     if (!truncated) {
                         accumulated.append(token)
-                        if (shouldFoldThink && !seenCloseThink && accumulated.indexOf("</think>") >= 0) {
-                            seenCloseThink = true
-                        }
                         // 兜底截断：累积文本出现「角色名：」多角色剧本标记 -> 截到标记前并停止。
                         // 模型遵守 system 规范时不会触发；不遵守时此为硬性防线，避免长篇剧本耗满 maxTokens。
                         val cutPos = findScriptCutPosition(accumulated)
@@ -163,10 +171,9 @@ class LocalChatProvider(
                         }
                         // 折叠包装：补回起始 <think> 使 parseWithThink 能把推理段识别为可折叠 Think 段。
                         val raw = accumulated.toString()
-                        onChunk(if (shouldFoldThink) renderLocalThink(raw) else raw)
+                        onChunk(renderLocalThink(raw, foldIfNoClose))
                     }
-                    // false -> MnnBackend 设 MnnBridge.abort=true -> native stepping 1 token 内停。
-                    // 截断后持续返回 false 确保 abort 生效（native 可能再推 1 个 token 才检测 shouldAbort）。
+                    // false -> native 1 token 内 abort；截断后持续返回 false 确保 abort 生效。
                     !truncated
                 },
             )
@@ -184,11 +191,9 @@ class LocalChatProvider(
             Log.i(TAG, "生成完成，使用后端: ${result.usedBackend.displayName}")
 
             // 优先使用流式累积的文本，否则回退 native 返回值，再回退占位文案。
-            // 折叠包装落库：仅当本轮确实出现过 </think>（模型真推理了）才保留 <think> 包装，使历史消息
-            // 重新渲染时仍可折叠（与流式展示一致）。未出现 </think>（模型未推理 / 被 max_tokens 截断在
-            // 推理中途）则不补 <think>，避免把正常回复困在「思考中」折叠块里。
+            // 折叠包装落库：与流式展示共用同一 [renderLocalThink] 逻辑，使历史消息重新渲染时仍可折叠。
             val finalRaw = accumulated.toString()
-            val finalText = if (shouldFoldThink && seenCloseThink) renderLocalThink(finalRaw) else finalRaw
+            val finalText = renderLocalThink(finalRaw, deepThinking && isThinkModel)
             finalText.ifBlank { result.text.ifBlank { "(本地模型未生成回复)" } }
         }
     }
@@ -225,13 +230,17 @@ class LocalChatProvider(
     companion object {
         private const val TAG = "LocalChatProvider"
 
+        /** DataStore .first() 超时阈值（ms）。国产 ROM 文件 I/O 被拦截时避免永久挂起。 */
+        private const val DATASTORE_TIMEOUT_MS = 5000L
+
         /** 本地小模型输出规范：约束单角色简短回复、禁剧本格式。追加到 system prompt（仅本地）。
          *  针对小模型角色扮演「上头」编多角色剧本并无限生成的根因（见 .claude/plans/fix-llm-not-stopping.md）。 */
         private const val RESPONSE_GUIDE = "\n\n【输出规范（严格遵守）】\n" +
             "- 每次只回复一两句话，简短自然，回复完立即停止。\n" +
             "- 只以你自己的角色身份说话，不要扮演、模拟或代言其他角色（如博士、其他干员）。\n" +
             "- 禁止使用「名字：」格式的对话剧本/台词录，禁止自问自答、不要连续生成多个角色的台词。\n" +
-            "- 不要写大段括号心理活动旁白。"
+            "- 不要写大段括号心理活动旁白。\n" +
+            "- 若进行深度思考，思考过程务必极其简短（三五句即可），切忌长篇推理。"
 
         /**
          * 剧本标记检测用角色名集合：全部干员名 + 常见 NPC。模型滑向多角色剧本时会生成
@@ -258,38 +267,48 @@ class LocalChatProvider(
 
         /**
          * 判断模型是否为推理模型（产生 `<think>...</think>` 思考段）。
-         * 据内置清单 [DEFAULT_MNN_MODELS] 的 Think 标签判定。推理模型（Qwen3 / DeepSeek-R1 等）的 chat
-         * 模板把起始 `<think>` 放在 generation prompt 前缀，输出流缺起始 `<think>`，需 [renderLocalThink]
-         * 补回以供折叠。非推理模型（Llama/Gemma/SmolLM）不产生 `<think>`，无需处理。未知模型回退 false。
+         *
+         * 推理模型（Qwen3 / DeepSeek-R1 等）的 chat 模板把起始 `<think>` 放在 generation prompt 前缀
+         * （非输出流），故 native 输出缺起始 `<think>`，[renderLocalThink] 据此补回以供折叠。
+         *
+         * 判定优先级：① 内置清单 [DEFAULT_MNN_MODELS] 的 Think 标签（权威）；② 清单外模型按 modelId
+         * 关键词兜底（qwen3/qwq/deepseek-r1/reason/think），使自行添加的推理模型也能折叠。即便两者都
+         * 未命中，[renderLocalThink] 仍会在输出含 `</think>` 时补起始标签折叠--本判定仅决定流式中
+         * （尚未出现 `</think>` 时）是否补 `<think>` 显示「思考中…」。非推理模型不产生 `<think>`，无需处理。
          */
         private fun isThinkingModel(modelId: String?): Boolean {
             if (modelId.isNullOrBlank()) return false
-            return DEFAULT_MNN_MODELS.firstOrNull { it.id == modelId }
-                ?.tags?.any { it.equals("Think", ignoreCase = true) } == true
+            if (DEFAULT_MNN_MODELS.firstOrNull { it.id == modelId }
+                    ?.tags?.any { it.equals("Think", ignoreCase = true) } == true) return true
+            val id = modelId.lowercase()
+            return id.contains("qwen3") || id.contains("qwq") || id.contains("deepseek-r1") ||
+                id.contains("reason") || id.contains("think")
         }
 
         /**
-         * 把本地推理模型的输出包装为 `<think>...</think>` 结构，供 [MarkdownParser.parseWithThink] 折叠。
+         * 把本地推理模型的输出包装为可折叠的 `<think>...</think>` 结构，供 [MarkdownParser.parseWithThink] 折叠。
          *
          * 背景：Qwen3/R1 的 chat 模板把起始 `<think>` 放在 generation prompt 前缀（非输出流），故 native
-         * 输出形如 `[reasoning]</think>[response]`——缺起始 `<think>`，[MarkdownParser.parseWithThink]
-         * 需 `<think>` 才能识别为思考段，否则推理过程以纯文本（夹一个孤立 `</think>`）显示、不可折叠。
-         * 这里补回起始 `<think>`：
-         * - 含 `</think>`：`<think>{reasoning}</think>{response}`（思考闭合 + 正文）。
-         * - 不含 `</think>`（流式中思考未结束）：`<think>{reasoning}`（未闭合，UI 显示「思考中…」可折叠查看）。
+         * 输出缺起始 `<think>`，[MarkdownParser.parseWithThink] 需 `<think>` 才能识别为思考段，否则推理过程
+         * 以纯文本（夹一个孤立 `</think>`）显示、不可折叠。
          *
-         * 防御：若模型自行输出了起始 `<think>`（个别模板行为），先剥掉避免 `<think><think>` 双标签。
-         * 是否最终保留包装由调用方按「本轮是否出现过 `</think>`」决定（未出现则不补，避免困住正常回复）。
+         * 包装规则（流式与落库共用同一逻辑，保证「输出中」与「输出完」折叠一致）：
+         * - 含 `</think>`：补起始 `<think>`（[stripLeadingThink] 防模型自输出时双标签）-> 可折叠。
+         * - 不含 `</think>` 但含 `<think>`：模型自输出起始标签（流式未闭合），保持原样即可折叠为「思考中…」。
+         * - 两者都没有：仅当 [foldIfNoClose]（预判推理模型，其起始 `<think>` 在前缀故输出流缺）时补
+         *   `<think>` 显示「思考中…」（含被 max_tokens 截断在思考中途，半截思考仍可折叠、不泄漏正文）；
+         *   否则不补，避免把正常回复困在「思考中」折叠块。
          */
-        private fun renderLocalThink(raw: String): String {
+        private fun renderLocalThink(raw: String, foldIfNoClose: Boolean): String {
             val closeTag = "</think>"
             val closeIdx = raw.indexOf(closeTag)
-            if (closeIdx < 0) {
-                return "<think>" + stripLeadingThink(raw)
+            if (closeIdx >= 0) {
+                val reasoning = stripLeadingThink(raw.substring(0, closeIdx))
+                val content = raw.substring(closeIdx + closeTag.length)
+                return "<think>$reasoning</think>$content"
             }
-            val reasoning = stripLeadingThink(raw.substring(0, closeIdx))
-            val content = raw.substring(closeIdx + closeTag.length)
-            return "<think>$reasoning</think>$content"
+            if (raw.contains("<think>")) return raw  // 模型自输出起始标签，未闭合但已可折叠
+            return if (foldIfNoClose) "<think>" + stripLeadingThink(raw) else raw
         }
 
         /** 去掉开头的 `<think>` 标签（trim 后匹配），防止模型自行输出 `<think>` 时与 [renderLocalThink] 补的重复。 */

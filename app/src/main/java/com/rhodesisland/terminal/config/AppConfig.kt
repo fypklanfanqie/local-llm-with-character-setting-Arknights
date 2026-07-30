@@ -4,11 +4,10 @@ package com.rhodesisland.terminal.config
  * 应用全局配置
  */
 object AppConfig {
-    // ===== CloudRun 服务 =====
-    // 现仅用于火山引擎 TTS 代理（云端对话/翻译/OCR/文档提取已改直连对话商 API）。
-    // 部署后填入 CloudRun 公网域名（如 https://llm-proxy-xxxx.cloudrun.cloudbase.net）
-    // 也可填入自建服务器地址
-    const val CLOUD_RUN_BASE_URL = "https://llm-proxy1-262820-10-1437375546.sh.run.tcloudbase.com"
+    // ===== TTS 代理 =====
+    // 火山引擎 TTS 透明代理（CloudBase Web 函数），对齐网页版 workers/cloudbase-tts-fn。
+    // 代理直接透传 header + body 到火山引擎 V3 API，不做请求格式转换。
+    const val TTS_PROXY_URL = "https://lanfanqie-d8go1l51d56f44d20.service.tcloudbase.com/tts"
 
     // ===== 云端 AI 默认配置 =====
     const val DEFAULT_API_BASE = "https://api.deepseek.com/v1"
@@ -44,4 +43,27 @@ object AppConfig {
     const val MAX_HISTORY_PER_CONVERSATION = 50
     // 单次请求喂给模型上下文的最大消息条数（取该会话最近 N 条）。
     const val MAX_CONTEXT_MESSAGES = 20
+
+    // ===== 角色问候（角色主动消息）=====
+    // 开启后，所选角色会在白天随机时间主动给用户发消息（早安/晚安/关心/开话题）。
+    // 仅云端 AI 模式可用：消息由 DirectLlmClient.chatOnce 生成，符合角色人设。
+    object Greeting {
+        // 用户可设置的每天主动消息条数范围与默认值
+        const val DEFAULT_DAILY_COUNT = 3
+        const val MIN_DAILY_COUNT = 1
+        const val MAX_DAILY_COUNT = 10
+        // 仅在此时段内触发（避免深夜打扰）：08:00–23:00
+        const val HOUR_START = 8
+        const val HOUR_END = 23
+        // 生成主动消息时带入的最近历史条数（让消息能衔接正在聊的话题）
+        const val CONTEXT_MESSAGES = 6
+        // 单次生成超时（秒）
+        const val GENERATE_TIMEOUT_MS = 60_000L
+        // PeriodicWork 周期（分钟）。WorkManager 最短允许 15 分钟。
+        // 用周期性 Worker 取代脆弱的自延续链：错失一次下个周期仍会触发，链条不会因进程被杀而永久断裂。
+        const val HEARTBEAT_INTERVAL_MIN = 15L
+        // 云 API 生成失败后下一次投递的退避间隔（毫秒）。
+        // 写入 next_fire_at，让 PeriodicWork 在此间隔后再尝试，避免每个周期都失败重试。
+        const val RETRY_DELAY_MS = 45 * 60 * 1000L
+    }
 }

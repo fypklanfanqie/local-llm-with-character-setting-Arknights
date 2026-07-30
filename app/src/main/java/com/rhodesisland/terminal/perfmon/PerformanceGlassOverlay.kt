@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
+import android.util.Log
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -121,47 +122,54 @@ private fun createPanel(
     refs: OverlayRefs,
 ): View {
     val metrics = PerformanceOverlayView(ctx).also { refs.metrics = it }
-    return if (liquidGlassEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        LiquidGlassView(ctx).also { glass ->
-            refs.glass = glass
-            // bind 先于任何 setter；源是兄弟(ComposeView)、不含玻璃 -> record() 不递归、不崩。
-            glass.bind(source as ViewGroup)
-            glass.addView(metrics)
-            glass.translationX = dp(ctx, 16).toFloat()
-            glass.translationY = dp(ctx, 120).toFloat()
-            // 拖动 return false -> 让 LiquidGlassView.onTouchEvent 跑 touchEffect 发光；
-            // 点击展开/折叠后重 fit 玻璃尺寸。
-            glass.setOnTouchListener(
-                dragListener(glass, metrics, false, ctx) {
-                    glass.post { fitGlassToContent(glass, metrics) }
-                },
-            )
-            glass.post {
-                runCatching {
-                    glass.setTouchEffectEnabled(true)
-                    glass.setCornerRadius(dp(ctx, 28).toFloat())
-                    glass.setRefractionHeight(dp(ctx, 14).toFloat())
-                    glass.setRefractionOffset(dp(ctx, 60).toFloat())
-                    glass.setBlurRadius(2.5f)
-                    glass.setDispersion(0.4f)
-                    // 淡冷色 tint：压底保文字可读，玻璃仍可见
-                    glass.setTintColorRed(0.05f)
-                    glass.setTintColorGreen(0.07f)
-                    glass.setTintColorBlue(0.12f)
-                    glass.setTintAlpha(0.10f)
+    // 尝试创建 LiquidGlassView（需 API 33+）。原生库在部分 GPU（老旧 Mali/PowerVR/Adreno 5xx）
+    // 上可能初始化失败抛异常；捕获后静默回退到普通圆角面板，不影响聊天主体。
+    if (liquidGlassEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        try {
+            LiquidGlassView(ctx).also { glass ->
+                refs.glass = glass
+                // bind 先于任何 setter；源是兄弟(ComposeView)、不含玻璃 -> record() 不递归、不崩。
+                glass.bind(source as ViewGroup)
+                glass.addView(metrics)
+                glass.translationX = dp(ctx, 16).toFloat()
+                glass.translationY = dp(ctx, 120).toFloat()
+                // 拖动 return false -> 让 LiquidGlassView.onTouchEvent 跑 touchEffect 发光；
+                // 点击展开/折叠后重 fit 玻璃尺寸。
+                glass.setOnTouchListener(
+                    dragListener(glass, metrics, false, ctx) {
+                        glass.post { fitGlassToContent(glass, metrics) }
+                    },
+                )
+                glass.post {
+                    runCatching {
+                        glass.setTouchEffectEnabled(true)
+                        glass.setCornerRadius(dp(ctx, 28).toFloat())
+                        glass.setRefractionHeight(dp(ctx, 14).toFloat())
+                        glass.setRefractionOffset(dp(ctx, 60).toFloat())
+                        glass.setBlurRadius(2.5f)
+                        glass.setDispersion(0.4f)
+                        // 淡冷色 tint：压底保文字可读，玻璃仍可见
+                        glass.setTintColorRed(0.05f)
+                        glass.setTintColorGreen(0.07f)
+                        glass.setTintColorBlue(0.12f)
+                        glass.setTintAlpha(0.10f)
+                    }
+                    fitGlassToContent(glass, metrics)
                 }
-                fitGlassToContent(glass, metrics)
+                return glass
             }
+        } catch (e: Exception) {
+            Log.w(TAG, "LiquidGlassView 创建失败（GPU 不兼容？），回退普通面板", e)
+            // 继续走下方普通面板逻辑
         }
-    } else {
-        // 普通面板：FrameLayout 天然 wrap 内容，无需 fit；圆角深底、无玻璃、无 record 开销。
-        FrameLayout(ctx).also { panel ->
-            panel.background = roundedDarkDrawable(ctx)
-            panel.addView(metrics)
-            panel.translationX = dp(ctx, 16).toFloat()
-            panel.translationY = dp(ctx, 120).toFloat()
-            panel.setOnTouchListener(dragListener(panel, metrics, true, ctx) {})
-        }
+    }
+    // 普通面板：FrameLayout 天然 wrap 内容，无需 fit；圆角深底、无玻璃、无 record 开销。
+    return FrameLayout(ctx).also { panel ->
+        panel.background = roundedDarkDrawable(ctx)
+        panel.addView(metrics)
+        panel.translationX = dp(ctx, 16).toFloat()
+        panel.translationY = dp(ctx, 120).toFloat()
+        panel.setOnTouchListener(dragListener(panel, metrics, true, ctx) {})
     }
 }
 
@@ -257,3 +265,4 @@ private class OverlayRefs {
 }
 
 private const val REFRESH_MS = 500L
+private const val TAG = "PerformanceGlass"

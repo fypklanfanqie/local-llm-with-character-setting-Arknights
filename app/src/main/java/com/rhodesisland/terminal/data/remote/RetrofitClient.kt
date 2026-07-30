@@ -1,27 +1,17 @@
 package com.rhodesisland.terminal.data.remote
 
-import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
-import com.rhodesisland.terminal.config.AppConfig
-import kotlinx.serialization.json.Json
 import okhttp3.EventListener
-import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
-import retrofit2.Retrofit
 import java.util.concurrent.TimeUnit
 
 /**
- * Retrofit 客户端
+ * Retrofit / OkHttp 客户端
  */
 object RetrofitClient {
 
-    private val json = Json {
-        ignoreUnknownKeys = true
-        coerceInputValues = true
-        explicitNulls = false
-    }
-
-    private val okHttpClient: OkHttpClient by lazy {
+    /** OkHttp 客户端（供 VolcTtsClient + DirectLlmClient 共用） */
+    val okHttpClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
@@ -47,18 +37,4 @@ object RetrofitClient {
             })
             .build()
     }
-
-    /** CloudRun 服务 Retrofit */
-    private val cloudRunRetrofit: Retrofit by lazy {
-        Retrofit.Builder()
-            .baseUrl(ensureTrailingSlash(AppConfig.CLOUD_RUN_BASE_URL))
-            .client(okHttpClient)
-            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
-            .build()
-    }
-
-    val cloudRunApi: CloudRunApi by lazy { cloudRunRetrofit.create(CloudRunApi::class.java) }
-
-    private fun ensureTrailingSlash(url: String): String =
-        if (url.endsWith("/")) url else "$url/"
 }

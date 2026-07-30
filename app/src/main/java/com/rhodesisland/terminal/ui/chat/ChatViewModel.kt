@@ -2,6 +2,7 @@ package com.rhodesisland.terminal.ui.chat
 
 import android.app.Application
 import android.os.SystemClock
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.rhodesisland.terminal.AppContainer
@@ -60,71 +61,116 @@ class ChatViewModel(
         // 监听活跃角色变化：加载角色信息。
         // 只绑定 activeCharacter（不绑会话映射），避免 setActiveConversation 触发重复 loadCharacter / 重播语音。
         viewModelScope.launch {
-            container.settingsRepository.activeCharacter.collect { charId ->
-                streamingJob?.cancel()
-                container.chatProviderManager.cancelAll()
-                loadCharacter(charId)
+            try {
+                container.settingsRepository.activeCharacter.collect { charId ->
+                    streamingJob?.cancel()
+                    container.chatProviderManager.cancelAll()
+                    loadCharacter(charId)
+                }
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                Log.e(TAG, "activeCharacter flow 异常", e)
+                _uiState.update { it.copy(errorMessage = "角色数据加载失败：${e.message}", showWelcome = false) }
             }
         }
         // 监听角色 + 活跃会话映射：确定该角色的活跃会话；无（或已被删除）则自动新建「新对话」。
         // setActiveConversation 会引发 combine 重发，但届时会话已存在 -> 走 if 分支，幂等无环。
         viewModelScope.launch {
-            container.settingsRepository.activeCharacter
-                .combine(container.settingsRepository.activeConversations) { charId, map -> charId to map[charId] }
-                .distinctUntilChanged()
-                .collect { (charId, convId) ->
-                    val id = convId
-                    if (id != null && container.conversationRepository.getById(id) != null) {
-                        _activeConversationId.value = id
-                    } else {
-                        val newId = container.conversationRepository.create(charId)
-                        container.settingsRepository.setActiveConversation(charId, newId)
-                        _activeConversationId.value = newId
+            try {
+                container.settingsRepository.activeCharacter
+                    .combine(container.settingsRepository.activeConversations) { charId, map -> charId to map[charId] }
+                    .distinctUntilChanged()
+                    .collect { (charId, convId) ->
+                        val id = convId
+                        if (id != null && container.conversationRepository.getById(id) != null) {
+                            _activeConversationId.value = id
+                        } else {
+                            val newId = container.conversationRepository.create(charId)
+                            container.settingsRepository.setActiveConversation(charId, newId)
+                            _activeConversationId.value = newId
+                        }
                     }
-                }
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                Log.e(TAG, "活跃会话 flow 异常", e)
+                _uiState.update { it.copy(errorMessage = "会话数据加载失败：${e.message}", showWelcome = false) }
+            }
         }
         // 监听活跃会话 + 聊天记录（flatMapLatest 保证会话切换时取消旧订阅，避免历史串台）
         viewModelScope.launch {
-            _activeConversationId
-                .flatMapLatest { id ->
-                    if (id != null) container.chatRepository.getHistoryFlow(id)
-                    else flowOf(emptyList())
-                }
-                .collect { history ->
-                    latestHistory = history
-                    renderMessages(history)
-                }
+            try {
+                _activeConversationId
+                    .flatMapLatest { id ->
+                        if (id != null) container.chatRepository.getHistoryFlow(id)
+                        else flowOf(emptyList())
+                    }
+                    .collect { history ->
+                        latestHistory = history
+                        renderMessages(history)
+                    }
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                Log.e(TAG, "聊天记录 flow 异常", e)
+                _uiState.update { it.copy(errorMessage = "聊天记录加载失败：${e.message}", showWelcome = false) }
+            }
         }
         // 监听当前角色的会话列表（供抽屉展示 + 同步当前会话标题）
         viewModelScope.launch {
-            container.settingsRepository.activeCharacter
-                .flatMapLatest { charId -> container.conversationRepository.observeByCharacter(charId) }
-                .collect { list ->
-                    _uiState.update { it.copy(conversations = list) }
-                    syncActiveMeta()
-                }
+            try {
+                container.settingsRepository.activeCharacter
+                    .flatMapLatest { charId -> container.conversationRepository.observeByCharacter(charId) }
+                    .collect { list ->
+                        _uiState.update { it.copy(conversations = list) }
+                        syncActiveMeta()
+                    }
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                Log.e(TAG, "会话列表 flow 异常", e)
+                _uiState.update { it.copy(errorMessage = "会话列表加载失败：${e.message}") }
+            }
         }
         // 监听活跃会话变化 -> 同步标题/高亮（切换/新建/删除后立即生效）
         viewModelScope.launch {
-            _activeConversationId.collect { syncActiveMeta() }
+            try {
+                _activeConversationId.collect { syncActiveMeta() }
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                Log.e(TAG, "activeConversationId flow 异常", e)
+            }
         }
         // 监听 Provider 类型变化
         viewModelScope.launch {
-            container.chatProviderManager.activeProviderType.collect { type ->
-                _uiState.update { it.copy(activeProvider = type) }
+            try {
+                container.chatProviderManager.activeProviderType.collect { type ->
+                    _uiState.update { it.copy(activeProvider = type) }
+                }
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                Log.e(TAG, "providerType flow 异常", e)
+                _uiState.update { it.copy(errorMessage = "Provider 切换失败：${e.message}") }
             }
         }
         // 监听 TTS 语言
         viewModelScope.launch {
-            container.settingsRepository.ttsLanguage.collect { lang ->
-                _uiState.update { it.copy(ttsLanguage = lang) }
+            try {
+                container.settingsRepository.ttsLanguage.collect { lang ->
+                    _uiState.update { it.copy(ttsLanguage = lang) }
+                }
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                Log.e(TAG, "ttsLanguage flow 异常", e)
             }
         }
         // 监听深度思考开关：更新 UI 态并重渲染已有消息（show/hide 思考过程）
         viewModelScope.launch {
-            container.settingsRepository.deepThinking.collect { enabled ->
-                _uiState.update { it.copy(deepThinkingEnabled = enabled) }
-                renderMessages(latestHistory)
+            try {
+                container.settingsRepository.deepThinking.collect { enabled ->
+                    _uiState.update { it.copy(deepThinkingEnabled = enabled) }
+                    renderMessages(latestHistory)
+                }
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                Log.e(TAG, "deepThinking flow 异常", e)
             }
         }
     }
@@ -671,5 +717,9 @@ class ChatViewModel(
         super.onCleared()
         container.chatProviderManager.cancelAll()
         container.ttsManager.stopAll()
+    }
+
+    companion object {
+        private const val TAG = "ChatViewModel"
     }
 }

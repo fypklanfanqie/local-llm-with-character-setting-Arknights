@@ -105,6 +105,7 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.lifecycle.process)
     implementation(libs.androidx.activity.compose)
 
     // Compose
@@ -148,4 +149,7 @@ dependencies {
 
     // Liquid Glass (QmDeve frosted glass overlay with refraction + dispersion + blur)
     implementation(libs.liquidglass.core)
+
+    // WorkManager (角色问候：后台定时主动发消息，跨重启存活)
+    implementation(libs.androidx.work.runtime.ktx)
 }

@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 
 /**
@@ -61,7 +62,7 @@ class TtsManager(
 
         val language = settings.getTtsLanguageNow()
         val ttsConfig = settings.getTtsConfigNow()
-        val volume = settings.ttsVolume.first()
+        val volume = withTimeoutOrNull(5000) { settings.ttsVolume.first() } ?: 60
 
         if (!client.hasCredentials(ttsConfig)) {
             throw Exception("请先在设置页配置火山引擎 TTS 凭据")

@@ -1,5 +1,7 @@
 package com.rhodesisland.terminal
 
+import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -19,6 +21,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
+import com.rhodesisland.terminal.notification.GreetingNotificationManager
 import com.rhodesisland.terminal.ui.LoadingScreen
 import com.rhodesisland.terminal.ui.navigation.AppNavGraph
 import com.rhodesisland.terminal.ui.theme.PrtsColors
@@ -29,13 +32,20 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        // enableEdgeToEdge() 需要 API 29+（Android 10+）；API 24-28 跳过，兼容旧设备及华为 EMUI 9 等魔改 ROM。
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            enableEdgeToEdge()
+        }
         WindowCompat.setDecorFitsSystemWindows(window, false)
         // 适配高刷新率（120Hz）：请求当前分辨率下刷新率最高的显示模式，让键盘上移/转场等动画跑满帧。
         // 系统在支持的设备上会启用高刷新率；不支持则 no-op（取到当前模式即跳过）。
         requestHighRefreshRate()
 
         val app = application as RhodesApp
+
+        // 角色问候通知点按跳转：把目标角色/会话写入设置，ChatViewModel 的 collector 自动切换。
+        // 冷启动在 setContent 前写入，配合启动 Loading 画面让 DataStore 写入完成，避免先闪默认角色。
+        handleGreetingIntent(intent, app)
 
         // CPU 提频（非 root 路线）：SustainedPerformanceMode 跟随设置开关 `llmCpuBoost`。
         // 窗口级持续高性能模式，抗热降频；与 CpuBoostController 的 PerformanceHintManager hint session
@@ -77,6 +87,30 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleGreetingIntent(intent, application as RhodesApp)
+    }
+
+    /**
+     * 角色问候通知点按跳转：从通知 PendingIntent 的 extra 取目标角色/会话，写入设置。
+     * ChatViewModel 的 activeCharacter / activeConversations collector 自动切换到对应会话。
+     */
+    private fun handleGreetingIntent(intent: Intent?, app: RhodesApp) {
+        val charId = intent?.getStringExtra(GreetingNotificationManager.EXTRA_CHARACTER_ID) ?: return
+        val convId = intent.getLongExtra(GreetingNotificationManager.EXTRA_CONVERSATION_ID, -1L)
+        // 消费后清除 extra，避免重复触发
+        intent.removeExtra(GreetingNotificationManager.EXTRA_CHARACTER_ID)
+        intent.removeExtra(GreetingNotificationManager.EXTRA_CONVERSATION_ID)
+        lifecycleScope.launch {
+            app.container.settingsRepository.setActiveCharacter(charId)
+            if (convId > 0) {
+                app.container.settingsRepository.setActiveConversation(charId, convId)
             }
         }
     }

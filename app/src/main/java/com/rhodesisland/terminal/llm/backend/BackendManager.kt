@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.rhodesisland.terminal.data.model.ChatMessage
 import com.rhodesisland.terminal.llm.CpuBoostController
+import com.rhodesisland.terminal.llm.InferenceSessionController
 import com.rhodesisland.terminal.llm.backend.MnnBackend.MnnMode
 import kotlinx.coroutines.CancellationException
 
@@ -27,6 +28,9 @@ class BackendManager(
     private val cpuBoostController: CpuBoostController,
 ) {
     private val selector = BackendSelector(context)
+    private val appContext = context.applicationContext
+    /** 推理保活句柄：generate 期间启停前台服务 + WakeLock，防国产 ROM 冻结/杀进程致 prefill 中断。 */
+    private val inferenceSession = InferenceSessionController(appContext)
     private val mnnCpuBackend = MnnBackend(context, MnnMode.CPU, cpuBoostController)
     private val mnnGpuBackend = MnnBackend(context, MnnMode.GPU_OPENCL, cpuBoostController)
     private val mnnNpuBackend = MnnBackend(context, MnnMode.NPU_QNN, cpuBoostController)
@@ -183,8 +187,13 @@ class BackendManager(
         val order = backendOrder(preference)
         Log.i(TAG, "后端尝试顺序: $order (pref=$preference)")
         var lastError: Exception? = null
+        // 各后端失败原因（display 名 + 诊断信息），全失败时汇总报错，定位部分芯片「所有后端加载失败」根因。
+        val failureReasons = mutableListOf<String>()
         reloadedThisCall = false
         generating = true
+        // 启前台服务保活：覆盖模型加载(prefill，可能数分钟)与流式生成；用户切后台不被冻/杀。
+        // begin 内部吞异常（Android 12+ 后台启动受限时降级为无 FG，生成照常进行）。
+        inferenceSession.begin(desiredBackend(preference).displayName)
         try {
             for (type in order) {
                 if (isSessionFailed(type)) continue
@@ -202,6 +211,11 @@ class BackendManager(
                 }
 
                 if (!ok) {
+                    // initialize 失败（返回 false 或抛异常）：取该后端 lastErrorMessage（由 MnnBackend 在各失败点填充，
+                    // 含 native 侧真实原因 / CPU 安全配置重试结果）汇总，供全失败时详细上报。
+                    val reason = backendFor(type).lastErrorMessage ?: lastError?.message ?: "初始化失败"
+                    failureReasons += "${type.displayName}: $reason"
+                    Log.w(TAG, "$type 初始化失败: $reason")
                     markSessionFailed(type)
                     runCatching { releaseBackend(type) }
                     continue
@@ -221,14 +235,18 @@ class BackendManager(
                     throw ce
                 } catch (e: Exception) {
                     Log.w(TAG, "$type 生成失败，尝试下一后端: ${e.message}")
+                    failureReasons += "${type.displayName}: 生成失败 - ${e.message}"
                     markSessionFailed(type)
                     lastError = e
                     runCatching { releaseBackend(type) }
                 }
             }
 
-            // 所有后端均失败：末端兜底（MNN_CPU）的异常保留在 lastError 中，向上冒泡
-            throw lastError ?: IllegalStateException("所有后端均初始化失败")
+            // 所有后端均失败：汇总各后端原因详细报错（替代空洞「所有后端均初始化失败」），便于定位部分芯片失败根因。
+            val detail = if (failureReasons.isEmpty()) "所有后端均初始化失败"
+                else "本地模型加载失败（所有后端均失败）。${failureReasons.joinToString("；")}"
+            Log.e(TAG, detail)
+            throw lastError?.let { IllegalStateException(detail, it) } ?: IllegalStateException(detail)
         } finally {
             // 与 [release] 互斥：原子地清 generating 并取走 releasePending，决定是否本轮释放。
             // 此时 native 调用已返回（finally 在 generateStreamMessages 之后），释放安全。
@@ -241,6 +259,7 @@ class BackendManager(
             if (pending) {
                 runCatching { doReleaseAll() }
             }
+            inferenceSession.end()
         }
     }
 

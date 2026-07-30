@@ -36,6 +36,8 @@ class SettingsStore(private val context: Context) {
 
         // TTS
         val TTS_API_KEY = stringPreferencesKey("tts_api_key")
+        val TTS_APP_ID = stringPreferencesKey("tts_app_id")
+        val TTS_ACCESS_KEY = stringPreferencesKey("tts_access_key")
         val TTS_LANGUAGE = stringPreferencesKey("tts_language")
         val TTS_VOLUME = intPreferencesKey("tts_volume")
         val TTS_VOICE_MAP = stringPreferencesKey("tts_voice_map")  // JSON: Map<characterId, VoicePair>
@@ -77,6 +79,18 @@ class SettingsStore(private val context: Context) {
         val CHAT_BG_ENABLED = booleanPreferencesKey("chat_bg_enabled")
         val CHAT_BG_PATHS = stringPreferencesKey("chat_bg_paths")
 
+        // 角色问候（角色主动消息）：仅云端可用
+        val GREETING_ENABLED = booleanPreferencesKey("greeting_enabled")
+        val GREETING_CHARACTER_IDS = stringSetPreferencesKey("greeting_character_ids")  // 可多选
+        val GREETING_DAILY_COUNT = intPreferencesKey("greeting_daily_count")
+        // 每日配额：当天已发条数，按日期(yyyy-MM-dd)重置
+        val GREETING_QUOTA_DATE = stringPreferencesKey("greeting_quota_date")
+        val GREETING_QUOTA_COUNT = intPreferencesKey("greeting_quota_count")
+        // 上一次主动问候的角色 id（用于多角色轮换，避免总挑同一个）
+        val GREETING_LAST_CHAR_ID = stringPreferencesKey("greeting_last_char_id")
+        // 下一次该投递问候的目标时间（epoch ms，0=未设置）。PeriodicWork 每个周期检查 now>=此值则投递。
+        val GREETING_NEXT_FIRE_AT = longPreferencesKey("greeting_next_fire_at")
+
         // ===== 配置变更检测（移植自 iFeng 的 hasConfigChanged/acknowledgeConfigChange）=====
         // 记录"上次成功加载模型时所用的"线程/上下文/后端/lookahead。当前值 != last_applied 即视为已变更，
         // 设置页据此展示"下次发送将自动重载"横幅；LocalChatProvider 在 generate 成功后 acknowledge 写回。
@@ -109,12 +123,16 @@ class SettingsStore(private val context: Context) {
     val ttsConfig: Flow<TtsConfig> = context.settingsDataStore.data.map { p ->
         TtsConfig(
             apiKey = p[Keys.TTS_API_KEY] ?: "",
+            appId = p[Keys.TTS_APP_ID] ?: "",
+            accessKey = p[Keys.TTS_ACCESS_KEY] ?: "",
         )
     }
 
     suspend fun setTtsConfig(config: TtsConfig) {
         context.settingsDataStore.edit { p ->
             p[Keys.TTS_API_KEY] = config.apiKey
+            p[Keys.TTS_APP_ID] = config.appId
+            p[Keys.TTS_ACCESS_KEY] = config.accessKey
         }
     }
 
@@ -372,6 +390,72 @@ class SettingsStore(private val context: Context) {
             else runCatching { voiceJson.decodeFromString<List<String>>(raw) }.getOrDefault(emptyList())
             val next = transform(current)
             p[Keys.CHAT_BG_PATHS] = voiceJson.encodeToString(next)
+        }
+    }
+
+    // ===== 角色问候（角色主动消息）=====
+    /** 角色问候开关（默认关）。开启后所选角色在白天随机时间主动发消息，仅云端 AI 可用。 */
+    val greetingEnabled: Flow<Boolean> = context.settingsDataStore.data.map { p ->
+        p[Keys.GREETING_ENABLED] ?: false
+    }
+
+    suspend fun setGreetingEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { it[Keys.GREETING_ENABLED] = enabled }
+    }
+
+    /** 主动发消息的角色 id 集合（可多选，默认空）。 */
+    val greetingCharacterIds: Flow<Set<String>> = context.settingsDataStore.data.map { p ->
+        p[Keys.GREETING_CHARACTER_IDS] ?: emptySet()
+    }
+
+    suspend fun setGreetingCharacterIds(ids: Set<String>) {
+        context.settingsDataStore.edit { it[Keys.GREETING_CHARACTER_IDS] = ids }
+    }
+
+    /** 每天主动消息条数（默认 [AppConfig.Greeting.DEFAULT_DAILY_COUNT]）。 */
+    val greetingDailyCount: Flow<Int> = context.settingsDataStore.data.map { p ->
+        p[Keys.GREETING_DAILY_COUNT] ?: AppConfig.Greeting.DEFAULT_DAILY_COUNT
+    }
+
+    suspend fun setGreetingDailyCount(count: Int) {
+        context.settingsDataStore.edit { it[Keys.GREETING_DAILY_COUNT] = count }
+    }
+
+    /** 当日配额：日期(yyyy-MM-dd) -> 已发条数。 */
+    val greetingQuota: Flow<Pair<String, Int>> = context.settingsDataStore.data.map { p ->
+        (p[Keys.GREETING_QUOTA_DATE] ?: "") to (p[Keys.GREETING_QUOTA_COUNT] ?: 0)
+    }
+
+    /** 写回当日配额（Worker 每发一条自增、跨天重置时调用）。 */
+    suspend fun setGreetingQuota(date: String, count: Int) {
+        context.settingsDataStore.edit {
+            it[Keys.GREETING_QUOTA_DATE] = date
+            it[Keys.GREETING_QUOTA_COUNT] = count
+        }
+    }
+
+    /** 上一次主动问候的角色 id（null 表示尚未发过）。用于多角色轮换，避免连续挑同一角色。 */
+    val greetingLastCharId: Flow<String?> = context.settingsDataStore.data.map { p ->
+        p[Keys.GREETING_LAST_CHAR_ID]
+    }
+
+    suspend fun setGreetingLastCharId(id: String?) {
+        context.settingsDataStore.edit { p ->
+            if (id == null) p.remove(Keys.GREETING_LAST_CHAR_ID)
+            else p[Keys.GREETING_LAST_CHAR_ID] = id
+        }
+    }
+
+    /** 下一次该投递问候的目标时间（epoch ms；0 表示尚未设置，由调度器初始化）。 */
+    val greetingNextFireAt: Flow<Long> = context.settingsDataStore.data.map { p ->
+        p[Keys.GREETING_NEXT_FIRE_AT] ?: 0L
+    }
+
+    /** 写回下一次投递目标时间（<=0 表示清除/未设置）。 */
+    suspend fun setGreetingNextFireAt(epochMs: Long) {
+        context.settingsDataStore.edit { p ->
+            if (epochMs <= 0L) p.remove(Keys.GREETING_NEXT_FIRE_AT)
+            else p[Keys.GREETING_NEXT_FIRE_AT] = epochMs
         }
     }
 
