@@ -675,9 +675,9 @@ private fun GlassField(
         onValueChange = onValueChange,
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
-            .background(scheme.surface.copy(alpha = 0.6f))
+            .background(androidx.compose.ui.graphics.Color(0xFF15151F))
             .padding(10.dp),
-        textStyle = TextStyle(color = scheme.onSurface, fontSize = 13.sp),
+        textStyle = TextStyle(color = androidx.compose.ui.graphics.Color(0xFFE8E4E0), fontSize = 13.sp),
         singleLine = singleLine,
         cursorBrush = androidx.compose.ui.graphics.SolidColor(scheme.primary),
     )

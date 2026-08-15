@@ -504,13 +504,15 @@ private fun GlassInputField(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(scheme.surface.copy(alpha = 0.6f))
+            // 固定深色底（玻璃卡片下可能被渲染偏亮，用纯深色保证对比）
+            .background(androidx.compose.ui.graphics.Color(0xFF15151F))
             .padding(12.dp),
-        textStyle = TextStyle(color = scheme.onSurface, fontSize = 14.sp),
+        // 固定浅色字（不依赖 scheme.onSurface，避免玻璃背景下解析出错导致文字不可见）
+        textStyle = TextStyle(color = androidx.compose.ui.graphics.Color(0xFFE8E4E0), fontSize = 14.sp),
         singleLine = singleLine,
         cursorBrush = androidx.compose.ui.graphics.SolidColor(scheme.primary),
         decorationBox = { inner ->
-            if (value.isEmpty()) Text(placeholder, color = scheme.onSurfaceVariant, fontSize = 14.sp)
+            if (value.isEmpty()) Text(placeholder, color = androidx.compose.ui.graphics.Color(0xFF8A8680), fontSize = 14.sp)
             inner()
         },
     )
@@ -538,9 +540,9 @@ private fun PasswordField(
                 modifier = Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(scheme.surface.copy(alpha = 0.6f))
+                    .background(androidx.compose.ui.graphics.Color(0xFF15151F))
                     .padding(12.dp),
-                textStyle = TextStyle(color = scheme.onSurface, fontSize = 14.sp),
+                textStyle = TextStyle(color = androidx.compose.ui.graphics.Color(0xFFE8E4E0), fontSize = 14.sp),
                 singleLine = true,
                 visualTransformation = if (show) VisualTransformation.None else PasswordVisualTransformation(),
                 cursorBrush = androidx.compose.ui.graphics.SolidColor(scheme.primary),
@@ -1124,25 +1126,7 @@ private fun SeedanceSettingsSection(container: AppContainer, scope: CoroutineSco
             )
             PasswordField("API Key", apiKey, showApiKey, { apiKey = it }, { showApiKey = !showApiKey })
             FieldLabel("服务地址")
-            BasicTextField(
-                value = baseUrl,
-                onValueChange = { baseUrl = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(scheme.surface.copy(alpha = 0.6f))
-                    .border(1.dp, scheme.primary.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
-                    .padding(12.dp),
-                textStyle = TextStyle(color = scheme.onSurface, fontSize = 14.sp),
-                singleLine = true,
-                cursorBrush = androidx.compose.ui.graphics.SolidColor(scheme.primary),
-                decorationBox = { inner ->
-                    if (baseUrl.isEmpty()) {
-                        Text("https://ark.cn-beijing.volces.com/api/v3", color = scheme.onSurfaceVariant, fontSize = 14.sp)
-                    }
-                    inner()
-                },
-            )
+            GlassInputField(value = baseUrl, onValueChange = { baseUrl = it }, placeholder = SeedanceConfig().baseUrl)
             Text(
                 "官方方舟填 base（含 /api/v3）。中转站可填完整「创建任务」地址（如 https://api.lk888.ai/v1/media/generate）或只填主机（如 https://api.lk888.ai），将自动识别媒体协议并调用 /v1/media/generate 与 /v1/media/status。",
                 color = scheme.onSurfaceVariant, fontSize = 10.sp,
