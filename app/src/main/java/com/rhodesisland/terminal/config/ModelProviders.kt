@@ -70,4 +70,17 @@ val PRESET_PROVIDERS: List<ModelProvider> = listOf(
             PresetModel("glm-4.7-flash", "GLM-4.7-Flash", "免费轻量"),
         ),
     ),
+    // 内置免费服务商：SiliconFlow 免费 7B。key 存于 Cloudflare Worker 加密环境变量，
+    // 对话经 Worker 代理（App → Cloudflare 注入 key → 硅基流动），key 不出 Cloudflare，无需用户填 key。
+    ModelProvider(
+        id = "siliconflow-free",
+        displayName = "免费对话",
+        baseUrl = "https://siliconflow-free-proxy.lanfanqie.workers.dev",
+        defaultModel = "Qwen/Qwen2.5-7B-Instruct",
+        models = listOf(
+            PresetModel("Qwen/Qwen2.5-7B-Instruct", "Qwen2.5-7B（免费）", "免费 7B 对话模型"),
+            PresetModel("deepseek-ai/DeepSeek-R1-Distill-Qwen-7B", "DeepSeek-R1-7B（免费）", "免费 7B 推理模型"),
+        ),
+        requiresApiKey = false,
+    ),
 )

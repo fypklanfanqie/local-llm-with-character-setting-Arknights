@@ -84,6 +84,10 @@ fun SettingsScreen(
     }
     var selectedProvider by remember(apiConfig) { mutableStateOf(matchedProvider) }
     val isCustom = selectedProvider == null
+    /** 是否内置免费服务商（SiliconFlow 免费 7B）：key 内置、无需用户填写。 */
+    val isFreeProvider = selectedProvider?.id == "siliconflow-free"
+    /** 首次选择「免费对话」时弹提示。 */
+    var showFreeTip by remember { mutableStateOf(false) }
 
     var selectedModel by remember(apiConfig, selectedProvider) {
         mutableStateOf(
@@ -187,6 +191,7 @@ fun SettingsScreen(
                         selectedProvider = provider
                         selectedModel = provider?.models?.firstOrNull()
                         providerExpanded = false
+                        if (provider?.id == "siliconflow-free") showFreeTip = true
                     },
                 )
                 if (!isCustom && selectedProvider != null) {
@@ -205,7 +210,12 @@ fun SettingsScreen(
                     GlassInputField(value = customBaseUrl, onValueChange = { customBaseUrl = it }, placeholder = "API BASE URL")
                     GlassInputField(value = customModel, onValueChange = { customModel = it }, placeholder = "MODEL")
                 }
-                PasswordField("API KEY", apiKey, showApiKey, { apiKey = it }, { showApiKey = !showApiKey })
+                if (isFreeProvider) {
+                    // 内置免费服务商：key 由 Cloudflare 代理注入，客户端无需填写
+                    PasswordField("API KEY", "通过云端代理（无需密钥）", true, {}, {})
+                } else {
+                    PasswordField("API KEY", apiKey, showApiKey, { apiKey = it }, { showApiKey = !showApiKey })
+                }
             }
         }
         SaveButton(
@@ -215,11 +225,33 @@ fun SettingsScreen(
                 scope.launch {
                     val baseUrl = if (isCustom) customBaseUrl else selectedProvider?.baseUrl ?: customBaseUrl
                     val model = if (isCustom) customModel else selectedModel?.id ?: customModel
-                    container.settingsRepository.setApiConfig(ApiConfig(baseUrl, apiKey, model))
+                    // 内置免费服务商：key 由 Cloudflare 代理注入，客户端无需/不填 key
+                    val effectiveKey = if (isFreeProvider) "" else apiKey
+                    container.settingsRepository.setApiConfig(ApiConfig(baseUrl, effectiveKey, model))
                     apiSaved = true
                 }
             },
         )
+
+        // ===== 免费对话提示弹窗 =====
+        if (showFreeTip) {
+            AlertDialog(
+                onDismissRequest = { showFreeTip = false },
+                containerColor = scheme.surfaceContainerHigh,
+                title = { Text("免费对话", color = scheme.primary) },
+                text = {
+                    Text(
+                        "此为免费模型，参数量为7b，如果出现错误稍等就行，免费的服务请大家谅解！",
+                        color = scheme.onSurface,
+                        fontSize = 14.sp,
+                        lineHeight = 20.sp,
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = { showFreeTip = false }) { Text("知道了", color = scheme.primary) }
+                },
+            )
+        }
 
         // ===== 对话 =====
         GlassListSection(title = "对话") {

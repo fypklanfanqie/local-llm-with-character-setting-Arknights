@@ -1,0 +1,10 @@
+name = "siliconflow-free-proxy"
+main = "src/index.js"
+compatibility_date = "2025-06-01"
+workers_dev = true
+
+# 部署后：
+#   1. 设置 key（加密存储，不落代码）：
+#      wrangler secret put SILICONFLOW_API_KEY
+#   2. 应用「免费对话」服务商 baseUrl 填：
+#      https://siliconflow-free-proxy.<你的子域>.workers.dev
