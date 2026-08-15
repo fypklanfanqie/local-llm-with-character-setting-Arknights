@@ -1,254 +1,97 @@
 # Rhodes Island Terminal · 罗德岛通讯终端
 
-> A fan-made Arknights AI character roleplay chat app for Android — 明日方舟同人 AI 角色扮演聊天应用
+> 明日方舟同人 AI 角色扮演聊天应用：端侧 **MNN 本地大模型推理**（自适应三后端 + 基准认证 + 深度思考）+ 云端双引擎 + 内置方舟 BGM/语音/立绘 · A fan-made Arknights on-device LLM roleplay chat app (MNN local inference + cloud engine + built-in Arknights BGM/voice/art)
 
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0.0-7F52FF?logo=kotlin)](https://kotlinlang.org)
-[![Compose](https://img.shields.io/badge/Jetpack%20Compose-2024.06-4285F4?logo=jetpackcompose)](https://developer.android.com/compose)
-[![API](https://img.shields.io/badge/API-24%2B-34A853?logo=android)](https://developer.android.com/about/versions)
-[![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
+[![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-Material3-4285F4?logo=jetpackcompose)](https://developer.android.com/compose)
+[![MNN](https://img.shields.io/badge/Local%20LLM-MNN-00C4A7?logo=alibabacloud)](https://github.com/alibaba/MNN)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
 
-[English](#english) | [中文](#中文)
+## 🆕 本次更新 · What's New
 
----
-## English
+本版本把本地 LLM 与聊天体验整体升级为「自适应推理 + 工程化闭环」架构，并合入一批新功能：
 
-### Overview
-
-Rhodes Island Terminal is a fan-made Android app that lets you chat with AI-powered Arknights characters. Originally migrated from a WeChat Mini Program, this native Android version features 20 fully-voiced operators, multiple AI backends (cloud + local), TTS, BGM player, and a PRTS-style sci-fi terminal UI.
-<img width="1080" height="2400" alt="Screenshot_2026-07-25-14-55-13-225_com rhodesisl" src="https://github.com/user-attachments/assets/4ea3ea8e-2b50-4433-9a05-af4d20c31466" />
-
-### Features
-
-- 🤖 **Cloud AI** — Direct API connection to DeepSeek, OpenAI, Qwen (通义千问), and GLM (智谱). SSE streaming with configurable endpoints.
-- 📱 **Local AI** — MNN engine with QNN NPU (Qualcomm HTP) acceleration for offline inference. Supports `.mnn` models. Low-memory optimized.
-- <img width="1080" height="2400" alt="Screenshot_2026-07-25-14-58-36-685_com rhodesisl" src="https://github.com/user-attachments/assets/8ee0870b-d23b-401a-80d8-2b3996291a99" />
-
-- 🔄 **Model Switching** — One-tap toggle between cloud API and local MNN inference on the chat screen.
-- ⬇️ **Model Management** — Download/pause/resume/delete local models from a remote server, with SHA256 integrity verification.
-- <img width="1080" height="2400" alt="Screenshot_2026-07-25-14-57-48-347_com rhodesisl" src="https://github.com/user-attachments/assets/6d081ad8-e333-40a3-8fc6-5e62d23fe421" />
-
-- 🎙️ **Volcano Engine TTS** — ByteDance Doubao voice synthesis (Chinese + Japanese), text-to-speech for character voice lines.
-- 🎵 **BGM Player** — 26 Arknights original soundtrack tracks as background music.
-- <img width="1080" height="2400" alt="Screenshot_2026-07-25-14-57-39-734_com rhodesisl" src="https://github.com/user-attachments/assets/3acd6ae2-7aec-42eb-8a92-be45388fa374" />
-
-- 📝 **Markdown Rendering** — Full Markdown support with VS Code Dark+ code highlighting and mathematical formula blocks.
-- 🎨 **PRTS Terminal UI** — Dark sci-fi themed interface with iOS Liquid Glass frosted-glass bottom navigation.
-- 📊 **Performance Overlay** — Real-time CPU/GPU/NPU usage and temperature monitoring via Liquid Glass overlay (non-root, system overlay permission required).
-- 🆓 **Completely Free** — All payment, credit, and ad features have been removed.
-
-### Characters (20 Operators)
-<img width="1080" height="2400" alt="Screenshot_2026-07-25-14-57-44-111_com rhodesisl" src="https://github.com/user-attachments/assets/a7436538-5e69-4b1a-9407-283561db1beb" />
-
-
-| # | Character | Race | Role |
-|---|-----------|------|------|
-| 1 | 羽毛笔 La Pluma | 黎博利 | 近卫干员 / 调酒师 |
-| 2 | 阿米娅 Amiya | 卡特斯/奇美拉 | 罗德岛公开领袖 |
-| 3 | 艾雅法拉 Eyjafjalla | 卡普里尼 | 火山学家 / 天灾信使 |
-| 4 | 澄闪 Goldenglow | 菲林 | 理发师 / 驭械术师 |
-| 5 | 泥岩 Mudrock | 萨卡兹 | 萨卡兹雇佣兵 / 不屈者 |
-| 6 | 逻各斯 Logos | 萨卡兹/妖 | 精英术师 / 咒术大师 |
-| 7 | 蜜莓 Honeyberry | 札拉克 | 医疗部 / 草药医生 |
-| 8 | 遥 Haruka | 阿戈尔 | 东国艺人 |
-| 9 | 维什戴尔 Wis'adel | 萨卡兹 | 雇佣兵领袖 / 巴别塔议长 |
-| 10 | 左乐 Zuole | 斐迪亚 | 司岁台秉烛人 |
-| 11 | 麦哲伦 Magallan | 黎博利 | 莱茵生命外勤专员 |
-| 12 | 黍 Shu | 岁兽碎片 | 炎国农业天师 |
-| 13 | 史尔特尔 Surtr | 萨卡兹 | 近卫干员 |
-| 14 | 晓歌 Cantabile | 黎博利 | 先锋干员 / 情报官 |
-| 15 | 林 Lin | 札拉克 | 龙门合作者 |
-| 16 | 拉普兰德 Lappland | 鲁珀 | 近卫干员 / 领主 |
-| 17 | 送葬人 Executor | 萨科塔 | 拉特兰公证所执行者 |
-| 18 | Mon3tr | 未公开 | 罗德岛特别顾问 |
-| 19 | 星源 Xingyuan | 黎博利 | 莱茵生命能量科研究员 |
-| 20 | 德克萨斯 Texas | 鲁珀 | 企鹅物流信使 / 先锋干员 |
-
-Each character has a detailed system prompt defining personality, speech patterns, and lore background.
-
-### Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Language | Kotlin 100% |
-| UI | Jetpack Compose + Material 3 |
-| Architecture | MVVM + Repository + Manager |
-| DI | Manual (AppContainer) |
-| Network | Retrofit2 + OkHttp3 |
-| Persistence | Room + DataStore Preferences |
-| Image | Coil |
-| Audio | ExoPlayer (Media3) / MediaPlayer |
-| Local LLM | MNN (libMNN.so) + JNI via CMake |
-| NPU | QNN HTP (Qualcomm Neural Network) |
-| Markdown | Custom parser + VS Code Dark+ highlight |
-| UI Effects | Liquid Glass (QmDeve) |
-
-### Project Structure
-
-```
-app/src/main/java/com/rhodesisland/terminal/
-├── config/              # AppConfig, Characters, ModelProviders, AssetPaths
-├── data/
-│   ├── local/           # Room DB, DataStore
-│   ├── model/           # Character, ChatMessage, Conversation, LocalModel
-│   ├── remote/          # CloudRunApi, DirectLlmClient, RetrofitClient
-│   └── repository/      # Chat, Character, Settings, Conversation, Asset repos
-├── download/            # Model download with resume/SHA256
-├── llm/                 # LLM inference optimization
-│   └── backend/         # BackendManager, MnnBackend, MnnBridge, BackendSelector
-├── manager/             # AudioManager, ModelManager, TtsManager
-├── perfmon/             # Performance monitoring overlay
-├── provider/
-│   ├── cloud/           # CloudChatProvider (SSE streaming)
-│   └── local/           # LocalChatProvider (MNN inference)
-├── tts/                 # VolcTtsClient (Volcano Engine TTS)
-├── ui/
-│   ├── chat/            # ChatScreen, ChatViewModel, MathView
-│   ├── characters/      # Character selection
-│   ├── models/          # Model download/management
-│   ├── music/           # BGM player
-│   ├── navigation/      # AppNavGraph
-│   ├── settings/        # Settings, BackendSettings, Guide
-│   └── theme/           # Color, Theme, Type (PRTS dark sci-fi)
-├── util/                # MarkdownParser, DeviceId, CharacterImageStore
-└── MainActivity.kt
-```
-
-### Native Code
-
-```
-app/src/main/cpp/
-├── CMakeLists.txt         # always compiles cpu_sys_jni; optionally mnn_jni
-├── cpu_affinity.h         # CPU topology probe (big core IDs, frequencies)
-├── cpu_affinity_jni.cpp   # JNI for read-only CPU sysfs queries
-└── mnn_jni.cpp            # MNN LLM JNI wrapper (ported from MnnLlmChat)
-```
-
-Prebuilt libraries in `app/src/main/jniLibs/arm64-v8a/`:
-- `libMNN.so` — MNN inference engine (CPU, OpenCL GPU, QNN NPU backends)
-- `libQnnHtp.so` + `libQnnHtpV*Skel.so` — Qualcomm HTP (NPU) runtime
-- `libQnnSystem.so` — QNN system library
-- `libc++_shared.so` — C++ shared runtime
-
-### Build
-
-#### Prerequisites
-- **Android Studio** Hedgehog (2023.1.1) or later
-- **JDK 21** (Temurin recommended)
-- **NDK 27.2.12479018** (r27c)
-- **CMake 3.22.1** (via SDK Manager)
-
-#### Quick Build
-
-```bash
-# Clone
-git clone https://github.com/fypklanfanqie/local-llm-with-character-setting-Arknights.git
-cd local-llm-with-character-setting-Arknights
-
-# Build (debug APK)
-./gradlew assembleDebug
-```
-
-Or open in Android Studio and **Build > Build APK**.
-
-#### MNN / QNN Setup
-
-The MNN JNI wrapper (`libmnn_jni.so`) is compiled at build time via `externalNativeBuild`. Configure:
-
-1. Prepare MNN prebuilt directory with:
-   ```
-   <MNN_DIR>/
-   ├── include/          # MNN core headers + llm/llm.hpp
-   └── lib/
-       └── libMNN.so     # MNN shared library (arm64-v8a)
-   ```
-
-2. Set `MNN_DIR` in `gradle.properties`:
-   ```properties
-   MNN_DIR=D:/path/to/mnn-matched
-   ```
-
-3. Build — CMake auto-compiles `libmnn_jni.so` and links against `libMNN.so`.
-
-> **Note:** `cpu_sys_jni` (CPU topology probe) always compiles — no configuration needed.
-
-### Configuration
-
-In `app/src/main/java/com/rhodesisland/terminal/config/AppConfig.kt`:
-
-```kotlin
-// Cloud Run proxy (currently only used for Volcano Engine TTS)
-const val CLOUD_RUN_BASE_URL = "https://your-proxy.cloudrun.cloudbase.net"
-
-// Asset CDN base URL (optional — falls back to local assets)
-const val ASSET_CDN_BASE = "https://your-cdn.com/arknights"
-
-// Cloud AI defaults
-const val DEFAULT_API_BASE = "https://api.deepseek.com/v1"
-const val DEFAULT_MODEL = "deepseek-chat"
-```
-
-Cloud AI providers (DeepSeek, OpenAI, Qwen, GLM) are configured in `ModelProviders.kt` with preset models. API keys are entered in the Settings screen.
-
-### Local AI: First Run
-
-1. Open the app → **Settings** → **Model Management**
-2. The app fetches the model list from the configured server
-3. Download a `.mnn` model (e.g., Qwen3-4B-MNN)
-4. Go to chat → switch to **Local AI** → start chatting offline
-
-Model files are stored in:
-```
-Android/data/com.rhodesisland.terminal/files/models/
-```
-
-### Assets
-
-Character art, voice lines, and BGM are stored in `app/src/main/assets/`:
-- `picture/` — Operator artwork (webp)
-- `music/` — Voice lines (wav) + BGM (mp3)
-- `background/` — Background images (webp/jpg)
-
-To reduce APK size, configure `ASSET_CDN_BASE` in AppConfig to serve assets from a public CDN. The app falls back to local assets if a CDN is not configured.
-
-### Disclaimer
-
-> This is a fan-made Arknights project. All characters, artwork, and music are copyrighted by **Hypergryph / 鹰角网络**. This project is for learning and communication purposes only — not for commercial use.
+- **🧠 端侧 MNN 自适应推理引擎** — CPU / OpenCL GPU / QNN NPU 三后端自适应调度、失败自动回退链、**GPU 自愈健康**（隔离进程探测 + 冷却/黑名单状态机）、一键 GPU 预热。完全离线推理，数据不出设备。
+- **🚀 本地深度思考分级** — AUTO / SHORT / MEDIUM / LONG 思考分级 + 字节预算截断，推理过程以可折叠「思考过程」块展示；思考开关有效性由聊天模板能力探测判定。
+- **🛡️ 内存准入 + 基准认证** — 大模型不 OOM：内存不足自动按轮减半上下文（最低 512）而**不崩溃不报错**；lookahead / 多 token 解码等实验加速**必须在真机基准测试中证明收益**后才启用。
+- **🎬 角色视频生成 · Seedance** — 聊天回复自动触发角色短片生成（「邂逅」时间线：播放 / 导出 / 历史），自定义参考图与场景。
+- **🔊 双 TTS 引擎** — 系统离线 TTS（默认，免配置）＋ 火山引擎豆包云端声音复刻（每角色独立音色，中日双语）。
+- **💬 聊天可靠性重构** — 思考流 30fps 节流渲染、用户控制底部跟随、「停止」保留部分输出、首答不再闪烁消失、支持删除单条消息。
+- **📦 模型下载可靠性** — 多镜像自动回退（ModelScope → hf-mirror → HuggingFace）+ 目录大小 / SHA-256 / 权重文件完整性校验，损坏模型不会被打上「已完成」。
+- **⏰ 后台保活增强** — 角色主动问候改为 15 分钟周期调度 + 精确闹钟兜底 + 前台服务/WakeLock 保护推理生成，国产 ROM 也能稳定触发。
 
 ---
 
-## 中文
+## 🧠 本地 LLM 推理 · On-device Local LLM（重点）
 
-### 概述
+基于 [MNN](https://github.com/alibaba/MNN) 的**自适应端侧推理栈**：从设备能力探测、内存准入、后端调度、健康自愈，到基准认证、性能遥测的一整套工程化闭环。全部推理在设备本地完成，**对话数据不离开手机**。
 
-罗德岛通讯终端是一款明日方舟同人 AI 角色扮演聊天 Android 应用。从微信小程序迁移而来，原生 Android 版本内置 20 位明日方舟干员，支持云端/本地双 AI 引擎、TTS 语音合成、BGM 播放器、PRTS 科幻终端风格 UI。
+### 自适应后端调度 · Adaptive backend scheduling
 
-### 特性
+- **三后端自动选择**：`CPU` / `OpenCL GPU` / `QNN NPU`。系统根据设备能力（SoC 芯片等级、CPU 大核数、总内存、NPU 支持）推荐首选后端，并按「用户偏好 × 模型大小 × GPU 就绪度」生成每条消息的回退尝试链；GPU 空输出 / 加载失败自动回退 CPU，CPU 永远是最终兜底。
+- **大模型 GPU 准入**：AUTO 模式下总参数量 **> 7B** 的模型才尝试 GPU（OpenCL），≤ 7B 默认走 CPU，避免小模型在 GPU 上的无谓开销。
 
-- 🤖 **云端 AI** — 直连 DeepSeek、OpenAI、通义千问、智谱 GLM 对话 API，SSE 流式输出，支持自定义 API 地址和密钥
-- 📱 **本地 AI** — MNN 引擎 + QNN NPU 加速（高通 HTP），离线推理 `.mnn` 模型，低内存优化
-- 🔄 **模型切换** — 聊天页一键切换云端/本地 AI，无需重启对话
-- ⬇️ **模型管理** — 从服务器动态获取模型列表，支持下载/暂停/恢复/删除，SHA256 完整性校验
-- 🎙️ **火山引擎 TTS** — 字节跳动豆包语音合成，支持中日双语
-- 🎵 **BGM 播放器** — 26 首明日方舟原声音乐
-- 📝 **Markdown 渲染** — 完整 Markdown 支持，VS Code Dark+ 代码高亮，物化公式块
-- 🎨 **PRTS 终端 UI** — 深色科幻风格界面，iOS Liquid Glass 液态玻璃底部导航
-- 📊 **性能监控** — Liquid Glass 浮窗实时显示 CPU/GPU/NPU 占用和温度（非 root，需悬浮窗权限）
-- 🆓 **完全免费** — 已移除所有付费/积分/广告功能
+### GPU 自愈健康 · Self-healing GPU health
 
-### 20 位干员
+- **隔离进程 OpenCL 探测**：在独立 `:mnn_probe` 进程中真正执行 OpenCL（15s 超时），主进程永远不被 GPU 崩溃拖垮；文件通道跨进程回传结果。
+- **健康状态机**：每个「设备 × 模型 × 后端 × 变体」维护 probe-ok / model-ok / 冷却 / 崩溃黑名单记录；设备 / 系统 / 模型变化后指纹自动过期。
+- **一键 GPU 预热**：手动预载 >7B 模型并跑一次 ≤8 token 的极短生成，预编译 OpenCL kernel 缓存，显著降低首条消息 TTFT。
 
-每位干员均配有详细的系统提示词，定义了性格、语气特征和背景故事。
+### 内存准入 · Memory admission
+
+- 每条本地消息生成前检查系统内存 + 进程 PSS；内存不足时**自动按轮减半上下文（最低 512）**而不崩溃、不报错，且不改动用户设置。
+- KV 缓存按模型架构精确估算（GQA 感知），上下文滑杆旁实时显示对应内存占用。
+- 进程真实峰值 PSS 被采样回灌，后续准入不断自我校准。
+
+### 基准测试与认证 · Benchmark & certification
+
+- **六场景基准**：冷加载 / 短 TTFT / 长 prefill / 固定 decode / 二轮 KV 复用 / 空响应检查，覆盖 **CPU × GPU × 思考开关** 四象限，P95 统计、热拒绝与可靠度运行。
+- **设备端认证门**：lookahead、多 token 解码等实验特性**必须**在真机上证明 ≥10% decode 提升、无 TTFT/PSS 明显回退，才写入 DataStore 认证并被启用。
+
+### 本地深度思考 · Local deep thinking
+
+- 思考分级 **AUTO / SHORT / MEDIUM / LONG**（仅本地模型生效），AUTO 按问题复杂度自动分级。
+- 思考区有软目标时长与硬字节预算；超预算自动截断并「合并直接作答」，不拖死整轮生成。
+- 思考开关有效性由**聊天模板能力探测**判定（模板无 `enable_thinking` 分支时不会误报可用）。
+
+### 性能与遥测 · Performance & telemetry
+
+- 两种性能模式：**综合平衡**（稳定解码，默认）与**最高速度**（最大解码吞吐，过热 / 内存吃紧自动降级）。
+- 非 root CPU 提速（PerformanceHint API 31+ + 线程优先级 + Sustained Performance Mode）、热感应降线程（中热减半 / 严重 2 线程 / 危急 1 线程）、大核拓扑感知选线程数。
+- **液态玻璃性能浮窗**实时监控 token/s、CPU / GPU / NPU、温度、内存；每轮推理生成结构化遥测（加载耗时、TTFT、prefill/decode、KV 复用、回退链、降级原因、思考分类）。
+
+### 本地模型管理 · Local model management
+
+- 内置 **13 款 MNN 模型清单**（无网络模型市场），支持下载 / 暂停续传 / 删除 / 切换，多文件分块合并 + 完整性校验。
+- 下载多镜像自动回退：**ModelScope（国内）→ hf-mirror → HuggingFace**。
+- 删除 / 切换活动模型即时释放 MNN native 句柄（生成中安全延迟释放）。
+
+---
+
+## ✨ 特性 · Features
+
+- **🤖 云端 + 本地双引擎** — 云端 OpenAI 兼容 API（DeepSeek / OpenAI / 通义千问 / 智谱，SSE 流式）与本地 MNN 离线推理一键切换，对话按角色独立保存。
+- **🎎 20 位罗德岛干员** — 完整人格 system prompt + 立绘 + 语音，支持新建 / 导入 / 导出自定义角色。
+- **🎵 音乐播放器** — **内置 7 首方舟 BGM（本地 mp3，离线可播）+ 178 首网易云方舟 OST 目录**，另支持网易云在线搜索与本地音乐导入；进度 / 音量 / 歌词 / 收藏 / 随机 / 三档循环。
+- **🔊 双 TTS 语音合成** — 系统离线 TTS（默认）+ 火山引擎豆包云端声音复刻（每角色独立音色，中日双语）；朗读自动剥离 `<think>` 思考块。
+- **🖼️ 多模态对话** — 图片（最多 3 张）、PDF（前 6 页）、纯文本文件直连多模态模型。
+- **📝 Markdown 渲染** — 完整 Markdown 支持，代码高亮 + 数学公式块。
+- **📊 性能浮窗** — 本地推理时实时监控 Token 速率 / CPU / GPU / NPU / 温度 / 内存，液态玻璃风格浮窗（非 root）。
+- **💬 角色主动问候** — 15 分钟周期调度 + 精确闹钟兜底，角色会在你离开后主动发来消息（跨重启存活，限云端），类微信横幅通知。
+- **🎨 PRTS 深色终端 UI** — 深藏青底 + 罗德岛金强调的液态玻璃界面，衬线标题、科幻终端风。
+
+## 20 位干员 · Operators
 
 | # | 干员 | 种族 | 定位 |
 |---|------|------|------|
 | 1 | 羽毛笔 | 黎博利 | 近卫干员 / 调酒师 |
-| 2 | 阿米娅 | 卡特斯/奇美拉 | 罗德岛公开领袖 |
+| 2 | 阿米娅 | 卡特斯 / 奇美拉 | 罗德岛公开领袖 |
 | 3 | 艾雅法拉 | 卡普里尼 | 火山学家 / 天灾信使 |
 | 4 | 澄闪 | 菲林 | 理发师 / 驭械术师 |
 | 5 | 泥岩 | 萨卡兹 | 萨卡兹雇佣兵 / 不屈者 |
-| 6 | 逻各斯 | 萨卡兹/妖 | 精英术师 / 咒术大师 |
+| 6 | 逻各斯 | 萨卡兹 / 妖 | 精英术师 / 咒术大师 |
 | 7 | 蜜莓 | 札拉克 | 医疗部 / 草药医生 |
 | 8 | 遥 | 阿戈尔 | 东国艺人 |
 | 9 | 维什戴尔 | 萨卡兹 | 雇佣兵领袖 / 巴别塔议长 |
@@ -264,163 +107,96 @@ To reduce APK size, configure `ASSET_CDN_BASE` in AppConfig to serve assets from
 | 19 | 星源 | 黎博利 | 莱茵生命能量科研究员 |
 | 20 | 德克萨斯 | 鲁珀 | 企鹅物流信使 / 先锋干员 |
 
-### 技术栈
+每位干员均配有详细的系统提示词，定义了性格、语气特征和背景故事。
 
-| 层级 | 技术 |
+## 技术栈 · Tech Stack
+
+| 分类 | 技术 |
 |------|------|
-| 语言 | Kotlin 100% |
-| UI | Jetpack Compose + Material 3 |
-| 架构 | MVVM + Repository + Manager |
-| 依赖注入 | 手动 (AppContainer) |
-| 网络 | Retrofit2 + OkHttp3 |
-| 持久化 | Room + DataStore Preferences |
-| 图片加载 | Coil |
-| 音频 | ExoPlayer (Media3) / MediaPlayer |
-| 本地大模型 | MNN (libMNN.so) + JNI via CMake |
-| NPU 加速 | QNN HTP (高通神经网络) |
-| Markdown | 自定义解析器 + VS Code Dark+ 语法高亮 |
-| UI 特效 | Liquid Glass (QmDeve) |
+| 语言 | Kotlin 100%（2.0.0） |
+| UI | Jetpack Compose + Material 3，液态玻璃（霜玻璃模糊 + 动态渐变网格背景） |
+| 架构 | MVVM + Repository + Manager，手动 DI（AppContainer） |
+| 本地推理 | **MNN 自适应引擎**（CPU / OpenCL GPU / QNN NPU），arm64-v8a only · NDK 27 预编译库 |
+| 深度思考 | 本地思考分级 + 字节预算 + 聊天模板能力探测 |
+| 基准认证 | 六场景四象限基准、DataStore 认证存储、实验特性设备端认证门 |
+| 视频生成 | Seedance 2.0（火山方舟 / 媒体中继协议）、WorkManager 管线、ExoPlayer 播放 |
+| TTS | Android 系统 TTS ＋ 火山引擎豆包声音复刻 |
+| 网络 | Retrofit 2.11 / OkHttp 4.12 / kotlinx-serialization |
+| 数据 | Room 2.6.1 / DataStore 1.1.1 |
+| 媒体 | Media3 1.3.1 (ExoPlayer) / Coil 2.6 |
+| 后台 | WorkManager 2.9.1（问候周期 + Seedance 视频管线） |
 
-### 项目结构
+## 项目结构 · Project Structure
 
 ```
 app/src/main/java/com/rhodesisland/terminal/
-├── config/              # 应用配置、角色定义、模型供应商、资源路径
-├── data/
-│   ├── local/           # Room 数据库、DataStore 偏好设置
-│   ├── model/           # 角色、消息、会话、本地模型数据类
-│   ├── remote/          # CloudRun API、直连对话商客户端、Retrofit 配置
-│   └── repository/      # 聊天、角色、设置、会话、资源仓库
-├── download/            # 模型下载（断点续传/SHA256校验）
-├── llm/                 # LLM 推理优化（CPU提频、线程优化、热监控、内存估算）
-│   └── backend/         # 后端管理器、MNN后端、MNN桥接、后端选择器
-├── manager/             # 音频管理器、模型管理器、TTS管理器
-├── perfmon/             # 性能监控浮窗（Liquid Glass 液态玻璃）
-├── provider/
-│   ├── cloud/           # 云端对话提供者（SSE 流式）
-│   └── local/           # 本地对话提供者（MNN 推理）
-├── tts/                 # 火山引擎 TTS 客户端
-├── ui/
-│   ├── chat/            # 聊天界面、ViewModel、数学公式渲染
-│   ├── characters/      # 角色选择页
-│   ├── models/          # 模型管理页
-│   ├── music/           # BGM 播放器
-│   ├── navigation/      # 应用导航图
-│   ├── settings/        # 设置页、后端设置、使用指南
-│   └── theme/           # 颜色、主题、字体（PRTS 深色科幻风）
-├── util/                # Markdown 解析器、设备ID、角色图片存储
-└── MainActivity.kt
+├── config/          # 应用配置、干员表、模型 Provider、资源路径（立绘/语音/BGM/背景）
+├── data/            # model / local(Room,DataStore) / remote(Retrofit,网易云,Seedance) / repository
+├── llm/             # ★ 本地 LLM 核心：backend(CPU/GPU/NPU 调度、健康、预热)、benchmark(基准+认证)、
+│                    #   metrics(遥测)、profile(性能模式/执行计划)、template(模板能力探测)、thinking(思考分级)
+├── provider/        # 聊天 Provider（cloud / local）抽象与切换
+├── tts/             # 双 TTS 引擎（系统 TTS + 火山豆包）
+├── video/           # Seedance 视频管线：提示词生成、校验、状态机、参考图/场景存储、导出
+├── download/        # MNN 模型多镜像下载（断点续传、分块合并、SHA-256/大小校验）
+├── manager/         # Audio / Model / Tts 管理器
+├── perfmon/         # 液态玻璃性能浮窗
+├── notification/    # 角色主动问候通知
+├── service/         # 本地推理前台服务（生成保活）
+├── work/            # WorkManager 调度（问候周期 / 精确闹钟 / Seedance 视频管线）
+├── ui/              # glass 组件、chat / characters / feed / music / models / settings / theme / video / navigation
+└── util/            # 工具类（电池白名单/自启引导、立绘存储、Markdown 等）
 ```
 
-### 原生代码
+## 构建 · Build
 
-```
-app/src/main/cpp/
-├── CMakeLists.txt         # 始终编译 cpu_sys_jni；可选编译 mnn_jni
-├── cpu_affinity.h         # CPU 拓扑探测（大核ID、频率）
-├── cpu_affinity_jni.cpp   # 只读 CPU sysfs 查询 JNI
-└── mnn_jni.cpp            # MNN LLM JNI 包装（移植自 MnnLlmChat）
-```
+### 环境要求
 
-预编译库在 `app/src/main/jniLibs/arm64-v8a/`：
-- `libMNN.so` — MNN 推理引擎（CPU/OpenCL GPU/QNN NPU 后端）
-- `libQnnHtp.so` + `libQnnHtpV*Skel.so` — 高通 HTP (NPU) 运行时
-- `libQnnSystem.so` — QNN 系统库
-- `libc++_shared.so` — C++ 共享运行时
+- Android SDK（compileSdk 34）
+- **JDK 17+**（本机验证 Temurin 17：`D:/jdk-temurin-17/jdk-17.0.20+8`）
+- NDK 27.2.12479018（`app/build.gradle.kts` 的 `ndkVersion`）
 
-### 构建
+### 说明
 
-#### 前提条件
-- **Android Studio** Hedgehog (2023.1.1) 或更新版本
-- **JDK 21**（推荐 Temurin）
-- **NDK 27.2.12479018** (r27c)
-- **CMake 3.22.1**（通过 SDK Manager 安装）
+- **Native 库已预编译**并放入 `app/src/main/jniLibs/arm64-v8a/`（`libMNN.so` + `libmnn_jni.so` + `libcpu_sys_jni.so` + `libbackend_probe.so` + `libc++_shared.so`）。Gradle 构建时不再调用 CMake，**无需配置 `MNN_DIR`**。
+- 仅打包 `arm64-v8a`：与预编译 MNN 库架构一致。
 
-#### 快速构建
+### 命令
 
 ```bash
-# 克隆仓库
-git clone https://github.com/fypklanfanqie/local-llm-with-character-setting-Arknights.git
-cd local-llm-with-character-setting-Arknights
+# 编译（验证 .kt 改动时务必 --rerun-tasks --no-build-cache，避免 build cache 假象 UP-TO-DATE）
+JAVA_HOME='D:/jdk-temurin-17/jdk-17.0.20+8' ./gradlew :app:compileDebugKotlin --rerun-tasks --no-build-cache
 
-# 构建 Debug APK
-./gradlew assembleDebug
+# Debug 构建
+./gradlew :app:assembleDebug
+
+# Release 构建（默认 debug 签名，发布前请自行配置签名）
+./gradlew :app:assembleRelease
 ```
 
-或在 Android Studio 中打开项目，点击 **Build > Build APK**。
-
-#### MNN / QNN 配置
-
-MNN JNI 包装 (`libmnn_jni.so`) 在构建时通过 `externalNativeBuild` 编译。配置步骤：
-
-1. 准备 MNN 预编译目录：
-   ```
-   <MNN_DIR>/
-   ├── include/          # MNN 核心头文件 + llm/llm.hpp
-   └── lib/
-       └── libMNN.so     # MNN 共享库 (arm64-v8a)
-   ```
-
-2. 在 `gradle.properties` 中设置 `MNN_DIR`：
-   ```properties
-   MNN_DIR=D:/path/to/mnn-matched
-   ```
-
-3. 构建 — CMake 自动编译 `libmnn_jni.so` 并链接 `libMNN.so`。
-
-> **注意：** `cpu_sys_jni`（CPU 拓扑探测）始终编译，无需额外配置。
-
-### 配置说明
-
-在 `app/src/main/java/com/rhodesisland/terminal/config/AppConfig.kt` 中：
-
-```kotlin
-// CloudRun 代理地址（目前仅用于火山引擎 TTS）
-const val CLOUD_RUN_BASE_URL = "https://your-proxy.cloudrun.cloudbase.net"
-
-// 资源 CDN 地址（可选 — 留空则使用本地 assets）
-const val ASSET_CDN_BASE = "https://your-cdn.com/arknights"
-
-// 云端 AI 默认配置
-const val DEFAULT_API_BASE = "https://api.deepseek.com/v1"
-const val DEFAULT_MODEL = "deepseek-chat"
-```
-
-云端 AI 供应商（DeepSeek、OpenAI、通义千问、智谱 GLM）及其预设模型在 `ModelProviders.kt` 中定义。API 密钥在设置页面输入。
-
-### 本地 AI：首次使用
+## 本地 AI：首次使用
 
 1. 打开应用 → **设置** → **模型管理**
-2. 应用自动从服务器拉取模型列表
-3. 下载 `.mnn` 模型（如 Qwen3-4B-MNN）
-4. 返回聊天页 → 切换至 **本地 AI** → 离线流式对话
+2. 选择要下载的 `.mnn` 模型（如 `Qwen3.5-2B-MNN`，支持断点续传）
+3. 返回聊天页 → 切换至 **本地 AI** → 离线流式对话
 
 模型文件存储在：
 ```
 Android/data/com.rhodesisland.terminal/files/models/
 ```
 
-### 资源文件
+## 资源配置
 
 角色立绘、语音和 BGM 存储在 `app/src/main/assets/`：
 - `picture/` — 干员立绘 (webp)
-- `music/` — 角色语音 (wav) + BGM (mp3)
+- `music/` — 内置 BGM (mp3) + 干员语音 (wav)
 - `background/` — 背景图 (webp/jpg)
 
-为减小 APK 体积，可在 `AppConfig` 中配置 `ASSET_CDN_BASE` 将资源托管至公网 CDN。未配置 CDN 时自动回退到本地 assets。
+---
 
-### 免责声明
+## 免责声明
 
 > 本项目为明日方舟同人作品，所有角色、立绘、音乐版权归 **Hypergryph / 鹰角网络** 所有。本项目仅用于学习交流，不作商业用途。
-
----
 
 ## License
 
 MIT License — see [LICENSE](LICENSE) for details.
-
----
-
-<p align="center">
-  <sub>Made with ❤️ for the Arknights community · 为明日方舟社区而建</sub>
-</p>
