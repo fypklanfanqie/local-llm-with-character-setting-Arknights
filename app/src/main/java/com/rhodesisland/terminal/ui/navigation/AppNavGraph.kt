@@ -85,7 +85,7 @@ fun AppNavGraph(container: AppContainer, initialChatOpen: Boolean = false) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
 
-    // 系统栏图标颜色复位：非通讯 Tab 都是亮色页面（浅色极光底），强制回深色图标；
+    // 系统栏图标颜色复位：本应用固定 PRTS 深色主题，非通讯 Tab 都是深色极光底 → 白色图标；
     // 通讯 Tab 由 feed/chat 页面各自按背景驱动（深色立绘/照片 → 白色图标），此处不覆盖。
     val view = LocalView.current
     val window = (LocalContext.current as? Activity)?.window
@@ -93,8 +93,8 @@ fun AppNavGraph(container: AppContainer, initialChatOpen: Boolean = false) {
     LaunchedEffect(isChatTab) {
         if (!isChatTab) {
             val controller = window?.let { WindowCompat.getInsetsController(it, view) }
-            controller?.isAppearanceLightStatusBars = true
-            controller?.isAppearanceLightNavigationBars = true
+            controller?.isAppearanceLightStatusBars = false
+            controller?.isAppearanceLightNavigationBars = false
         }
     }
 

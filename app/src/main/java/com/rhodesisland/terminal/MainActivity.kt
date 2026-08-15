@@ -1,7 +1,6 @@
 package com.rhodesisland.terminal
 
 import android.content.Intent
-import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -13,7 +12,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
@@ -26,17 +24,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
-import com.rhodesisland.terminal.data.model.ThemeMode
 import com.rhodesisland.terminal.notification.GreetingNotificationManager
 import com.rhodesisland.terminal.ui.LoadingScreen
 import com.rhodesisland.terminal.ui.glass.GlassBackdrop
 import com.rhodesisland.terminal.ui.glass.MeshBackground
 import com.rhodesisland.terminal.ui.navigation.AppNavGraph
 import com.rhodesisland.terminal.ui.theme.ChatTheme
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeoutOrNull
 
 class MainActivity : ComponentActivity() {
 
@@ -49,17 +43,8 @@ class MainActivity : ComponentActivity() {
 
         val app = application as RhodesApp
 
-        // 同步读取当前主题模式，用于初始化系统栏样式（避免冷启动时系统栏图标与主题错位）。
-        // DataStore 读取通常很快，加 1s 超时防止国产 ROM 文件 I/O 被拦截时阻塞 onCreate。
-        val initialThemeMode = runBlocking {
-            withTimeoutOrNull(1000L) { app.container.settingsRepository.themeMode.first() }
-        } ?: ThemeMode.SYSTEM
-        val initialDarkTheme = when (initialThemeMode) {
-            ThemeMode.LIGHT -> false
-            ThemeMode.DARK -> true
-            ThemeMode.SYSTEM -> (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
-                    Configuration.UI_MODE_NIGHT_YES
-        }
+        // PRTS 深色主题：本应用固定深色科幻风，忽略系统/设置的主题模式（themeMode 设置保留但不再生效）。
+        val initialDarkTheme = true
 
         // 沉浸式全屏：内容延伸到状态栏 / 导航栏背后，系统栏透明化。
         // 初始样式根据当前主题偏好设定；后续 setContent 中 ChatTheme 的 SideEffect 会继续同步。
@@ -111,13 +96,8 @@ class MainActivity : ComponentActivity() {
         app.container.cpuBoostController.sustainedModeSetter = setter
 
         setContent {
-            // 主题模式：用户可强制浅色/深色，或跟随系统。
-            val themeMode by app.container.settingsRepository.themeMode.collectAsState(initial = ThemeMode.SYSTEM)
-            val darkTheme = when (themeMode) {
-                ThemeMode.LIGHT -> false
-                ThemeMode.DARK -> true
-                ThemeMode.SYSTEM -> isSystemInDarkTheme()
-            }
+            // PRTS 深色主题：固定深色（themeMode 设置保留但不再生效）。
+            val darkTheme = true
             // GlassBackdrop 提供真实背景模糊背板，供所有玻璃面板采样。
             ChatTheme(darkTheme = darkTheme) {
                 GlassBackdrop(Modifier.fillMaxSize()) {

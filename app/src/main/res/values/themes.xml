@@ -1,9 +1,9 @@
 <resources>
-    <!-- 启动壳主题：亮色底，避免冷启动暗闪；运行时 insets 由 ChatTheme 接管。 -->
+    <!-- 启动壳主题：深色底（PRTS 终端深色主题），避免冷启动闪白；运行时 insets 由 ChatTheme 接管。 -->
     <style name="Theme.RhodesIslandTerminal" parent="android:Theme.Material.NoActionBar">
         <item name="android:statusBarColor">@color/app_bg</item>
         <item name="android:navigationBarColor">@color/app_bg</item>
         <item name="android:windowBackground">@color/app_bg</item>
-        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightStatusBar">false</item>
     </style>
 </resources>

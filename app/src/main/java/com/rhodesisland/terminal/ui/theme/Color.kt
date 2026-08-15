@@ -7,56 +7,56 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
 /**
- * Chat by your side · Iris 玻璃主题色板
+ * Rhodes Island Terminal · PRTS 深色主题色板
  *
- * 设计语言参考 Cresto Glasense：中性毛玻璃底 + 冰蓝 Iris 强调色，支持亮/暗双模。
- * 玻璃面的半透明叠层颜色见 [GlassTokens]（由 [LocalGlassTokens] 按亮暗提供）。
+ * 设计语言：深藏青/近黑底 + 罗德岛金强调 + 青/蓝科技辅助色（明日方舟 PRTS 终端风）。
+ * 保持大众版的玻璃组件与 Material3 结构，仅重配色为深色科幻风。
  */
 
-// ---------- 紫罗兰强调色 ----------
-val IrisPrimary = Color(0xFF7C5CFF)      // 暗：紫罗兰
-val IrisPrimaryLight = Color(0xFF6E4DFF) // 亮：紫罗兰（略深保白底可读）
-val IrisBright = Color(0xFFA99BFF)
-val IrisDim = Color(0xFF3A2A6F)
-val IrisViolet = Color(0xFF7C5CFF)
-val IrisMint = Color(0xFF34C7BE)
+// ---------- PRTS 强调色 ----------
+val IrisPrimary = Color(0xFFC9A87C)      // 暗：罗德岛金
+val IrisPrimaryLight = Color(0xFFD4B88C) // 亮：亮金（保白底可读）
+val IrisBright = Color(0xFFE3CDA8)
+val IrisDim = Color(0xFF8A7355)
+val IrisViolet = Color(0xFF4FA5A0)       // 辅助：青（PRTS 科技辅色）
+val IrisMint = Color(0xFF55B9B4)
 
 val IrisDarkColors: ColorScheme = darkColorScheme(
     primary = IrisPrimary,
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFF221845),
-    onPrimaryContainer = Color(0xFFD9CCFF),
+    onPrimary = Color(0xFF1A1510),
+    primaryContainer = Color(0xFF2A241A),
+    onPrimaryContainer = IrisBright,
     secondary = IrisViolet,
-    onSecondary = Color.White,
-    secondaryContainer = Color(0xFF241A4D),
-    onSecondaryContainer = Color(0xFFD9CCFF),
+    onSecondary = Color(0xFF0D1B1A),
+    secondaryContainer = Color(0xFF163331),
+    onSecondaryContainer = Color(0xFFA9E6E1),
     tertiary = IrisMint,
-    onTertiary = Color(0xFF00201E),
-    tertiaryContainer = Color(0xFF0E2E2C),
-    onTertiaryContainer = Color(0xFFB6F0E8),
-    background = Color(0xFF07080C),
-    onBackground = Color(0xFFE8EAF0),
-    surface = Color(0xFF0E1016),
-    onSurface = Color(0xFFE8EAF0),
-    surfaceVariant = Color(0xFF1A1D26),
-    onSurfaceVariant = Color(0xFFA8AEC0),
+    onTertiary = Color(0xFF0B1D1C),
+    tertiaryContainer = Color(0xFF143634),
+    onTertiaryContainer = Color(0xFFB8F0EC),
+    background = Color(0xFF0A0A0F),
+    onBackground = Color(0xFFE8E4E0),
+    surface = Color(0xFF12121C),
+    onSurface = Color(0xFFE8E4E0),
+    surfaceVariant = Color(0xFF1E1E2E),
+    onSurfaceVariant = Color(0xFF9A9690),
     surfaceTint = IrisPrimary,
-    inverseSurface = Color(0xFFE8EAF0),
+    inverseSurface = Color(0xFFE8E4E0),
     inverseOnSurface = Color(0xFF14161C),
-    outline = Color(0xFF2A2E3A),
-    outlineVariant = Color(0xFF1F222C),
-    error = Color(0xFFFF453A),
+    outline = Color(0xFF3A352E),
+    outlineVariant = Color(0xFF26221C),
+    error = Color(0xFFB55A5A),
     onError = Color.White,
-    errorContainer = Color(0xFF5C1A16),
-    onErrorContainer = Color(0xFFFFDAD4),
+    errorContainer = Color(0xFF3A1F1F),
+    onErrorContainer = Color(0xFFFFD8D0),
     scrim = Color.Black,
-    surfaceBright = Color(0xFF1B1E26),
-    surfaceDim = Color(0xFF0A0B10),
-    surfaceContainer = Color(0xFF12141B),
-    surfaceContainerHigh = Color(0xFF181A22),
-    surfaceContainerHighest = Color(0xFF1E2029),
-    surfaceContainerLow = Color(0xFF0D0F15),
-    surfaceContainerLowest = Color(0xFF06070B),
+    surfaceBright = Color(0xFF1E1E2A),
+    surfaceDim = Color(0xFF0C0C13),
+    surfaceContainer = Color(0xFF14141E),
+    surfaceContainerHigh = Color(0xFF1A1A26),
+    surfaceContainerHighest = Color(0xFF1E1E2E),
+    surfaceContainerLow = Color(0xFF0E0E16),
+    surfaceContainerLowest = Color(0xFF07070B),
 )
 
 val IrisLightColors: ColorScheme = lightColorScheme(
@@ -111,13 +111,13 @@ data class GlassTokens(
 
 val DarkGlassTokens = GlassTokens(
     surfaceTint = Color.Black.copy(alpha = 0.38f),
-    borderHighlight = Color.White.copy(alpha = 0.16f),
+    borderHighlight = Color.White.copy(alpha = 0.14f),
     borderShadow = Color.Black.copy(alpha = 0.45f),
-    sheen = Color.White.copy(alpha = 0.08f),
+    sheen = Color.White.copy(alpha = 0.07f),
     ambientShadow = Color.Black.copy(alpha = 0.30f),
     spotShadow = Color.Black.copy(alpha = 0.50f),
-    onGlass = Color(0xFFE8EAF0),
-    onGlassSecondary = Color(0xFFA8AEC0),
+    onGlass = Color(0xFFE8E4E0),
+    onGlassSecondary = Color(0xFF9A9690),
 )
 
 val LightGlassTokens = GlassTokens(

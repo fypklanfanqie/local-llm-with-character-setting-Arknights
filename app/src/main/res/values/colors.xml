@@ -1,7 +1,7 @@
 <resources>
-    <!-- 启动窗口亮色底色（Iris 亮色极光底） -->
-    <color name="app_bg">#FFF2F3F8</color>
-    <!-- PRTS 终端深色主题色板（遗留，已不再被 UI 引用） -->
+    <!-- 启动窗口深色底色（PRTS 终端深色主题，本应用固定深色） -->
+    <color name="app_bg">#FF0A0A0F</color>
+    <!-- PRTS 终端深色主题色板 -->
     <color name="prts_bg_primary">#FF0A0A0F</color>
     <color name="prts_bg_secondary">#FF0E0E16</color>
     <color name="prts_gold">#FFC9A87C</color>

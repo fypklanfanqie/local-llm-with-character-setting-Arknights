@@ -40,8 +40,6 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import com.rhodesisland.terminal.ui.theme.IrisMint
-import com.rhodesisland.terminal.ui.theme.IrisPrimary
 import com.rhodesisland.terminal.ui.theme.LocalDarkTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -60,15 +58,15 @@ internal data class MeshBlobSpec(val color: Color, val alpha: Float)
 
 internal data class MeshSpec(val base: Color, val blobs: List<MeshBlobSpec>)
 
-/** 亮/暗两套极光配色。亮色：淡紫 / 冰蓝 / 粉（用户确认的极光配色，透出玻璃后呈液态光感）。 */
+/** 亮/暗两套极光配色。暗色：PRTS 深藏青底 + 金/青光斑（透出玻璃后呈液态光感）；亮色保留原淡紫/冰蓝/粉。 */
 internal fun meshSpec(dark: Boolean): MeshSpec =
     if (dark) MeshSpec(
-        base = Color(0xFF07080C),
+        base = Color(0xFF0A0A0F),
         blobs = listOf(
-            MeshBlobSpec(IrisPrimary, 0.32f),
-            MeshBlobSpec(Color(0xFFC44CE0), 0.32f),
-            MeshBlobSpec(IrisMint, 0.27f),
-            MeshBlobSpec(IrisPrimary, 0.19f),
+            MeshBlobSpec(Color(0xFFC9A87C), 0.24f),  // 罗德岛金
+            MeshBlobSpec(Color(0xFF4FA5A0), 0.22f),  // 青（PRTS 辅色）
+            MeshBlobSpec(Color(0xFF2F6F8A), 0.26f),  // 深蓝
+            MeshBlobSpec(Color(0xFF8A7355), 0.20f),  // 暗金
         ),
     ) else MeshSpec(
         base = Color(0xFFF2F3F8),

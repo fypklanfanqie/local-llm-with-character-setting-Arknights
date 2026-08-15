@@ -201,10 +201,8 @@ fun ChatScreen(
         initial = ChatBackgroundConfig(enabled = false, paths = emptyList())
     )
     val bgUrls = remember(bgConfig) { container.chatBackgroundRepository.effectiveUrls(bgConfig) }
-    // 有照片背景 → 整页是深色画面，系统状态栏/导航栏图标切白保证可读；
-    // 无照片（透出浅色极光底）→ 保持亮色主题的深色图标。
-    val hasPhotoBg = bgUrls.isNotEmpty()
-    applySystemBarIcons(light = hasPhotoBg)
+    // PRTS 深色主题：聊天页始终深色（极光底或照片背景），系统状态栏/导航栏图标保持白色。
+    applySystemBarIcons(light = true)
     val bgCount = bgUrls.size
     var bgIndex by remember { mutableIntStateOf(0) }
     LaunchedEffect(bgCount) {
