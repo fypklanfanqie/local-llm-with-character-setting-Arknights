@@ -147,35 +147,45 @@ class LocalChatProvider(
             var truncated = false  // onToken 截断后置位，后续 token 不再累积、持续返回 false 让 native abort
             // 折叠开关：开思考 + 推理模型时补起始 <think> 显示「思考中」（否则会把正常回复困在思考块）。
             val foldIfNoClose = deepThinking && isThinkModel
-            val result = backendManager.generate(
-                modelPath = modelPath,
-                messages = enhancedMessages,
-                maxTokens = maxTokens,
-                temperature = temperature,
-                topP = AppConfig.LLM.DEFAULT_TOP_P,
-                repeatPenalty = AppConfig.LLM.DEFAULT_REPEAT_PENALTY,
-                contextLen = contextLen,
-                threads = effectiveThreads,
-                preference = preference,
-                lookahead = lookahead,
-                enableThinking = deepThinking,
-                onToken = { token ->
-                    if (!truncated) {
-                        accumulated.append(token)
-                        // 兜底截断：累积文本出现「角色名：」多角色剧本标记 -> 截到标记前并停止。
-                        // 模型遵守 system 规范时不会触发；不遵守时此为硬性防线，避免长篇剧本耗满 maxTokens。
-                        val cutPos = findScriptCutPosition(accumulated)
-                        if (cutPos >= 0) {
-                            accumulated.setLength(cutPos)
-                            truncated = true
+            // 推理总超时：覆盖模型加载 + prefill + 生成。withTimeoutOrNull 超时返回 null，
+            // 转为普通 Exception（非 CancellationException）向上抛，被 ChatViewModel catch 显示友好提示。
+            // 注意：超时后 native 层 nativeCreate/nativeGenerateStream 可能仍在 IO 线程跑（阻塞 JNI
+            // 无法中断），但 UI 已恢复响应并报错，避免无限"无响应"——这正是用户反馈的症状根因。
+            val result = withTimeoutOrNull(INFERENCE_TIMEOUT_MS) {
+                backendManager.generate(
+                    modelPath = modelPath,
+                    messages = enhancedMessages,
+                    maxTokens = maxTokens,
+                    temperature = temperature,
+                    topP = AppConfig.LLM.DEFAULT_TOP_P,
+                    repeatPenalty = AppConfig.LLM.DEFAULT_REPEAT_PENALTY,
+                    contextLen = contextLen,
+                    threads = effectiveThreads,
+                    preference = preference,
+                    lookahead = lookahead,
+                    enableThinking = deepThinking,
+                    onToken = { token ->
+                        if (!truncated) {
+                            accumulated.append(token)
+                            // 兜底截断：累积文本出现「角色名：」多角色剧本标记 -> 截到标记前并停止。
+                            // 模型遵守 system 规范时不会触发；不遵守时此为硬性防线，避免长篇剧本耗满 maxTokens。
+                            val cutPos = findScriptCutPosition(accumulated)
+                            if (cutPos >= 0) {
+                                accumulated.setLength(cutPos)
+                                truncated = true
+                            }
+                            // 折叠包装：补回起始 <think> 使 parseWithThink 能把推理段识别为可折叠 Think 段。
+                            val raw = accumulated.toString()
+                            onChunk(renderLocalThink(raw, foldIfNoClose))
                         }
-                        // 折叠包装：补回起始 <think> 使 parseWithThink 能把推理段识别为可折叠 Think 段。
-                        val raw = accumulated.toString()
-                        onChunk(renderLocalThink(raw, foldIfNoClose))
-                    }
-                    // false -> native 1 token 内 abort；截断后持续返回 false 确保 abort 生效。
-                    !truncated
-                },
+                        // false -> native 1 token 内 abort；截断后持续返回 false 确保 abort 生效。
+                        !truncated
+                    },
+                )
+            } ?: throw Exception(
+                "本地推理超时（超过 ${INFERENCE_TIMEOUT_MS / 1000} 秒无响应）。" +
+                    "可能原因：模型文件损坏、设备内存不足、或模型过大不适合当前设备。" +
+                    "请尝试更小的模型，或在模型管理页删除该模型后重新下载。"
             )
 
             // 配置变更检测：本次推理成功后，把"本次生效的"用户配置写回 last_applied，使设置页横幅归位。
@@ -232,6 +242,12 @@ class LocalChatProvider(
 
         /** DataStore .first() 超时阈值（ms）。国产 ROM 文件 I/O 被拦截时避免永久挂起。 */
         private const val DATASTORE_TIMEOUT_MS = 5000L
+
+        /** 本地推理总超时（ms）。覆盖模型加载 + prefill + 生成；超时则提示用户模型可能损坏/过大。
+         *  大模型（4B+）冷启动加载 + 首 token prefill 在中端设备可达 2-3 分钟，故给 180s。
+         *  withTimeoutOrNull 超时后 native 层 nativeCreate/nativeGenerateStream 可能仍在 IO 线程跑
+         *  （阻塞 JNI 无法中断），但 UI 已恢复响应并报错，避免无限"无响应"。 */
+        private const val INFERENCE_TIMEOUT_MS = 180_000L
 
         /** 本地小模型输出规范：约束单角色简短回复、禁剧本格式。追加到 system prompt（仅本地）。
          *  针对小模型角色扮演「上头」编多角色剧本并无限生成的根因（见 .claude/plans/fix-llm-not-stopping.md）。 */

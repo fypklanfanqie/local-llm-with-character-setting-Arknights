@@ -244,7 +244,9 @@ class BackendManager(
 
             // 所有后端均失败：汇总各后端原因详细报错（替代空洞「所有后端均初始化失败」），便于定位部分芯片失败根因。
             val detail = if (failureReasons.isEmpty()) "所有后端均初始化失败"
-                else "本地模型加载失败（所有后端均失败）。${failureReasons.joinToString("；")}"
+                else "本地模型加载失败（所有后端均失败）。${failureReasons.joinToString("；")}" +
+                    "\n可能原因：模型文件损坏（请在模型管理页删除后重新下载）、设备内存不足、" +
+                    "或芯片不支持当前量化精度。建议尝试更小的模型。"
             Log.e(TAG, detail)
             throw lastError?.let { IllegalStateException(detail, it) } ?: IllegalStateException(detail)
         } finally {
