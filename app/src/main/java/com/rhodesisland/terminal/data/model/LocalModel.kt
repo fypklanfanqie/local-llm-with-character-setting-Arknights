@@ -53,6 +53,12 @@ data class ModelInfo(
      * null = 未知（自定义/旧元数据）；AUTO 下安全默认 CPU。
      */
     val totalParamsB: Float? = null,
+    /**
+     * 模型主权重文件（llm.mnn.weight 或 llm.mnn）的 SHA-256 哈希。留空则跳过 SHA256 校验，
+     * 仅靠目录总大小比对做完整性检查（[com.rhodesisland.terminal.download.DownloadManager.finishMnnDownload]）。
+     * 从 HuggingFace/ModelScope 仓库文件页可获取，填入后下载完成会做严格校验。
+     */
+    val sha256: String = "",
 ) {
     /** 是否带 NPU 标签（MNN 模型市场里 QNN 预编译变体） */
     val isNpuVariant: Boolean get() = tags.any { it.equals("NPU", ignoreCase = true) }

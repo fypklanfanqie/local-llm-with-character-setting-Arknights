@@ -22,7 +22,29 @@ data class Character(
     val isCustom: Boolean = false,
 ) {
     val watermarkName: String
-        get() = name
+        get() = when (id) {
+            "amiya" -> "AMIYA"
+            "eyjafjalla" -> "EYJAFJALLA"
+            "goldenglow" -> "GOLDENGLOW"
+            "mudrock" -> "MUDROCK"
+            "la-pluma" -> "LA PLUMA"
+            "logos" -> "LOGOS"
+            "honeyberry" -> "HONEYBERRY"
+            "haruka" -> "HARUKA"
+            "wisdel" -> "WIS'ADEL"
+            "zuole" -> "ZUO LE"
+            "magallan" -> "MAGALLAN"
+            "shu" -> "SHU"
+            "surtr" -> "SURTR"
+            "xinoge" -> "CANTABILE"
+            "lin" -> "LIN"
+            "lappland" -> "LAPPLAND"
+            "executor" -> "EXECUTOR"
+            "mon3tr" -> "Mon3tr"
+            "xingyuan" -> "ASTGENNE"
+            "texas" -> "TEXAS"
+            else -> id.uppercase()
+        }
 }
 
 @Serializable
