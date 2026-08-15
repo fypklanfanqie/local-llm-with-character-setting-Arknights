@@ -2,6 +2,7 @@ package com.rhodesisland.terminal.util
 
 import okhttp3.Cookie
 import okhttp3.CookieJar
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -42,11 +43,16 @@ object PrtsImageLoader {
             .build()
     }
 
-    /** 预热：请求一次让反热链挑战页下发 sec cookie（结果非图片也无妨，关键是 cookie 进 jar）。幂等。 */
+    /** 预热：请求让反热链挑战页下发 sec cookie（结果非图片也无妨，关键是 cookie 进 jar）。带重试，幂等。 */
     fun prewarm() {
         runCatching {
-            okHttpClient.newCall(Request.Builder().url(WARM_URL).build())
-                .execute().use { it.body?.close() }
+            val warmUrl = WARM_URL.toHttpUrl()
+            repeat(3) {
+                okHttpClient.newCall(Request.Builder().url(WARM_URL).build())
+                    .execute().use { it.body?.close() }
+                // 已拿到 media.prts.wiki 的 cookie => 挑战已通过，后续图片请求都正常
+                if (okHttpClient.cookieJar.loadForRequest(warmUrl).isNotEmpty()) return
+            }
         }
     }
 

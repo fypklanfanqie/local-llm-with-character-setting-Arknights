@@ -18,6 +18,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import com.chatbyyourside.llm.backend.OpenClProbeService
+import java.io.File
 
 /**
  * 全局 Application 入口
@@ -75,6 +76,8 @@ class RhodesApp : Application(), ImageLoaderFactory {
 
         // PRTS 立绘反热链 cookie 预热：一次请求拿到 sec cookie，此后全量干员立绘（网络图）可正常加载。
         appScope.launch(Dispatchers.IO) { PrtsImageLoader.prewarm() }
+        // 升级时清一次 Coil 图片缓存：旧版本可能把反热链 HTML 挑战页当成成功响应缓存了，需冲掉。
+        clearStaleImageCache()
 
         // 角色问候：通知 channel + 前后台观察 + 确保后台调度链存活
         GreetingNotificationManager.createChannel(this)
@@ -91,6 +94,21 @@ class RhodesApp : Application(), ImageLoaderFactory {
         // Task 6：恢复 Seedance 视频流水线（复位进程中断残留的进行中状态 + 重入队可自动认领任务）。幂等，异步。
         appScope.launch {
             container.seedanceVideoScheduler.recoverPending()
+        }
+    }
+
+    /**
+     * 升级后清一次 Coil 磁盘缓存（Coil 默认目录 cacheDir/image_cache）：
+     * 旧版本可能把 PRTS 反热链 HTML 挑战页当作成功响应缓存，导致立绘一直解码失败。
+     * 按版本号只清一次，避免每次启动都清（浪费）。
+     */
+    private fun clearStaleImageCache() {
+        val prefs = getSharedPreferences("rhodes_app", MODE_PRIVATE)
+        val lastClearedV = prefs.getInt("last_image_cache_cleared_v", 0)
+        val vc = BuildConfig.VERSION_CODE
+        if (lastClearedV < vc) {
+            runCatching { File(cacheDir, "image_cache").deleteRecursively() }
+            prefs.edit().putInt("last_image_cache_cleared_v", vc).apply()
         }
     }
 
