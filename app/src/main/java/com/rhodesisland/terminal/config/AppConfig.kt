@@ -61,6 +61,9 @@ object AppConfig {
         const val HOUR_END = 23
         // 生成主动消息时带入的最近历史条数（让消息能衔接正在聊的话题）
         const val CONTEXT_MESSAGES = 6
+        // PeriodicWork 周期（分钟）。WorkManager 最短允许 15 分钟。
+        // 用周期性 Worker 取代脆弱的自延续链：错失一次下个周期仍会触发，链条不会因进程被杀而永久断裂。
+        const val HEARTBEAT_INTERVAL_MIN = 15L
         // 单次生成超时（秒）
         const val GENERATE_TIMEOUT_MS = 60_000L
         // 云 API 失败后重排的间隔（毫秒），避免 WorkManager retry 风暴

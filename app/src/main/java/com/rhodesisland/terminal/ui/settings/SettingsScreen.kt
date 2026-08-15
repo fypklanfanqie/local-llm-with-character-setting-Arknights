@@ -23,14 +23,18 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.LifecycleEventObserver
 import android.Manifest
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import coil.compose.AsyncImage
 import com.rhodesisland.terminal.AppContainer
+import com.rhodesisland.terminal.util.BackgroundSurvivalHelper
 import com.rhodesisland.terminal.data.model.ApiConfig
 import com.rhodesisland.terminal.data.model.TtsConfig
 import com.rhodesisland.terminal.data.repository.ChatBackgroundConfig
@@ -747,7 +751,41 @@ private fun GreetingSection(container: AppContainer, scope: CoroutineScope) {
         if (testScheduled) { delay(12_000); testScheduled = false }
     }
 
-    val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    // 后台保活相关权限状态（国产 ROM）：通知权限 / 电池白名单 / 精确闹钟。ON_RESUME 重新核验，
+    // 用户从系统设置跳回后刷新，避免状态过期。
+    var notifGranted by remember {
+        mutableStateOf(
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) ==
+                    android.content.pm.PackageManager.PERMISSION_GRANTED
+            } else true
+        )
+    }
+    var ignoringBattery by remember {
+        mutableStateOf(BackgroundSurvivalHelper.isIgnoringBatteryOptimizations(context))
+    }
+    var exactAlarmGranted by remember {
+        mutableStateOf(BackgroundSurvivalHelper.canScheduleExactAlarms(context))
+    }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                notifGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) ==
+                        android.content.pm.PackageManager.PERMISSION_GRANTED
+                } else true
+                ignoringBattery = BackgroundSurvivalHelper.isIgnoringBatteryOptimizations(context)
+                exactAlarmGranted = BackgroundSurvivalHelper.canScheduleExactAlarms(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        notifGranted = it
+    }
 
     GlassListSection(title = "角色问候") {
         GlassListRow(
@@ -771,6 +809,27 @@ private fun GreetingSection(container: AppContainer, scope: CoroutineScope) {
             },
             showDivider = isCloud && enabled,
         )
+        if (enabled && isCloud && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !notifGranted) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("⚠️", fontSize = 14.sp)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "通知权限未开启，收不到主动消息提醒",
+                    color = scheme.error,
+                    fontSize = 11.sp,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = {
+                    val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                        putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                    }
+                    runCatching { context.startActivity(intent) }
+                }) { Text("去开启", color = scheme.primary, fontSize = 12.sp) }
+            }
+        }
         if (isCloud) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Button(
@@ -827,9 +886,67 @@ private fun GreetingSection(container: AppContainer, scope: CoroutineScope) {
                         steps = AppConfig.Greeting.MAX_DAILY_COUNT - AppConfig.Greeting.MIN_DAILY_COUNT - 1,
                     )
                     Text(
-                        "提示：部分手机需在系统设置中允许本应用「后台运行 / 自启动」。",
+                        "部分国产 ROM 需手动允许后台运行 / 自启动，否则可能收不到主动消息：",
                         color = scheme.onSurfaceVariant, fontSize = 10.sp,
                     )
+                    // 电池优化白名单：未允许时可能被省电冻结，点「去允许」跳系统电池设置
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("🔋", fontSize = 14.sp)
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            if (ignoringBattery) "后台运行：已允许" else "后台运行：未允许（可能被省电冻结）",
+                            color = if (ignoringBattery) scheme.tertiary else scheme.error,
+                            fontSize = 11.sp,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (!ignoringBattery) {
+                            TextButton(onClick = { BackgroundSurvivalHelper.requestIgnoreBatteryOptimizations(context) }) {
+                                Text("去允许", color = scheme.primary, fontSize = 12.sp)
+                            }
+                        }
+                    }
+                    // 厂商自启动设置（仅当厂商入口可达时显示，如小米/OPPO/vivo 等）
+                    val autostartIntent = remember { BackgroundSurvivalHelper.manufacturerAutostartIntent(context) }
+                    if (autostartIntent != null) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("📱", fontSize = 14.sp)
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "自启动管理（厂商设置）",
+                                color = scheme.onSurface,
+                                fontSize = 11.sp,
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(onClick = { runCatching { context.startActivity(autostartIntent) } }) {
+                                Text("去设置", color = scheme.primary, fontSize = 12.sp)
+                            }
+                        }
+                    }
+                    // 精确闹钟（Android 12+）：未授权时提醒，提升后台触发可靠性
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !exactAlarmGranted) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("⏰", fontSize = 14.sp)
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "精确闹钟未授权（后台触发可靠性降低）",
+                                color = scheme.onSurface,
+                                fontSize = 11.sp,
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(onClick = { BackgroundSurvivalHelper.requestScheduleExactAlarm(context) }) {
+                                Text("去授权", color = scheme.primary, fontSize = 12.sp)
+                            }
+                        }
+                    }
                 }
             }
         }

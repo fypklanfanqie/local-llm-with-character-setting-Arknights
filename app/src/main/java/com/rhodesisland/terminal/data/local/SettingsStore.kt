@@ -124,6 +124,10 @@ class SettingsStore(
         // 每日配额：当天已发条数，按日期(yyyy-MM-dd)重置
         val GREETING_QUOTA_DATE = stringPreferencesKey("greeting_quota_date")
         val GREETING_QUOTA_COUNT = intPreferencesKey("greeting_quota_count")
+        // 上次发问候的角色 id（跨天也连续轮询，保证多个已选角色轮流被投递）
+        val GREETING_LAST_CHAR_ID = stringPreferencesKey("greeting_last_char_id")
+        // 下一次问候投递的绝对目标时间（epoch ms）；<=0 表示尚未初始化（首次启用后先算一个随机时刻）
+        val GREETING_NEXT_FIRE_AT = longPreferencesKey("greeting_next_fire_at")
 
         // ===== 配置变更检测（移植自 iFeng 的 hasConfigChanged/acknowledgeConfigChange）=====
         // 记录"上次成功加载模型时所用的"线程/上下文/后端/lookahead。当前值 != last_applied 即视为已变更，
@@ -606,6 +610,30 @@ class SettingsStore(
         dataStore.edit {
             it[Keys.GREETING_QUOTA_DATE] = date
             it[Keys.GREETING_QUOTA_COUNT] = count
+        }
+    }
+
+    /** 上次发问候的角色 id（null = 从未发过）。 */
+    val greetingLastCharId: Flow<String?> = dataStore.data.map { p ->
+        p[Keys.GREETING_LAST_CHAR_ID]
+    }
+
+    suspend fun setGreetingLastCharId(id: String?) {
+        dataStore.edit {
+            if (id == null) it.remove(Keys.GREETING_LAST_CHAR_ID)
+            else it[Keys.GREETING_LAST_CHAR_ID] = id
+        }
+    }
+
+    /** 下一次问候投递目标时间（epoch ms；0 = 尚未初始化）。 */
+    val greetingNextFireAt: Flow<Long> = dataStore.data.map { p ->
+        p[Keys.GREETING_NEXT_FIRE_AT] ?: 0L
+    }
+
+    suspend fun setGreetingNextFireAt(epochMs: Long) {
+        dataStore.edit {
+            if (epochMs <= 0L) it.remove(Keys.GREETING_NEXT_FIRE_AT)
+            else it[Keys.GREETING_NEXT_FIRE_AT] = epochMs
         }
     }
 

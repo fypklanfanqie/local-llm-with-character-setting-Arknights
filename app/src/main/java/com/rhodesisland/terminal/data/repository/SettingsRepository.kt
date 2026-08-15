@@ -81,6 +81,10 @@ class SettingsRepository(private val store: SettingsStore) {
     val greetingDailyCount: Flow<Int> = store.greetingDailyCount
     /** 当日配额（日期 -> 已发条数）。 */
     val greetingQuota: Flow<Pair<String, Int>> = store.greetingQuota
+    /** 上次发问候的角色 id（跨天也连续轮询）。 */
+    val greetingLastCharId: Flow<String?> = store.greetingLastCharId
+    /** 下一次问候投递目标时间（epoch ms；0 = 尚未初始化）。 */
+    val greetingNextFireAt: Flow<Long> = store.greetingNextFireAt
 
     suspend fun setThemeMode(mode: ThemeMode) = store.setThemeMode(mode)
 
@@ -138,6 +142,8 @@ class SettingsRepository(private val store: SettingsStore) {
     suspend fun setGreetingCharacterIds(ids: Set<String>) = store.setGreetingCharacterIds(ids)
     suspend fun setGreetingDailyCount(count: Int) = store.setGreetingDailyCount(count)
     suspend fun setGreetingQuota(date: String, count: Int) = store.setGreetingQuota(date, count)
+    suspend fun setGreetingLastCharId(id: String?) = store.setGreetingLastCharId(id)
+    suspend fun setGreetingNextFireAt(epochMs: Long) = store.setGreetingNextFireAt(epochMs)
 
     /** 一次成功推理后写回本次生效的用户配置，使 [llmConfigChanged] 归 false */
     suspend fun acknowledgeLlmConfig(
@@ -204,13 +210,19 @@ class SettingsRepository(private val store: SettingsStore) {
     } ?: emptyList()
 
     // ===== 角色问候同步读取（供 GreetingWorker 用）=====
-    suspend fun getGreetingEnabledNow(): Boolean = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
+    /** 已开启?（超时返回 null 而非 false——Worker 据此区分「明确关闭」与「暂时读不到」）。 */
+    suspend fun getGreetingEnabledOrNull(): Boolean? = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
         greetingEnabled.first()
-    } ?: false
+    }
 
-    suspend fun getGreetingCharacterIdsNow(): Set<String> = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
+    suspend fun getGreetingEnabledNow(): Boolean = getGreetingEnabledOrNull() ?: false
+
+    /** 已选角色集合?（超时返回 null 而非空集，避免 Worker 误判「未选角色」）。 */
+    suspend fun getGreetingCharacterIdsOrNull(): Set<String>? = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
         greetingCharacterIds.first()
-    } ?: emptySet()
+    }
+
+    suspend fun getGreetingCharacterIdsNow(): Set<String> = getGreetingCharacterIdsOrNull() ?: emptySet()
 
     suspend fun getGreetingDailyCountNow(): Int = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
         greetingDailyCount.first()
@@ -219,6 +231,16 @@ class SettingsRepository(private val store: SettingsStore) {
     suspend fun getGreetingQuotaNow(): Pair<String, Int> = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
         greetingQuota.first()
     } ?: "" to 0
+
+    /** 上次发问候的角色 id（超时返回 null，Worker 退化为随机起点）。 */
+    suspend fun getLastGreetingCharIdNow(): String? = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
+        greetingLastCharId.first()
+    }
+
+    /** 下一次问候投递目标时间（epoch ms；0 = 尚未初始化，超时回退 0）。 */
+    suspend fun getGreetingNextFireAtNow(): Long = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
+        greetingNextFireAt.first()
+    } ?: 0L
 
     companion object {
         /** DataStore .first() 超时阈值（ms）。国产 ROM 文件 I/O 被拦截时避免永久挂起。 */

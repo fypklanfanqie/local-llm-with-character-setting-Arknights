@@ -8,6 +8,7 @@ import android.util.Log
 import com.rhodesisland.terminal.data.local.AppDatabase
 import com.rhodesisland.terminal.notification.AppLifecycleObserver
 import com.rhodesisland.terminal.notification.GreetingNotificationManager
+import com.rhodesisland.terminal.service.InferenceForegroundService
 import com.rhodesisland.terminal.work.GreetingScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -64,6 +65,8 @@ class RhodesApp : Application() {
 
         // 角色问候：通知 channel + 前后台观察 + 确保后台调度链存活
         GreetingNotificationManager.createChannel(this)
+        // 本地推理保活：前台服务通知渠道（生成期间常驻通知栏，防国产 ROM 杀进程）
+        InferenceForegroundService.createChannel(this)
         AppLifecycleObserver.register(this)
         // Task 15/16：前台空闲时只做轻量 OpenCL 探测（绝不自动加载模型/预热）。
         container.startIdleOpenClProbe(appScope)

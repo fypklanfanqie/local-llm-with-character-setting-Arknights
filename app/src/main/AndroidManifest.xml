@@ -24,6 +24,16 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- 本地推理保活：前台服务（生成期间常驻通知栏，防国产 ROM 杀进程）+ WakeLock -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- 后台保活引导：电池白名单 / 精确闹钟（问候兜底）/ 开机重排闹钟 -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
     <!-- Android 11+ 包可见性：朗读（系统 TTS）需要声明 TTS 服务查询，
          否则无法绑定系统语音引擎（小米 HyperOS 会把未声明的绑定 BLOCKED，导致 onInit 失败）。 -->
     <queries>
@@ -67,6 +77,32 @@
             android:name="com.chatbyyourside.llm.backend.OpenClProbeService"
             android:process=":mnn_probe"
             android:exported="false" />
+
+        <!-- 本地推理保活前台服务（生成期间常驻通知栏 + WakeLock，防国产 ROM 杀进程） -->
+        <service
+            android:name=".service.InferenceForegroundService"
+            android:foregroundServiceType="dataSync"
+            android:exported="false" />
+
+        <!-- WorkManager 前台 Worker（GreetingWorker 生成问候时 setForeground 用），与自定义服务共存需 merge -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
+
+        <!-- 问候精确闹钟兜底：WorkManager 周期工作被国产 ROM 冻结时，闹钟到点触发一次问候 Worker -->
+        <receiver
+            android:name=".work.GreetingAlarmReceiver"
+            android:exported="false" />
+
+        <!-- 开机重排问候闹钟（WorkManager 周期工作开机自动恢复，仅精确闹钟需手动重排） -->
+        <receiver
+            android:name=".work.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>
