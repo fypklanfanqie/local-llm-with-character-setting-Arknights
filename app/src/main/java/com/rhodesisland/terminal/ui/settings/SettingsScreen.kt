@@ -385,7 +385,7 @@ fun SettingsScreen(
                 Text("明日方舟同人 AI 角色扮演聊天应用", color = scheme.onSurfaceVariant, fontSize = 12.sp)
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "内置 20 位罗德岛干员。项目为明日方舟同人作品，所有角色、立绘、音乐版权归 Hypergryph / 鹰角网络所有，仅用于学习交流，不作商业用途。",
+                    "内置 384 位罗德岛干员（20 位含语音/本地立绘 + 364 位自动生成）。项目为明日方舟同人作品，所有角色、立绘、音乐版权归 Hypergryph / 鹰角网络所有，仅用于学习交流，不作商业用途。",
                     color = scheme.onSurfaceVariant, fontSize = 10.sp, lineHeight = 15.sp,
                 )
             }

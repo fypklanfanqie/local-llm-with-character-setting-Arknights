@@ -92,7 +92,7 @@ fun GuideDialog(onDismiss: () -> Unit) {
                             color = scheme.onSurfaceVariant, fontSize = 12.sp, lineHeight = 17.sp,
                         )
                         Spacer(Modifier.height(8.dp))
-                        FeatureRow("💬", "角色扮演对话", "内置 20 位罗德岛干员，每位拥有独立人格设定与对话风格；支持新建 / 导入 / 导出自定义角色，基于 LLM 大语言模型驱动。")
+                        FeatureRow("💬", "角色扮演对话", "内置 384 位罗德岛干员（全量 3★~6★），每位拥有独立人格设定与对话风格；支持新建 / 导入 / 导出自定义角色，基于 LLM 大语言模型驱动。")
                         FeatureRow("☁️", "云端 / 本地双引擎", "聊天页一键切换云端 API（SSE 流式）与本地 MNN 离线推理，对话记录按角色独立保存。")
                         FeatureRow("🎤", "TTS 语音合成", "角色消息可一键朗读，采用火山引擎豆包语音合成 + 声音复刻，支持中日双语。")
                         FeatureRow("🎵", "音乐播放", "支持搜索网易云音乐在线播放，也可导入本地音乐文件；支持播放 / 进度拖动 / 音量 / 歌词显示。")

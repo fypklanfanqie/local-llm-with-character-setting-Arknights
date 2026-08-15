@@ -18,6 +18,10 @@ data class Character(
     val voiceLines: VoiceLines? = null,
     /** 刷卡时「随机问好」用的问候语池；为空时回退到通用问候池。 */
     val greetings: List<String> = emptyList(),
+    /** 干员技能名（游戏内技能1/2/3，仅名称；全量干员由 ExtraCharacters 生成）。 */
+    val skills: List<String> = emptyList(),
+    /** 干员天赋名（游戏内天赋1/2，仅名称）。 */
+    val talents: List<String> = emptyList(),
     val systemPrompt: String,
     val isCustom: Boolean = false,
 ) {

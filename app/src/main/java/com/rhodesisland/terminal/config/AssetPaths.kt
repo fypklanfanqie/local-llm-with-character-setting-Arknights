@@ -10,7 +10,7 @@ package com.rhodesisland.terminal.config
  */
 object AssetPaths {
 
-    val PICTURES: Map<String, String> = mapOf(
+    private val BASE_PICTURES: Map<String, String> = mapOf(
         "la-pluma" to "picture/立绘_羽毛笔_skin1.webp",
         "amiya" to "picture/立绘_阿米娅_2.webp",
         "eyjafjalla" to "picture/立绘_艾雅法拉_skin2.webp",
@@ -33,7 +33,10 @@ object AssetPaths {
         "texas" to "picture/立绘_德克萨斯_skin1.webp",
     )
 
-    val SELECTION_PICTURES: Map<String, String> = mapOf(
+    /** 通讯页立绘（基础 20 位本地图 + 全量干员精二/精一 PRTS 直链）。 */
+    val PICTURES: Map<String, String> = BASE_PICTURES + ExtraArtPaths.PICTURES
+
+    private val BASE_SELECTION_PICTURES: Map<String, String> = mapOf(
         "surtr" to "picture/立绘_史尔特尔_skin2.webp",
         "xinoge" to "picture/立绘_晓歌_skin2.webp",
         "lin" to "picture/立绘_林_skin3.webp",
@@ -43,6 +46,9 @@ object AssetPaths {
         "xingyuan" to "picture/立绘_星源_skin1.webp",
         "texas" to "picture/立绘_德克萨斯_skin2.webp",
     )
+
+    /** 干员选择页立绘（基础 8 位本地图 + 全量干员皮肤/精一 PRTS 直链）。 */
+    val SELECTION_PICTURES: Map<String, String> = BASE_SELECTION_PICTURES + ExtraArtPaths.SELECTION_PICTURES
 
     val VOICES: Map<String, String> = mapOf(
         "la-pluma" to "music/任命助理.wav",

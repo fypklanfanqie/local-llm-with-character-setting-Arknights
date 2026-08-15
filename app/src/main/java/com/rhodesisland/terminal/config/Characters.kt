@@ -17,7 +17,7 @@ object Characters {
         "见到你真开心，我们开始吧。",
     )
 
-    val ALL: Map<String, Character> = linkedMapOf(
+    private val ALL_BASE: Map<String, Character> = linkedMapOf(
         "la-pluma" to Character(
             id = "la-pluma", name = "羽毛笔", code = "R126",
             role = "近卫干员 / 调酒师", race = "黎博利", ttsEnabled = true,
@@ -713,6 +713,9 @@ object Characters {
         ),
     )
 
+    /** 全量干员合并：基础 20 位 + 自动生成的全量干员（ExtraCharacters，含游戏技能/天赋与立绘 URL）。 */
+    val ALL: Map<String, Character> = ALL_BASE + ExtraCharacters.ALL
+
     /** 角色卡列表顺序（对应小程序 CHARACTER_ORDER） */
     val ORDER: List<String> = listOf(
         "la-pluma", "amiya", "eyjafjalla", "goldenglow", "mudrock",
@@ -721,10 +724,13 @@ object Characters {
         "lappland", "executor", "mon3tr", "xingyuan", "texas",
     )
 
+    /** 全量干员排序：基础顺序 + 自动生成顺序。 */
+    val ORDER_ALL: List<String> = ORDER + ExtraCharacters.ORDER
+
     /** 默认角色 */
     const val DEFAULT_CHARACTER_ID = "la-pluma"
 
     fun get(id: String): Character? = ALL[id]
 
-    fun getOrderedList(): List<Character> = ORDER.mapNotNull { ALL[it] }
+    fun getOrderedList(): List<Character> = ORDER_ALL.mapNotNull { ALL[it] }
 }

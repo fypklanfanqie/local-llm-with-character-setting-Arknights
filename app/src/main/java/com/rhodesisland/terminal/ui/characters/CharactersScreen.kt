@@ -307,6 +307,26 @@ fun PersonaSheet(
                 style = MaterialTheme.typography.titleLarge,
                 color = scheme.onSurface,
             )
+            if (character.skills.isNotEmpty() || character.talents.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    if (character.skills.isNotEmpty()) {
+                        Text(
+                            "技能：${character.skills.joinToString(" · ")}",
+                            fontSize = 12.sp, color = scheme.primary,
+                        )
+                    }
+                    if (character.talents.isNotEmpty()) {
+                        Text(
+                            "天赋：${character.talents.joinToString(" · ")}",
+                            fontSize = 12.sp, color = scheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
             Spacer(Modifier.height(14.dp))
             Column(
                 modifier = Modifier
