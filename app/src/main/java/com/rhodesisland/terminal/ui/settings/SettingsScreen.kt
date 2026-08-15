@@ -50,7 +50,6 @@ import com.rhodesisland.terminal.config.PresetModel
 import com.rhodesisland.terminal.config.PRESET_PROVIDERS
 import com.rhodesisland.terminal.config.AppConfig
 import com.rhodesisland.terminal.data.model.ChatProviderType
-import com.rhodesisland.terminal.data.model.ThemeMode
 import com.rhodesisland.terminal.data.model.SystemVoiceTemplate
 import com.rhodesisland.terminal.data.model.TtsEngine
 import com.rhodesisland.terminal.data.model.VoicePair
@@ -78,7 +77,6 @@ fun SettingsScreen(
     val ttsConfig by container.settingsRepository.ttsConfig.collectAsState(initial = TtsConfig())
     val deepThinking by container.settingsRepository.deepThinking.collectAsState(initial = false)
     val liquidGlass by container.settingsRepository.liquidGlass.collectAsState(initial = true)
-    val themeMode by container.settingsRepository.themeMode.collectAsState(initial = ThemeMode.SYSTEM)
     val scope = rememberCoroutineScope()
 
     val matchedProvider: ModelProvider? = PRESET_PROVIDERS.find { provider ->
@@ -135,7 +133,6 @@ fun SettingsScreen(
     }
 
     var showGuide by remember { mutableStateOf(false) }
-    var showThemePicker by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -371,17 +368,11 @@ fun SettingsScreen(
             },
         )
 
-        // ===== 主题模式 =====
+        // ===== 主题模式（PRTS 深色，固定） =====
         GlassListSection {
             GlassListRow(
                 title = "主题模式",
-                subtitle = when (themeMode) {
-                    ThemeMode.SYSTEM -> "跟随系统"
-                    ThemeMode.LIGHT -> "浅色"
-                    ThemeMode.DARK -> "深色"
-                },
-                onClick = { showThemePicker = true },
-                trailing = { Chevron() },
+                subtitle = "深色主题（PRTS 终端风，固定）",
                 showDivider = false,
             )
         }
@@ -389,12 +380,12 @@ fun SettingsScreen(
         // ===== 关于 =====
         GlassListSection(title = "关于") {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Chat by your side", color = scheme.onSurface, fontSize = 16.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                Text("罗德岛通讯终端", color = scheme.onSurface, fontSize = 16.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                 Text("Android 版 v1.0.0", color = scheme.onSurfaceVariant, fontSize = 12.sp)
-                Text("AI 角色扮演聊天应用", color = scheme.onSurfaceVariant, fontSize = 12.sp)
+                Text("明日方舟同人 AI 角色扮演聊天应用", color = scheme.onSurfaceVariant, fontSize = 12.sp)
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "内置 20 位原创人设，角色与音乐资源均为原创或来自公开接口。仅用于学习交流，不作商业用途。",
+                    "内置 20 位罗德岛干员。项目为明日方舟同人作品，所有角色、立绘、音乐版权归 Hypergryph / 鹰角网络所有，仅用于学习交流，不作商业用途。",
                     color = scheme.onSurfaceVariant, fontSize = 10.sp, lineHeight = 15.sp,
                 )
             }
@@ -404,63 +395,6 @@ fun SettingsScreen(
     if (showGuide) {
         GuideDialog(onDismiss = { showGuide = false })
     }
-
-    if (showThemePicker) {
-        ThemePickerDialog(
-            currentMode = themeMode,
-            onSelect = { mode ->
-                scope.launch { container.settingsRepository.setThemeMode(mode) }
-                showThemePicker = false
-            },
-            onDismiss = { showThemePicker = false },
-        )
-    }
-}
-
-@Composable
-private fun ThemePickerDialog(
-    currentMode: ThemeMode,
-    onSelect: (ThemeMode) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val scheme = MaterialTheme.colorScheme
-    val modes = listOf(
-        ThemeMode.SYSTEM to "跟随系统",
-        ThemeMode.LIGHT to "浅色",
-        ThemeMode.DARK to "深色",
-    )
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = scheme.surfaceContainerHigh,
-        title = { Text("主题模式", color = scheme.onSurface) },
-        text = {
-            Column {
-                modes.forEach { (mode, label) ->
-                    val selected = mode == currentMode
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onSelect(mode) }
-                            .padding(vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            label,
-                            color = if (selected) scheme.primary else scheme.onSurface,
-                            fontSize = 14.sp,
-                            modifier = Modifier.weight(1f),
-                        )
-                        if (selected) {
-                            Text("✓", color = scheme.primary, fontSize = 16.sp)
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("取消", color = scheme.onSurfaceVariant) }
-        },
-    )
 }
 
 @Composable
