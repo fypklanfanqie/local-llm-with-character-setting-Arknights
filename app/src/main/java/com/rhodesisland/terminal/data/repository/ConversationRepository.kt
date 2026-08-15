@@ -45,6 +45,11 @@ class ConversationRepository(private val dao: ConversationDao) {
         dao.touch(id, System.currentTimeMillis())
     }
 
+    /** 开启/关闭该会话的 Seedance 自动视频（新会话默认关闭；旧库行迁移后同为关闭）。 */
+    suspend fun setAutoVideoEnabled(id: Long, enabled: Boolean) {
+        dao.updateAutoVideoEnabled(id, enabled)
+    }
+
     /** 删除会话及其全部消息（事务性，见 ConversationDao.deleteConversation）。 */
     suspend fun delete(id: Long) {
         dao.deleteConversation(id)
@@ -56,6 +61,7 @@ class ConversationRepository(private val dao: ConversationDao) {
         title = e.title,
         createdAt = e.createdAt,
         updatedAt = e.updatedAt,
+        autoVideoEnabled = e.autoVideoEnabled,
     )
 
     companion object {

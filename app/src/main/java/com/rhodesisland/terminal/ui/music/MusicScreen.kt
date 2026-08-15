@@ -6,20 +6,36 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.RepeatOne
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
@@ -30,7 +46,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -41,17 +56,16 @@ import com.rhodesisland.terminal.AppContainer
 import com.rhodesisland.terminal.data.remote.LrcLine
 import com.rhodesisland.terminal.data.remote.LrcParser
 import com.rhodesisland.terminal.data.remote.NeteaseApiService
+import com.rhodesisland.terminal.data.remote.NeteaseSong
 import com.rhodesisland.terminal.data.repository.BgmTrack
-import com.rhodesisland.terminal.ui.theme.PrtsColors
+import com.rhodesisland.terminal.ui.glass.GlassLargeTitle
+import com.rhodesisland.terminal.ui.glass.frostedGlass
+import com.rhodesisland.terminal.ui.theme.GlassShapes
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/** EP 筛选顺序（与网页版 musicData.js EP_ORDER 一致） */
-private val MUSIC_EP_ORDER = listOf("系统", "Y-7", "Y-6", "Y-5", "Y-4", "Y-3", "Y-2", "Y-0～Y-1", "Overseas")
-
-/** 毫秒 -> mm:ss */
 private fun formatTime(ms: Long): String {
     if (ms <= 0) return "00:00"
     val totalSec = ms / 1000
@@ -62,71 +76,77 @@ private fun formatTime(ms: Long): String {
 
 @Composable
 fun MusicScreen(container: AppContainer) {
-    val playlist = remember { container.assetRepository.getBgmList() }
-    // 播放状态与当前曲目下标以 AudioManager 的真实状态为准（由 ExoPlayer 回调驱动），
-    // 避免 UI 乐观设置后与播放器实际状态脱节
+    val scheme = MaterialTheme.colorScheme
+    val playlist by container.musicLibrary.playlist.collectAsState(initial = emptyList())
     val currentIndex by container.audioManager.currentIndexFlow.collectAsState(initial = 0)
     val isPlaying by container.audioManager.isPlayingFlow.collectAsState(initial = false)
     var searchQuery by remember { mutableStateOf("") }
     var showSearch by remember { mutableStateOf(false) }
     val repeatMode by container.settingsRepository.musicRepeatMode.collectAsState(initial = 0)
+    val shuffle by container.settingsRepository.musicShuffle.collectAsState(initial = false)
     val favorites by container.settingsRepository.musicFavorites.collectAsState(initial = emptySet())
     var showFavoritesOnly by remember { mutableStateOf(false) }
-    var selectedEp by remember { mutableStateOf<String?>(null) }
     val volume by container.settingsRepository.volume.collectAsState(initial = 70)
     var volumeSlider by remember { mutableFloatStateOf(volume.toFloat()) }
     LaunchedEffect(volume) { volumeSlider = volume.toFloat() }
     val scope = rememberCoroutineScope()
 
-    // BGM 播放错误（资源缺失 / 加载失败）提示
     val bgmError by container.audioManager.error.collectAsState(initial = null)
 
-    // 当前曲目封面与歌词（仅网易云曲目，本地曲目不显示）
     var coverUrl by remember { mutableStateOf<String?>(null) }
     var lyrics by remember { mutableStateOf<List<LrcLine>>(emptyList()) }
     var lyricLoading by remember { mutableStateOf(false) }
 
-    val displayList = remember(playlist, searchQuery, showFavoritesOnly, favorites, selectedEp) {
-        var list = playlist
-        if (selectedEp != null) {
-            list = list.filter { it.ep == selectedEp }
-        }
-        if (searchQuery.isNotBlank()) {
-            list = list.filter { it.name.contains(searchQuery, ignoreCase = true) }
-        }
-        if (showFavoritesOnly) {
-            list = list.filter { it.key in favorites }
-        }
-        list
+    var searchResults by remember { mutableStateOf<List<NeteaseSong>>(emptyList()) }
+    var searchLoading by remember { mutableStateOf(false) }
+
+    val displayList = remember(playlist, showFavoritesOnly, favorites) {
+        if (showFavoritesOnly) playlist.filter { it.key in favorites } else playlist
     }
 
     val currentTrack = playlist.getOrNull(currentIndex)
 
-    // 初始化 BGM 播放器。仅在首次进入时自动加载第一首；
-    // 从其他页面返回时保持当前播放状态，不重置曲目。
-    LaunchedEffect(Unit) {
-        val wasInitialized = container.audioManager.isPlayerInitialized()
-        container.audioManager.initBgm(playlist)
-        if (!wasInitialized && playlist.isNotEmpty()) {
-            container.audioManager.loadTrack(0, playlist)
+    // 持久化的循环/随机值先喂给管理器（须先于 playlist effect，保证 initBgm 时已就位）
+    LaunchedEffect(repeatMode) { container.audioManager.setRepeatMode(repeatMode) }
+    LaunchedEffect(shuffle) { container.audioManager.setShuffle(shuffle) }
+
+    // 首次进音乐页自动加载第一首；之后列表增删/切页返回只同步下标，不重置第一首、不打断播放。
+    // 以播放器是否已构建为界：进程被杀重启后 bgmPlayer 为 null → 会正确重新起播。
+    LaunchedEffect(playlist) {
+        val mgr = container.audioManager
+        if (playlist.isEmpty()) {
+            if (mgr.isPlayerInitialized()) mgr.syncIndex(playlist)
+            return@LaunchedEffect
+        }
+        if (!mgr.isPlayerInitialized()) {
+            mgr.initBgm(playlist)
+            mgr.loadTrack(0, playlist)
+        } else {
+            mgr.syncIndex(playlist)
         }
     }
 
-    // 切歌时拉取封面与歌词（本地曲目 neteaseId 为 null，直接清空）
+    // 网易云搜索：只填充搜索结果区，绝不改动播放列表（本地曲目常驻）
+    LaunchedEffect(searchQuery) {
+        if (searchQuery.isBlank()) {
+            searchResults = emptyList()
+            searchLoading = false
+            return@LaunchedEffect
+        }
+        delay(450)
+        searchLoading = true
+        searchResults = NeteaseApiService.search(searchQuery)
+        searchLoading = false
+    }
+
     LaunchedEffect(currentIndex) {
         val track = playlist.getOrNull(currentIndex)
         val nid = track?.neteaseId
         if (nid == null) {
-            coverUrl = null
-            lyrics = emptyList()
-            lyricLoading = false
+            coverUrl = null; lyrics = emptyList(); lyricLoading = false
             return@LaunchedEffect
         }
-        coverUrl = null
-        lyrics = emptyList()
-        lyricLoading = true
-        // 封面与歌词并行获取；用 coroutineScope 使 async 成为 LaunchedEffect 协程的子协程，
-        // 切歌重启 LaunchedEffect 时旧请求会一并取消，避免旧数据覆盖新曲目
+        coverUrl = null; lyrics = emptyList(); lyricLoading = true
         coroutineScope {
             val coverDeferred = async { NeteaseApiService.fetchCover(nid) }
             val lyricDeferred = async {
@@ -139,7 +159,6 @@ fun MusicScreen(container: AppContainer) {
         lyricLoading = false
     }
 
-    // 进度更新
     var currentPosition by remember { mutableLongStateOf(0L) }
     var duration by remember { mutableLongStateOf(0L) }
     var seekDragging by remember { mutableStateOf(false) }
@@ -152,177 +171,196 @@ fun MusicScreen(container: AppContainer) {
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(PrtsColors.BgPrimary)
-            .windowInsetsPadding(WindowInsets.statusBars)
-    ) {
-        Text("AUDIO TERMINAL", modifier = Modifier.padding(16.dp), color = PrtsColors.GoldBright, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-
-        // 当前曲目（标题左侧信息，右侧封面；本地曲目无封面/歌词）
-        Card(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            colors = CardDefaults.cardColors(containerColor = PrtsColors.BgTertiary),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = Alignment.Start,
-                ) {
-                    Text("#${currentIndex + 1} / ${playlist.size}", color = PrtsColors.GoldDim, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
-                    Text(currentTrack?.name ?: "NO TRACK", color = PrtsColors.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                    Text(
-                        if (currentTrack?.neteaseId != null) "SOURCE: NETEASE CLOUD" else "SOURCE: LOCAL ASSET",
-                        color = PrtsColors.TextDim,
-                        fontSize = 10.sp,
-                    )
-                }
-                // 封面（仅网易云曲目）
-                if (currentTrack?.neteaseId != null) {
-                    if (coverUrl != null) {
-                        AsyncImage(
-                            model = coverUrl,
-                            contentDescription = "专辑封面",
-                            modifier = Modifier
-                                .size(72.dp)
-                                .clip(RoundedCornerShape(6.dp)),
-                            contentScale = ContentScale.Crop,
-                        )
-                    } else {
-                        // 封面加载占位
-                        Box(
-                            modifier = Modifier
-                                .size(72.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(PrtsColors.BgInput),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                color = PrtsColors.GoldDim,
-                                strokeWidth = 2.dp,
-                            )
-                        }
-                    }
-                }
-            }
-
-            // 歌词区（仅网易云曲目）
-            if (currentTrack?.neteaseId != null) {
-                Spacer(modifier = Modifier.height(8.dp))
-                LyricView(
-                    lyrics = lyrics,
-                    positionMs = currentPosition,
-                    loading = lyricLoading,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(140.dp)
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
+    // 本地音乐导入：系统文件选择器多选音频 → 拷贝到内部存储并加入播放列表
+    val context = LocalContext.current
+    val importPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris ->
+        uris.forEach { uri ->
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
                 )
             }
         }
+        if (uris.isNotEmpty()) scope.launch { container.musicLibrary.addLocalUris(uris) }
+    }
 
-        // 进度（可拖动 seek）
-        val seekProgress = if (duration > 0) {
-            if (seekDragging) seekValue else currentPosition.toFloat() / duration
-        } else 0f
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-            Slider(
-                value = seekProgress.coerceIn(0f, 1f),
-                onValueChange = { seekDragging = true; seekValue = it },
-                onValueChangeFinished = {
-                    seekDragging = false
-                    if (duration > 0) container.audioManager.seekTo((seekValue * duration).toLong())
-                },
-                modifier = Modifier.fillMaxWidth(),
-                colors = SliderDefaults.colors(
-                    thumbColor = PrtsColors.GoldBright,
-                    activeTrackColor = PrtsColors.Gold,
-                    inactiveTrackColor = PrtsColors.BgInput,
-                ),
-            )
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                val posMs = if (seekDragging && duration > 0) (seekValue * duration).toLong() else currentPosition
-                Text(formatTime(posMs), color = PrtsColors.TextDim, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
-                Text(formatTime(duration), color = PrtsColors.TextDim, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
-            }
-        }
-
-        // 音量
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(Icons.Filled.VolumeUp, tint = PrtsColors.TextDim, contentDescription = "音量", modifier = Modifier.size(18.dp))
-            Slider(
-                value = volumeSlider.coerceIn(0f, 100f),
-                onValueChange = {
-                    volumeSlider = it
-                    container.audioManager.applyVolume(it.toInt())
-                },
-                onValueChangeFinished = {
-                    scope.launch { container.settingsRepository.setVolume(volumeSlider.toInt()) }
-                },
-                valueRange = 0f..100f,
-                modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
-                colors = SliderDefaults.colors(
-                    thumbColor = PrtsColors.GoldBright,
-                    activeTrackColor = PrtsColors.Gold,
-                    inactiveTrackColor = PrtsColors.BgInput,
-                ),
-            )
-            Text(
-                "${volumeSlider.toInt()}",
-                color = PrtsColors.TextDim,
-                fontSize = 10.sp,
-                fontFamily = FontFamily.Monospace,
-                modifier = Modifier.width(28.dp),
-                textAlign = TextAlign.End,
-            )
-        }
-
-        // 控制
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(onClick = {
-                container.audioManager.prevTrack(playlist)
-                container.audioManager.playMusic()
-            }) {
-                Icon(Icons.Filled.SkipPrevious, tint = PrtsColors.Gold, contentDescription = "上一曲")
-            }
-            IconButton(onClick = {
-                container.audioManager.togglePlay()
-            }) {
-                Icon(if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, tint = PrtsColors.Gold, contentDescription = "播放")
-            }
-            IconButton(onClick = {
-                container.audioManager.nextTrack(playlist)
-                container.audioManager.playMusic()
-            }) {
-                Icon(Icons.Filled.SkipNext, tint = PrtsColors.Gold, contentDescription = "下一曲")
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Transparent)
+            .windowInsetsPadding(WindowInsets.statusBars)
+    ) {
+        GlassLargeTitle("音乐") {
+            IconButton(onClick = { importPicker.launch(arrayOf("audio/*")) }) {
+                Icon(Icons.Filled.Add, contentDescription = "导入本地音乐", tint = scheme.onSurfaceVariant)
             }
             IconButton(onClick = {
                 showSearch = !showSearch
                 if (!showSearch) searchQuery = ""
             }) {
-                Icon(Icons.Filled.Search, tint = if (showSearch) PrtsColors.Gold else PrtsColors.TextDim, contentDescription = "搜索")
+                Icon(Icons.Filled.Search, contentDescription = "搜索", tint = if (showSearch) scheme.primary else scheme.onSurfaceVariant)
             }
-            IconButton(onClick = { showFavoritesOnly = !showFavoritesOnly }) {
-                Icon(if (showFavoritesOnly) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder, tint = if (showFavoritesOnly) PrtsColors.Gold else PrtsColors.TextDim, contentDescription = "收藏")
-            }
-            IconButton(onClick = {
-                val newMode = if (repeatMode == 1) 0 else 1
-                scope.launch { container.settingsRepository.setMusicRepeatMode(newMode) }
-                container.audioManager.setRepeatMode(newMode)
-            }) {
-                Icon(Icons.Filled.Repeat, tint = if (repeatMode == 1) PrtsColors.Gold else PrtsColors.TextDim, contentDescription = "循环")
+        }
+
+        // 当前曲目
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp)
+                .clip(GlassShapes.large)
+                .frostedGlass(GlassShapes.large, shadowElevation = 6.dp)
+                .padding(16.dp),
+        ) {
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // 封面
+                    if (currentTrack?.neteaseId != null) {
+                        if (coverUrl != null) {
+                            AsyncImage(
+                                model = coverUrl,
+                                contentDescription = "专辑封面",
+                                modifier = Modifier.size(72.dp).clip(RoundedCornerShape(14.dp)),
+                                contentScale = ContentScale.Crop,
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier.size(72.dp).clip(RoundedCornerShape(14.dp)).background(scheme.surfaceVariant),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp), color = scheme.primary, strokeWidth = 2.dp)
+                            }
+                        }
+                        Spacer(Modifier.width(14.dp))
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text("#${currentIndex + 1} / ${playlist.size}", color = scheme.onSurfaceVariant, fontSize = 11.sp)
+                        Text(
+                            currentTrack?.name ?: "未在播放",
+                            color = scheme.onSurface,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 2,
+                        )
+                        Text(
+                            if (currentTrack?.neteaseId != null) "网易云音乐" else "本地资源",
+                            color = scheme.primary, fontSize = 10.sp,
+                        )
+                    }
+                }
+
+                if (currentTrack?.neteaseId != null) {
+                    Spacer(Modifier.height(8.dp))
+                    LyricView(
+                        lyrics = lyrics,
+                        positionMs = currentPosition,
+                        loading = lyricLoading,
+                        modifier = Modifier.fillMaxWidth().height(120.dp),
+                    )
+                }
+
+                // 进度
+                val seekProgress = if (duration > 0) {
+                    if (seekDragging) seekValue else currentPosition.toFloat() / duration
+                } else 0f
+                Slider(
+                    value = seekProgress.coerceIn(0f, 1f),
+                    onValueChange = { seekDragging = true; seekValue = it },
+                    onValueChangeFinished = {
+                        seekDragging = false
+                        if (duration > 0) container.audioManager.seekTo((seekValue * duration).toLong())
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = SliderDefaults.colors(
+                        thumbColor = scheme.primary,
+                        activeTrackColor = scheme.primary,
+                        inactiveTrackColor = scheme.surfaceVariant,
+                    ),
+                )
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    val posMs = if (seekDragging && duration > 0) (seekValue * duration).toLong() else currentPosition
+                    Text(formatTime(posMs), color = scheme.onSurfaceVariant, fontSize = 10.sp)
+                    Text(formatTime(duration), color = scheme.onSurfaceVariant, fontSize = 10.sp)
+                }
+
+                // 控制
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(onClick = {
+                        scope.launch { container.settingsRepository.setMusicShuffle(!shuffle) }
+                    }) {
+                        Icon(Icons.Filled.Shuffle, contentDescription = "随机播放", tint = if (shuffle) scheme.primary else scheme.onSurfaceVariant)
+                    }
+                    IconButton(onClick = {
+                        container.audioManager.prevTrack(playlist); container.audioManager.playMusic()
+                    }) { Icon(Icons.Filled.SkipPrevious, contentDescription = "上一曲", tint = scheme.onSurface, modifier = Modifier.size(28.dp)) }
+                    Box(
+                        modifier = Modifier
+                            .size(52.dp)
+                            .clip(CircleShape)
+                            .background(scheme.primary)
+                            .clickable { container.audioManager.togglePlay() },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                            contentDescription = "播放/暂停",
+                            tint = scheme.onPrimary,
+                            modifier = Modifier.size(28.dp),
+                        )
+                    }
+                    IconButton(onClick = {
+                        container.audioManager.nextTrack(playlist); container.audioManager.playMusic()
+                    }) { Icon(Icons.Filled.SkipNext, contentDescription = "下一曲", tint = scheme.onSurface, modifier = Modifier.size(28.dp)) }
+                    IconButton(onClick = {
+                        val newMode = (repeatMode + 1) % 3
+                        scope.launch { container.settingsRepository.setMusicRepeatMode(newMode) }
+                        container.audioManager.setRepeatMode(newMode)
+                    }) {
+                        Icon(
+                            if (repeatMode == 2) Icons.Filled.RepeatOne else Icons.Filled.Repeat,
+                            contentDescription = "播放模式",
+                            tint = if (repeatMode != 0) scheme.primary else scheme.onSurfaceVariant,
+                        )
+                    }
+                    IconButton(onClick = { showFavoritesOnly = !showFavoritesOnly }) {
+                        Icon(
+                            if (showFavoritesOnly) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                            contentDescription = "收藏",
+                            tint = if (showFavoritesOnly) scheme.primary else scheme.onSurfaceVariant,
+                        )
+                    }
+                }
+
+                // 音量
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Filled.VolumeUp, contentDescription = "音量", tint = scheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                    Slider(
+                        value = volumeSlider.coerceIn(0f, 100f),
+                        onValueChange = {
+                            volumeSlider = it
+                            container.audioManager.applyVolume(it.toInt())
+                        },
+                        onValueChangeFinished = {
+                            scope.launch { container.settingsRepository.setVolume(volumeSlider.toInt()) }
+                        },
+                        valueRange = 0f..100f,
+                        modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+                        colors = SliderDefaults.colors(
+                            thumbColor = scheme.primary,
+                            activeTrackColor = scheme.primary,
+                            inactiveTrackColor = scheme.surfaceVariant,
+                        ),
+                    )
+                    Text("${volumeSlider.toInt()}", color = scheme.onSurfaceVariant, fontSize = 10.sp, modifier = Modifier.width(28.dp), textAlign = TextAlign.End)
+                }
             }
         }
 
@@ -331,85 +369,134 @@ fun MusicScreen(container: AppContainer) {
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                placeholder = { Text("搜索歌曲...", color = PrtsColors.TextDim, fontSize = 13.sp) },
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = PrtsColors.BgInput,
-                    unfocusedContainerColor = PrtsColors.BgInput,
-                    focusedTextColor = PrtsColors.TextPrimary,
-                    unfocusedTextColor = PrtsColors.TextPrimary,
-                ),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                placeholder = { Text("搜索歌曲…", color = scheme.onSurfaceVariant, fontSize = 13.sp) },
+                shape = RoundedCornerShape(14.dp),
                 singleLine = true,
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = scheme.surface.copy(alpha = 0.6f),
+                    unfocusedContainerColor = scheme.surface.copy(alpha = 0.6f),
+                    focusedTextColor = scheme.onSurface,
+                    unfocusedTextColor = scheme.onSurface,
+                    focusedIndicatorColor = scheme.primary,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    cursorColor = scheme.primary,
+                ),
             )
         }
 
-        // EP 筛选
-        LazyRow(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        // 播放列表（本地曲目常驻）+ 网易云搜索结果（独立区，合并滚动）+ 错误提示浮层
+        val searching = showSearch && searchQuery.isNotBlank()
+        Box(
+            modifier = Modifier.weight(1f).fillMaxWidth(),
         ) {
-            items(MUSIC_EP_ORDER) { ep ->
-                FilterChip(
-                    selected = selectedEp == ep,
-                    onClick = { selectedEp = if (selectedEp == ep) null else ep },
-                    label = { Text(ep, fontSize = 11.sp) },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = PrtsColors.Gold,
-                        selectedLabelColor = PrtsColors.BgPrimary,
-                        containerColor = PrtsColors.BgInput,
-                        labelColor = PrtsColors.TextSecondary,
-                    ),
-                )
-            }
-        }
-
-        // 播放列表
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(8.dp),
-        ) {
-            items(displayList) { track ->
-                val originalIndex = playlist.indexOf(track)
-                val isFav = track.key in favorites
-                PlaylistRow(
-                    track = track,
-                    isActive = originalIndex == currentIndex,
-                    isPlaying = isPlaying && originalIndex == currentIndex,
-                    isFav = isFav,
-                    onClick = {
-                        if (track.file.isNotBlank()) {
-                            container.audioManager.loadTrack(originalIndex, playlist)
-                            container.audioManager.playMusic()
-                        }
-                    },
-                    onToggleFav = {
-                        scope.launch { container.settingsRepository.toggleMusicFavorite(track.key) }
-                    },
-                )
-            }
-        }
-
-        // 资源缺失 / 播放失败 提示
-        bgmError?.let { err ->
-            Snackbar(
-                modifier = Modifier.padding(8.dp),
-                action = {
-                    TextButton(onClick = { container.audioManager.clearError() }) {
-                        Text("知道了", color = PrtsColors.Gold)
+            if (playlist.isEmpty() && !searching) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("暂无音乐", style = MaterialTheme.typography.titleMedium, color = scheme.onSurfaceVariant)
+                        Spacer(Modifier.height(6.dp))
+                        Text("导入本地音乐，或搜索网易云添加", fontSize = 12.sp, color = scheme.onSurfaceVariant)
+                        Spacer(Modifier.height(14.dp))
+                        Button(onClick = { importPicker.launch(arrayOf("audio/*")) }) { Text("导入本地音乐") }
                     }
-                },
-            ) { Text(err, color = PrtsColors.DangerBright, fontSize = 12.sp) }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp),
+                ) {
+                    if (searching) {
+                        item {
+                            Text("搜索结果", color = scheme.onSurfaceVariant, fontSize = 12.sp, modifier = Modifier.padding(vertical = 6.dp))
+                        }
+                        when {
+                            searchLoading -> item {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(14.dp).padding(vertical = 4.dp),
+                                    color = scheme.primary,
+                                    strokeWidth = 2.dp,
+                                )
+                            }
+                            searchResults.isEmpty() -> item {
+                                Text("未找到相关歌曲", color = scheme.onSurfaceVariant, fontSize = 12.sp, modifier = Modifier.padding(vertical = 8.dp))
+                            }
+                            else -> items(searchResults, key = { "result_${it.id}" }) { song ->
+                                val already = playlist.any { it.key == "search_${song.id}" }
+                                SearchResultRow(
+                                    song = song,
+                                    alreadyAdded = already,
+                                    onAdd = {
+                                        scope.launch {
+                                            container.musicLibrary.addOnlineTrack(
+                                                BgmTrack(
+                                                    file = "https://music.163.com/song/media/outer/url?id=${song.id}.mp3",
+                                                    name = if (song.artist.isNotBlank()) "${song.name} - ${song.artist}" else song.name,
+                                                    key = "search_${song.id}",
+                                                    neteaseId = song.id,
+                                                )
+                                            )
+                                        }
+                                    },
+                                )
+                            }
+                        }
+                    }
+                    when {
+                        playlist.isEmpty() -> item {
+                            // 正在搜索但本地列表为空：仍显示导入引导
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                Text("本地暂无音乐", color = scheme.onSurfaceVariant, fontSize = 13.sp)
+                                Spacer(Modifier.height(8.dp))
+                                Button(onClick = { importPicker.launch(arrayOf("audio/*")) }) { Text("导入本地音乐") }
+                            }
+                        }
+                        displayList.isEmpty() -> item {
+                            Text("暂无收藏的歌曲", color = scheme.onSurfaceVariant, fontSize = 13.sp, modifier = Modifier.padding(vertical = 12.dp))
+                        }
+                        else -> items(displayList, key = { it.key }) { track ->
+                            val originalIndex = playlist.indexOf(track)
+                            PlaylistRow(
+                                track = track,
+                                isActive = originalIndex == currentIndex,
+                                isPlaying = isPlaying && originalIndex == currentIndex,
+                                isFav = track.key in favorites,
+                                onClick = {
+                                    if (track.file.isNotBlank()) {
+                                        container.audioManager.loadTrack(originalIndex, playlist)
+                                        container.audioManager.playMusic()
+                                    }
+                                },
+                                onToggleFav = {
+                                    scope.launch { container.settingsRepository.toggleMusicFavorite(track.key) }
+                                },
+                                onRemove = {
+                                    scope.launch { container.musicLibrary.removeTrack(track) }
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+
+            bgmError?.let { err ->
+                Snackbar(
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp),
+                    action = {
+                        TextButton(onClick = { container.audioManager.clearError() }) { Text("知道了") }
+                    },
+                ) { Text(err, color = scheme.error, fontSize = 12.sp) }
+            }
         }
     }
 }
 
 /**
- * 歌词视图：随播放进度高亮当前行并自动滚动居中。
- * 包含华丽「果冻感」动效：
- *  - 当前行：弹簧缩放 + 轻微弹跳位移 + 流光描边 + 双层光晕
- *  - 非当前行：随距离当前行的远近产生错位缩放/位移/透明度（洗牌果冻感）
- *  - 列表滚动：行进入视口时由弹起态沉降复位（果冻弹跳）
- *  - 背景：跟随当前行的金色辉光呼吸
- * 本地曲目不调用（neteaseId 为 null 时外部不会传入歌词）。
+ * 歌词视图：随播放进度高亮当前行并自动滚动居中，紫罗兰流光。
  */
 @Composable
 private fun LyricView(
@@ -418,10 +505,10 @@ private fun LyricView(
     loading: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val scheme = MaterialTheme.colorScheme
     val listState = rememberLazyListState()
     val activeIndex = remember(lyrics, positionMs) { LrcParser.currentIndex(lyrics, positionMs) }
 
-    // 进度变化时自动滚动到当前歌词行（居中，带弹簧果冻感）
     LaunchedEffect(activeIndex) {
         if (activeIndex >= 0) {
             listState.animateScrollToItem(
@@ -431,7 +518,6 @@ private fun LyricView(
         }
     }
 
-    // 背景辉光呼吸（随当前行在歌词中的相对位置缓慢流动）
     val glowAnim = remember { Animatable(0f) }
     var glowPhase by remember { mutableFloatStateOf(0f) }
     LaunchedEffect(Unit) {
@@ -445,7 +531,6 @@ private fun LyricView(
 
     if (loading) {
         Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            // 加载态：三条金色果冻脉冲条
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 repeat(3) { idx ->
                     val loadAnim = remember { Animatable(0.4f) }
@@ -463,16 +548,12 @@ private fun LyricView(
                         modifier = Modifier
                             .size(width = 26.dp, height = 6.dp)
                             .graphicsLayer {
-                                scaleX = scale
-                                scaleY = scale
-                                shape = RoundedCornerShape(50)
-                                clip = true
+                                scaleX = scale; scaleY = scale
+                                shape = RoundedCornerShape(50); clip = true
                                 shadowElevation = 8f * scale
                             }
                             .background(
-                                Brush.horizontalGradient(
-                                    listOf(PrtsColors.GoldDim, PrtsColors.GoldBright, PrtsColors.GoldDim)
-                                ),
+                                Brush.horizontalGradient(listOf(scheme.primary.copy(alpha = 0.5f), scheme.primary, scheme.primary.copy(alpha = 0.5f))),
                                 RoundedCornerShape(50),
                             ),
                     )
@@ -483,55 +564,41 @@ private fun LyricView(
     }
     if (lyrics.isEmpty()) {
         Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(
-                "暂无歌词",
-                color = PrtsColors.TextDim,
-                fontSize = 12.sp,
-                fontFamily = FontFamily.Monospace,
-                letterSpacing = 2.sp,
-            )
+            Text("暂无歌词", color = scheme.onSurfaceVariant, fontSize = 12.sp)
         }
         return
     }
 
-    Box(modifier = modifier.clip(RoundedCornerShape(10.dp))) {
-        // 跟随当前行的柔和金色辉光（呼吸）
+    Box(modifier = modifier.clip(RoundedCornerShape(12.dp))) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer { alpha = 0.5f + 0.5f * glowPhase }
                 .background(
                     Brush.radialGradient(
-                        colors = listOf(
-                            PrtsColors.GoldGlow.copy(alpha = 0.22f),
-                            Color.Transparent,
-                        ),
+                        colors = listOf(scheme.primary.copy(alpha = 0.18f), Color.Transparent),
                         center = Offset(0.5f, 0.5f),
                         radius = 0.75f,
                     ),
                 ),
         )
-
-        // 顶部/底部渐隐遮罩，制造聚光灯聚焦当前行的质感
         LazyColumn(
             state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .drawWithContent {
                     drawContent()
-                    // 上遮罩
                     drawRect(
                         brush = Brush.verticalGradient(
-                            0f to PrtsColors.BgTertiary.copy(alpha = 0.95f),
+                            0f to scheme.surface.copy(alpha = 0.6f),
                             0.28f to Color.Transparent,
                         ),
                         size = androidx.compose.ui.geometry.Size(size.width, size.height * 0.34f),
                     )
-                    // 下遮罩
                     drawRect(
                         brush = Brush.verticalGradient(
                             0.72f to Color.Transparent,
-                            1f to PrtsColors.BgTertiary.copy(alpha = 0.95f),
+                            1f to scheme.surface.copy(alpha = 0.6f),
                         ),
                         topLeft = Offset(0f, size.height * 0.66f),
                         size = androidx.compose.ui.geometry.Size(size.width, size.height * 0.34f),
@@ -552,13 +619,6 @@ private fun LyricView(
     }
 }
 
-/**
- * 单行歌词。依据与当前行的距离产生：
- *  - 弹簧缩放（越近越大，当前行最大）
- *  - 错位位移（洗牌果冻：非当前行前后交错偏移）
- *  - 透明度渐变
- *  - 当前行附带流光描边 + 双层呼吸光晕
- */
 @Composable
 private fun LyricLine(
     text: String,
@@ -566,45 +626,32 @@ private fun LyricLine(
     isActive: Boolean,
     glowPhase: Float,
 ) {
-    // 目标缩放：当前行 1.18，相邻 1.0，越远越小（但保留可读性）
+    val scheme = MaterialTheme.colorScheme
     val targetScale = when {
-        isActive -> 1.22f
-        distance == -1 -> 0.98f
-        distance == 1 -> 0.98f
+        isActive -> 1.18f
+        kotlin.math.abs(distance) <= 1 -> 0.98f
         else -> (1f - kotlin.math.min(kotlin.math.abs(distance), 6) * 0.05f).coerceAtLeast(0.7f)
     }
-    // 目标透明度
     val targetAlpha = when {
         isActive -> 1f
-        distance == -1 || distance == 1 -> 0.78f
+        kotlin.math.abs(distance) <= 1 -> 0.78f
         else -> (1f - kotlin.math.min(kotlin.math.abs(distance), 6) * 0.12f).coerceAtLeast(0.25f)
     }
-    // 错位果冻位移：奇数距离向左漂、偶数向右漂，制造洗牌抖动
     val targetOffsetX = if (!isActive) {
         (if (distance % 2 == 0) 1 else -1) * kotlin.math.min(kotlin.math.abs(distance), 5) * 7f
     } else 0f
 
-    // 弹簧动画：果冻弹跳核心（低阻尼、高刚度 → 回弹过冲）
-    val jellySpec = spring<Float>(
-        dampingRatio = Spring.DampingRatioMediumBouncy,
-        stiffness = Spring.StiffnessMedium,
-    )
+    val jellySpec = spring<Float>(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium)
     val scale by animateFloatAsState(targetScale, jellySpec, label = "lineScale")
     val alpha by animateFloatAsState(targetAlpha, tween(360, easing = FastOutSlowInEasing), label = "lineAlpha")
     val offsetX by animateFloatAsState(targetOffsetX, jellySpec, label = "lineOffsetX")
 
-    // 进入视口的弹起沉降（果冻到位感）：用 key + LaunchedEffect 触发一次弹簧
     var entered by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { entered = true }
     val entryScale by animateFloatAsState(
         if (entered) 1f else 0.6f,
         spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
         label = "entry",
-    )
-    val entryY by animateFloatAsState(
-        if (entered) 0f else 26f,
-        spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
-        label = "entryY",
     )
 
     Box(
@@ -616,37 +663,26 @@ private fun LyricLine(
                 this.scaleY = scale * entryScale
                 this.alpha = alpha
                 this.translationX = offsetX
-                this.translationY = entryY
-                // 当前行轻微 3D 旋转，强化立体果冻感
-                if (isActive) {
-                    rotationX = (1f - glowPhase) * 4f
-                }
+                if (isActive) rotationX = (1f - glowPhase) * 4f
             },
         contentAlignment = Alignment.Center,
     ) {
-        // 当前行：流光描边文字（金色渐变 + 呼吸亮度）
         if (isActive) {
-            // 外层光晕
             Text(
                 text = text,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
-                color = PrtsColors.Gold.copy(alpha = 0.18f + 0.18f * glowPhase),
-                letterSpacing = 1.sp,
-                modifier = Modifier
-                    .graphicsLayer { scaleX = 1.04f; scaleY = 1.04f }
-                    .blur(6.dp)
-                    .alpha(0.6f + 0.4f * glowPhase),
+                color = scheme.primary.copy(alpha = 0.18f + 0.18f * glowPhase),
+                modifier = Modifier.graphicsLayer { scaleX = 1.04f; scaleY = 1.04f }.blur(6.dp).alpha(0.6f + 0.4f * glowPhase),
             )
-            // 流光文字
             val brush = Brush.horizontalGradient(
                 colors = listOf(
-                    PrtsColors.GoldDim,
-                    PrtsColors.GoldBright,
+                    scheme.primary.copy(alpha = 0.6f),
+                    scheme.primary,
                     Color.White.copy(alpha = 0.95f),
-                    PrtsColors.GoldBright,
-                    PrtsColors.GoldDim,
+                    scheme.primary,
+                    scheme.primary.copy(alpha = 0.6f),
                 ),
                 startX = 0f,
                 endX = (0.55f + 0.45f * glowPhase) * 1000f,
@@ -656,13 +692,9 @@ private fun LyricLine(
                 fontSize = 16.sp,
                 fontWeight = FontWeight.ExtraBold,
                 textAlign = TextAlign.Center,
-                letterSpacing = 1.sp,
                 style = androidx.compose.ui.text.TextStyle(
                     brush = brush,
-                    shadow = androidx.compose.ui.graphics.Shadow(
-                        color = PrtsColors.Gold.copy(alpha = 0.5f),
-                        blurRadius = 12f,
-                    ),
+                    shadow = androidx.compose.ui.graphics.Shadow(color = scheme.primary.copy(alpha = 0.5f), blurRadius = 12f),
                 ),
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
@@ -672,8 +704,7 @@ private fun LyricLine(
                 fontSize = if (kotlin.math.abs(distance) <= 1) 13.sp else 12.sp,
                 fontWeight = if (kotlin.math.abs(distance) <= 1) FontWeight.Medium else FontWeight.Normal,
                 textAlign = TextAlign.Center,
-                color = PrtsColors.TextSecondary.copy(alpha = 0.5f + 0.5f * (1f - kotlin.math.min(kotlin.math.abs(distance), 4) * 0.18f)),
-                letterSpacing = 0.5.sp,
+                color = scheme.onSurfaceVariant.copy(alpha = 0.5f + 0.5f * (1f - kotlin.math.min(kotlin.math.abs(distance), 4) * 0.18f)),
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
         }
@@ -688,35 +719,90 @@ private fun PlaylistRow(
     isFav: Boolean,
     onClick: () -> Unit,
     onToggleFav: () -> Unit,
+    onRemove: () -> Unit,
 ) {
+    val scheme = MaterialTheme.colorScheme
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 4.dp)
-            .background(if (isActive) PrtsColors.BgCard else PrtsColors.BgSecondary, RoundedCornerShape(4.dp))
+            .padding(vertical = 3.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .then(if (isActive) Modifier.background(scheme.primary.copy(alpha = 0.14f)) else Modifier)
             .clickable(onClick = onClick)
-            .padding(8.dp),
+            .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            "♪",
-            color = if (isActive) PrtsColors.Gold else PrtsColors.TextDim,
-            fontSize = 14.sp,
-        )
-        Text(
-            track.name,
-            modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
-            color = if (isActive) PrtsColors.GoldBright else PrtsColors.TextSecondary,
-            fontSize = 13.sp,
-            maxLines = 1,
-        )
-        IconButton(onClick = onToggleFav, modifier = Modifier.size(32.dp)) {
+        Box(
+            modifier = Modifier.size(30.dp).clip(RoundedCornerShape(8.dp)).background(if (isActive) scheme.primary else scheme.surfaceVariant),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(if (isActive && isPlaying) "▶" else "♪", color = if (isActive) scheme.onPrimary else scheme.onSurfaceVariant, fontSize = 13.sp)
+        }
+        Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
+            Text(
+                track.name,
+                color = if (isActive) scheme.primary else scheme.onSurface,
+                fontSize = 13.sp,
+                maxLines = 1,
+            )
+            Text(
+                if (track.neteaseId != null) "网易云" else "本地",
+                color = if (track.neteaseId != null) scheme.primary else scheme.onSurfaceVariant,
+                fontSize = 10.sp,
+                maxLines = 1,
+            )
+        }
+        IconButton(onClick = onToggleFav, modifier = Modifier.size(30.dp)) {
             Icon(
                 if (isFav) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
                 contentDescription = "收藏",
-                tint = if (isFav) PrtsColors.Gold else PrtsColors.TextDim,
+                tint = if (isFav) scheme.primary else scheme.onSurfaceVariant,
                 modifier = Modifier.size(16.dp),
             )
+        }
+        IconButton(onClick = onRemove, modifier = Modifier.size(30.dp)) {
+            Icon(
+                Icons.Filled.DeleteOutline,
+                contentDescription = "移除",
+                tint = scheme.onSurfaceVariant,
+                modifier = Modifier.size(16.dp),
+            )
+        }
+    }
+}
+
+/** 网易云搜索结果行：歌名 + 歌手 + 添加/已添加。 */
+@Composable
+private fun SearchResultRow(
+    song: NeteaseSong,
+    alreadyAdded: Boolean,
+    onAdd: () -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(song.name, color = scheme.onSurface, fontSize = 13.sp, maxLines = 1)
+            if (song.artist.isNotBlank()) {
+                Text(song.artist, color = scheme.onSurfaceVariant, fontSize = 11.sp, maxLines = 1)
+            }
+        }
+        TextButton(
+            onClick = onAdd,
+            enabled = !alreadyAdded,
+            modifier = Modifier.size(height = 32.dp, width = 72.dp),
+        ) {
+            if (alreadyAdded) {
+                Icon(Icons.Filled.Check, contentDescription = null, tint = scheme.primary, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+            }
+            Text(if (alreadyAdded) "已添加" else "添加", fontSize = 12.sp)
         }
     }
 }

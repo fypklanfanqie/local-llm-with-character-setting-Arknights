@@ -4,7 +4,7 @@
 // libcpu_sys_jni.so（独立 CMake target，仅链 liblog，无 llama/MNN 依赖，始终编译）。
 // extern "C" 保证 JNI 名称查找不被 C++ name mangling 破坏。
 //
-// 对应 Kotlin 声明（com.rhodesisland.terminal.llm.CpuSysBridge，实例方法）：
+// 对应 Kotlin 声明（com.chatbyyourside.llm.CpuSysBridge，实例方法）：
 //   external fun getBigCoreIds(): IntArray
 //   external fun getCpuTopology(): String
 //   external fun getBigCoreFreqMHz(): Float
@@ -19,7 +19,7 @@ extern "C" {
 
 // 获取大核（含超核）CPU ID 列表，按最大频率降序（最快在最前）。
 JNIEXPORT jintArray JNICALL
-Java_com_rhodesisland_terminal_llm_CpuSysBridge_getBigCoreIds(JNIEnv* env, jobject thiz) {
+Java_com_chatbyyourside_llm_CpuSysBridge_getBigCoreIds(JNIEnv* env, jobject thiz) {
     (void) thiz;
     auto big_ids = get_big_core_ids();
     jintArray result = env->NewIntArray((jsize) big_ids.size());
@@ -31,7 +31,7 @@ Java_com_rhodesisland_terminal_llm_CpuSysBridge_getBigCoreIds(JNIEnv* env, jobje
 
 // 获取 CPU 拓扑 JSON：[{"cpu":0,"maxFreq":..,"curFreq":..,"isBig":0,"isPrime":0}, ...]
 JNIEXPORT jstring JNICALL
-Java_com_rhodesisland_terminal_llm_CpuSysBridge_getCpuTopology(JNIEnv* env, jobject thiz) {
+Java_com_chatbyyourside_llm_CpuSysBridge_getCpuTopology(JNIEnv* env, jobject thiz) {
     (void) thiz;
     auto cores = detect_cpu_topology();
     std::string json = "[";
@@ -50,7 +50,7 @@ Java_com_rhodesisland_terminal_llm_CpuSysBridge_getCpuTopology(JNIEnv* env, jobj
 
 // 获取最快大核（big_ids[0]）的当前频率，返回 MHz（KHz/1000）。读不到返回 0。
 JNIEXPORT jfloat JNICALL
-Java_com_rhodesisland_terminal_llm_CpuSysBridge_getBigCoreFreqMHz(JNIEnv* env, jobject thiz) {
+Java_com_chatbyyourside_llm_CpuSysBridge_getBigCoreFreqMHz(JNIEnv* env, jobject thiz) {
     (void) env; (void) thiz;
     auto big_ids = get_big_core_ids();
     if (!big_ids.empty()) {

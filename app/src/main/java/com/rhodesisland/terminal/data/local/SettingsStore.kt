@@ -1,6 +1,7 @@
 package com.rhodesisland.terminal.data.local
 
 import android.content.Context
+import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import com.rhodesisland.terminal.config.AppConfig
@@ -8,10 +9,20 @@ import com.rhodesisland.terminal.config.Characters
 import com.rhodesisland.terminal.data.model.ApiConfig
 import com.rhodesisland.terminal.data.model.Character
 import com.rhodesisland.terminal.data.model.ChatProviderType
+import com.rhodesisland.terminal.data.model.SeedanceConfig
+import com.rhodesisland.terminal.data.model.SeedanceModelVariant
+import com.rhodesisland.terminal.data.model.SeedanceRatio
+import com.rhodesisland.terminal.data.model.SeedanceResolution
+import com.rhodesisland.terminal.data.model.SystemVoiceTemplate
+import com.rhodesisland.terminal.data.model.ThemeMode
 import com.rhodesisland.terminal.data.model.TtsConfig
+import com.rhodesisland.terminal.data.model.TtsEngine
 import com.rhodesisland.terminal.data.model.TtsLanguage
 import com.rhodesisland.terminal.data.model.VoicePair
+import com.rhodesisland.terminal.data.repository.BgmTrack
 import com.rhodesisland.terminal.llm.backend.BackendPreference
+import com.rhodesisland.terminal.llm.profile.InferencePerformanceMode
+import com.rhodesisland.terminal.llm.thinking.LocalThinkingLevel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
@@ -26,9 +37,15 @@ private val Context.settingsDataStore by preferencesDataStore(name = "rhodes_set
  * 对应小程序 utils/storage.js
  * 已删除付费相关字段（credits / ad_unit_id / openid）
  */
-class SettingsStore(private val context: Context) {
+class SettingsStore(
+    private val context: Context,
+    private val dataStore: DataStore<Preferences> = context.settingsDataStore,
+) {
 
     private object Keys {
+        // 主题模式
+        val THEME_MODE = stringPreferencesKey("theme_mode")
+
         // API
         val API_BASE = stringPreferencesKey("api_base")
         val API_KEY = stringPreferencesKey("api_key")
@@ -41,6 +58,8 @@ class SettingsStore(private val context: Context) {
         val TTS_LANGUAGE = stringPreferencesKey("tts_language")
         val TTS_VOLUME = intPreferencesKey("tts_volume")
         val TTS_VOICE_MAP = stringPreferencesKey("tts_voice_map")  // JSON: Map<characterId, VoicePair>
+        val TTS_ENGINE = stringPreferencesKey("tts_engine")        // system（默认，手机自带）/ cloud（火山豆包）
+        val TTS_SYSTEM_TEMPLATE = stringPreferencesKey("tts_system_template")  // 系统引擎声音模板
 
         // 角色
         val ACTIVE_CHARACTER = stringPreferencesKey("active_character")
@@ -54,23 +73,29 @@ class SettingsStore(private val context: Context) {
 
         // 音乐
         val MUSIC_FAVORITES = stringSetPreferencesKey("music_favorites")
-        val MUSIC_REPEAT_MODE = intPreferencesKey("music_repeat_mode")
+        val MUSIC_REPEAT_MODE = intPreferencesKey("music_repeat_mode")  // 0=顺序播放, 1=列表循环, 2=单曲循环
+        val MUSIC_PLAYLIST = stringPreferencesKey("music_playlist")  // JSON: List<BgmTrack>（本地导入 + 已添加在线曲）
+        val MUSIC_SHUFFLE = booleanPreferencesKey("music_shuffle")
 
         // ★ 本地 AI
         val ACTIVE_PROVIDER = stringPreferencesKey("active_provider")  // CLOUD / LOCAL
         val ACTIVE_LOCAL_MODEL = stringPreferencesKey("active_local_model")
-        val LLM_CONTEXT_LEN = intPreferencesKey("llm_context_len")
-        val LLM_THREADS = intPreferencesKey("llm_threads")
-        val LLM_TEMPERATURE = floatPreferencesKey("llm_temperature")
-        val LLM_MAX_TOKENS = intPreferencesKey("llm_max_tokens")
+        val LLM_CONTEXT_LEN = intPreferencesKey(LocalInferenceSettings.CONTEXT_LEN_KEY)
+        val LLM_THREADS = intPreferencesKey(LocalInferenceSettings.THREADS_KEY)
+        val LLM_TEMPERATURE = floatPreferencesKey(LocalInferenceSettings.TEMPERATURE_KEY)
+        val LLM_MAX_TOKENS = intPreferencesKey(LocalInferenceSettings.MAX_TOKENS_KEY)
         // 推理后端偏好：AUTO / MNN_CPU / MNN_GPU / MNN_NPU（见 BackendPreference）
         val LLM_BACKEND = stringPreferencesKey("llm_backend")
-        // CPU 推理提频开关：PerformanceHintManager hint session + SustainedPerformanceMode + 高线程优先级
-        val LLM_CPU_BOOST = booleanPreferencesKey("llm_cpu_boost")
-        // CPU lookahead 投机解码开关（n-gram，无需 draft 模型）；仅 MNN CPU 后端生效，改值需重载模型
-        val LLM_LOOKAHEAD = booleanPreferencesKey("llm_lookahead")
+        // 推理性能模式：BALANCED / MAXIMUM_SPEED（Task 6）。键名单点定义见 LocalInferenceSettings。
+        val LLM_PERFORMANCE_MODE = stringPreferencesKey(LocalInferenceSettings.PERFORMANCE_MODE_KEY)
+        // CPU 推理提频开关（legacy，Task 6 起不再权威；由性能模式解析层接管，高级诊断视图仍可改）
+        val LLM_CPU_BOOST = booleanPreferencesKey(LocalInferenceSettings.CPU_BOOST_KEY)
+        // CPU lookahead 投机解码开关（legacy，Task 6 起不再权威）；仅 MNN CPU 后端生效，改值需重载模型
+        val LLM_LOOKAHEAD = booleanPreferencesKey(LocalInferenceSettings.LOOKAHEAD_KEY)
         // 深度思考模式开关（本地 + 云端通用）：控制推理过程是否生成与展示
-        val DEEP_THINKING = booleanPreferencesKey("deep_thinking")
+        val DEEP_THINKING = booleanPreferencesKey(LocalInferenceSettings.DEEP_THINKING_KEY)
+        // 本地思考档位（默认 AUTO，仅本地生效）：开启深度思考后决定思考强度；云端不读取本键
+        val THINKING_LEVEL = stringPreferencesKey(LocalInferenceSettings.THINKING_LEVEL_KEY)
         // 性能监控浮窗液态玻璃效果开关（默认开）：backdrop blur + 镜面高光 + 旋转虹彩光晕；关闭则用普通深色面板
         val LIQUID_GLASS = booleanPreferencesKey("liquid_glass_perf_overlay")
 
@@ -79,6 +104,19 @@ class SettingsStore(private val context: Context) {
         val CHAT_BG_ENABLED = booleanPreferencesKey("chat_bg_enabled")
         val CHAT_BG_PATHS = stringPreferencesKey("chat_bg_paths")
 
+        // Seedance 对话视频（Task 3）：聚合配置。generateAudio 固定 true 无存储键；
+        // fps/seed/camera 不支持故无键。API Key 仅落 DataStore，绝不写入 Room/日志/WorkData。
+        val SEEDANCE_BASE_URL = stringPreferencesKey("seedance_base_url")
+        val SEEDANCE_API_KEY = stringPreferencesKey("seedance_api_key")
+        val SEEDANCE_MODEL_ID = stringPreferencesKey("seedance_model_id")
+        val SEEDANCE_VARIANT = stringPreferencesKey("seedance_variant")
+        val SEEDANCE_RESOLUTION = stringPreferencesKey("seedance_resolution")
+        val SEEDANCE_RATIO = stringPreferencesKey("seedance_ratio")
+        val SEEDANCE_DURATION = intPreferencesKey("seedance_duration")
+        val SEEDANCE_WATERMARK = booleanPreferencesKey("seedance_watermark")
+        val SEEDANCE_SCENE_PATH = stringPreferencesKey("seedance_scene_path")
+        val SEEDANCE_SCENE_DESCRIPTION = stringPreferencesKey("seedance_scene_description")
+
         // 角色问候（角色主动消息）：仅云端可用
         val GREETING_ENABLED = booleanPreferencesKey("greeting_enabled")
         val GREETING_CHARACTER_IDS = stringSetPreferencesKey("greeting_character_ids")  // 可多选
@@ -86,10 +124,6 @@ class SettingsStore(private val context: Context) {
         // 每日配额：当天已发条数，按日期(yyyy-MM-dd)重置
         val GREETING_QUOTA_DATE = stringPreferencesKey("greeting_quota_date")
         val GREETING_QUOTA_COUNT = intPreferencesKey("greeting_quota_count")
-        // 上一次主动问候的角色 id（用于多角色轮换，避免总挑同一个）
-        val GREETING_LAST_CHAR_ID = stringPreferencesKey("greeting_last_char_id")
-        // 下一次该投递问候的目标时间（epoch ms，0=未设置）。PeriodicWork 每个周期检查 now>=此值则投递。
-        val GREETING_NEXT_FIRE_AT = longPreferencesKey("greeting_next_fire_at")
 
         // ===== 配置变更检测（移植自 iFeng 的 hasConfigChanged/acknowledgeConfigChange）=====
         // 记录"上次成功加载模型时所用的"线程/上下文/后端/lookahead。当前值 != last_applied 即视为已变更，
@@ -100,10 +134,21 @@ class SettingsStore(private val context: Context) {
         val LLM_LAST_BACKEND = stringPreferencesKey("llm_last_backend")
         val LLM_LAST_LOOKAHEAD = booleanPreferencesKey("llm_last_lookahead")
         val LLM_LAST_TEMPERATURE = floatPreferencesKey("llm_last_temperature")
+        // Task 7：最近一次成功加载实际应用的 plan loadConfigHash（唯一重载指纹）。
+        val LLM_LAST_CONFIG_HASH = stringPreferencesKey("llm_last_config_hash")
+    }
+
+    // ===== Theme Mode =====
+    val themeMode: Flow<ThemeMode> = dataStore.data.map { p ->
+        ThemeMode.fromKey(p[Keys.THEME_MODE])
+    }
+
+    suspend fun setThemeMode(mode: ThemeMode) {
+        dataStore.edit { it[Keys.THEME_MODE] = mode.name }
     }
 
     // ===== API Config =====
-    val apiConfig: Flow<ApiConfig> = context.settingsDataStore.data.map { p ->
+    val apiConfig: Flow<ApiConfig> = dataStore.data.map { p ->
         ApiConfig(
             baseUrl = p[Keys.API_BASE] ?: AppConfig.DEFAULT_API_BASE,
             apiKey = p[Keys.API_KEY] ?: "",
@@ -112,15 +157,61 @@ class SettingsStore(private val context: Context) {
     }
 
     suspend fun setApiConfig(config: ApiConfig) {
-        context.settingsDataStore.edit { p ->
+        dataStore.edit { p ->
             p[Keys.API_BASE] = config.baseUrl
             p[Keys.API_KEY] = config.apiKey
             p[Keys.API_MODEL] = config.model
         }
     }
 
+    // ===== Seedance 对话视频 =====
+    /**
+     * Seedance 视频生成配置聚合快照（Task 3）。单个 data.map 读取全部相关键。
+     * 缺失键回退 [SeedanceConfig] 默认值（只读、不写回）；未知枚举存储键经 fromStorageKey 保守回落；
+     * 时长越界回落默认 5 秒（4–15 与 com.rhodesisland.terminal.video.SEEDANCE_MIN/MAX_DURATION_SECONDS 对齐）。
+     * generateAudio 固定 true，无存储键；无 fps/seed/camera 键。
+     */
+    val seedanceConfig: Flow<SeedanceConfig> = dataStore.data.map { p ->
+        val storedDuration = p[Keys.SEEDANCE_DURATION] ?: 5
+        SeedanceConfig(
+            baseUrl = p[Keys.SEEDANCE_BASE_URL] ?: SeedanceConfig().baseUrl,
+            apiKey = p[Keys.SEEDANCE_API_KEY] ?: "",
+            relayModelId = p[Keys.SEEDANCE_MODEL_ID] ?: SeedanceConfig().relayModelId,
+            variant = SeedanceModelVariant.fromStorageKey(p[Keys.SEEDANCE_VARIANT]),
+            resolution = SeedanceResolution.fromStorageKey(p[Keys.SEEDANCE_RESOLUTION]),
+            ratio = SeedanceRatio.fromStorageKey(p[Keys.SEEDANCE_RATIO]),
+            durationSeconds = storedDuration.takeIf { it in 4..15 } ?: 5,
+            watermark = p[Keys.SEEDANCE_WATERMARK] ?: false,
+            backgroundImagePath = p[Keys.SEEDANCE_SCENE_PATH],
+            sceneDescription = p[Keys.SEEDANCE_SCENE_DESCRIPTION] ?: "",
+        )
+    }
+
+    /**
+     * 一次原子写回全部 Seedance 配置键（单个 edit 事务，避免逐字段写回被并发覆盖——同
+     * [updateCustomCharacters] 的 lost update 教训）。API Key 仅落 DataStore，绝不进入 Room/日志/WorkData。
+     */
+    suspend fun setSeedanceConfig(config: SeedanceConfig) {
+        dataStore.edit { p ->
+            p[Keys.SEEDANCE_BASE_URL] = config.baseUrl
+            p[Keys.SEEDANCE_API_KEY] = config.apiKey
+            p[Keys.SEEDANCE_MODEL_ID] = config.relayModelId
+            p[Keys.SEEDANCE_VARIANT] = config.variant.storageKey
+            p[Keys.SEEDANCE_RESOLUTION] = config.resolution.storageKey
+            p[Keys.SEEDANCE_RATIO] = config.ratio.storageKey
+            p[Keys.SEEDANCE_DURATION] = config.durationSeconds
+            p[Keys.SEEDANCE_WATERMARK] = config.watermark
+            if (config.backgroundImagePath == null) {
+                p.remove(Keys.SEEDANCE_SCENE_PATH)
+            } else {
+                p[Keys.SEEDANCE_SCENE_PATH] = config.backgroundImagePath
+            }
+            p[Keys.SEEDANCE_SCENE_DESCRIPTION] = config.sceneDescription
+        }
+    }
+
     // ===== TTS Config =====
-    val ttsConfig: Flow<TtsConfig> = context.settingsDataStore.data.map { p ->
+    val ttsConfig: Flow<TtsConfig> = dataStore.data.map { p ->
         TtsConfig(
             apiKey = p[Keys.TTS_API_KEY] ?: "",
             appId = p[Keys.TTS_APP_ID] ?: "",
@@ -129,33 +220,51 @@ class SettingsStore(private val context: Context) {
     }
 
     suspend fun setTtsConfig(config: TtsConfig) {
-        context.settingsDataStore.edit { p ->
+        dataStore.edit { p ->
             p[Keys.TTS_API_KEY] = config.apiKey
             p[Keys.TTS_APP_ID] = config.appId
             p[Keys.TTS_ACCESS_KEY] = config.accessKey
         }
     }
 
-    val ttsLanguage: Flow<TtsLanguage> = context.settingsDataStore.data.map { p ->
+    val ttsLanguage: Flow<TtsLanguage> = dataStore.data.map { p ->
         TtsLanguage.fromCode(p[Keys.TTS_LANGUAGE] ?: "zh")
     }
 
     suspend fun setTtsLanguage(lang: TtsLanguage) {
-        context.settingsDataStore.edit { it[Keys.TTS_LANGUAGE] = lang.code }
+        dataStore.edit { it[Keys.TTS_LANGUAGE] = lang.code }
     }
 
-    val ttsVolume: Flow<Int> = context.settingsDataStore.data.map { p ->
+    /** 朗读引擎（system=手机自带，默认；cloud=云端火山豆包）。 */
+    val ttsEngine: Flow<TtsEngine> = dataStore.data.map { p ->
+        TtsEngine.fromStorageKey(p[Keys.TTS_ENGINE])
+    }
+
+    suspend fun setTtsEngine(engine: TtsEngine) {
+        dataStore.edit { it[Keys.TTS_ENGINE] = engine.storageKey }
+    }
+
+    /** 系统引擎声音模板。 */
+    val ttsSystemTemplate: Flow<SystemVoiceTemplate> = dataStore.data.map { p ->
+        SystemVoiceTemplate.fromStorageKey(p[Keys.TTS_SYSTEM_TEMPLATE])
+    }
+
+    suspend fun setTtsSystemTemplate(template: SystemVoiceTemplate) {
+        dataStore.edit { it[Keys.TTS_SYSTEM_TEMPLATE] = template.storageKey }
+    }
+
+    val ttsVolume: Flow<Int> = dataStore.data.map { p ->
         p[Keys.TTS_VOLUME] ?: AppConfig.TTS_DEFAULT_VOLUME
     }
 
     suspend fun setTtsVolume(vol: Int) {
-        context.settingsDataStore.edit { it[Keys.TTS_VOLUME] = vol }
+        dataStore.edit { it[Keys.TTS_VOLUME] = vol }
     }
 
     // ===== 角色音色映射 =====
     private val voiceJson = Json { ignoreUnknownKeys = true; isLenient = true }
 
-    val ttsVoiceMap: Flow<Map<String, VoicePair>> = context.settingsDataStore.data.map { p ->
+    val ttsVoiceMap: Flow<Map<String, VoicePair>> = dataStore.data.map { p ->
         val raw = p[Keys.TTS_VOICE_MAP] ?: ""
         if (raw.isBlank()) emptyMap()
         else try {
@@ -166,28 +275,28 @@ class SettingsStore(private val context: Context) {
     }
 
     suspend fun setTtsVoiceMap(map: Map<String, VoicePair>) {
-        context.settingsDataStore.edit { it[Keys.TTS_VOICE_MAP] = voiceJson.encodeToString(map) }
+        dataStore.edit { it[Keys.TTS_VOICE_MAP] = voiceJson.encodeToString(map) }
     }
 
     // ===== 角色 =====
-    val activeCharacter: Flow<String> = context.settingsDataStore.data.map { p ->
+    val activeCharacter: Flow<String> = dataStore.data.map { p ->
         p[Keys.ACTIVE_CHARACTER] ?: Characters.DEFAULT_CHARACTER_ID
     }
 
     suspend fun setActiveCharacter(id: String) {
-        context.settingsDataStore.edit { it[Keys.ACTIVE_CHARACTER] = id }
+        dataStore.edit { it[Keys.ACTIVE_CHARACTER] = id }
     }
 
     // ===== 会话：每角色当前活跃会话 =====
     // 存 Map<characterId, conversationId>，切换角色时恢复该角色上次活跃的会话。
-    val activeConversations: Flow<Map<String, Long>> = context.settingsDataStore.data.map { p ->
+    val activeConversations: Flow<Map<String, Long>> = dataStore.data.map { p ->
         val raw = p[Keys.ACTIVE_CONVERSATIONS] ?: ""
         if (raw.isBlank()) emptyMap()
         else runCatching { voiceJson.decodeFromString<Map<String, Long>>(raw) }.getOrDefault(emptyMap())
     }
 
     suspend fun setActiveConversation(characterId: String, conversationId: Long) {
-        context.settingsDataStore.edit { p ->
+        dataStore.edit { p ->
             val raw = p[Keys.ACTIVE_CONVERSATIONS] ?: ""
             val current: Map<String, Long> = if (raw.isBlank()) emptyMap()
             else runCatching { voiceJson.decodeFromString<Map<String, Long>>(raw) }.getOrDefault(emptyMap())
@@ -197,7 +306,7 @@ class SettingsStore(private val context: Context) {
 
     /** 删除会话后清理指向它的活跃记录（让角色回到「无活跃会话」态，由 ViewModel 重建） */
     suspend fun clearActiveConversation(characterId: String) {
-        context.settingsDataStore.edit { p ->
+        dataStore.edit { p ->
             val raw = p[Keys.ACTIVE_CONVERSATIONS] ?: ""
             val current: Map<String, Long> = if (raw.isBlank()) emptyMap()
             else runCatching { voiceJson.decodeFromString<Map<String, Long>>(raw) }.getOrDefault(emptyMap())
@@ -206,7 +315,7 @@ class SettingsStore(private val context: Context) {
     }
 
     // ===== 自定义角色 =====
-    val customCharacters: Flow<List<Character>> = context.settingsDataStore.data.map { p ->
+    val customCharacters: Flow<List<Character>> = dataStore.data.map { p ->
         val raw = p[Keys.CUSTOM_CHARACTERS] ?: ""
         if (raw.isBlank()) emptyList()
         else try {
@@ -217,7 +326,7 @@ class SettingsStore(private val context: Context) {
     }
 
     suspend fun setCustomCharacters(list: List<Character>) {
-        context.settingsDataStore.edit { it[Keys.CUSTOM_CHARACTERS] = voiceJson.encodeToString(list) }
+        dataStore.edit { it[Keys.CUSTOM_CHARACTERS] = voiceJson.encodeToString(list) }
     }
 
     /**
@@ -227,7 +336,7 @@ class SettingsStore(private val context: Context) {
      * 改为在 edit 闭包内读取当前值并写入新值，由 DataStore 保证原子性。
      */
     suspend fun updateCustomCharacters(transform: (List<Character>) -> List<Character>) {
-        context.settingsDataStore.edit { p ->
+        dataStore.edit { p ->
             val raw = p[Keys.CUSTOM_CHARACTERS] ?: ""
             val current: List<Character> = if (raw.isBlank()) emptyList()
             else runCatching { voiceJson.decodeFromString<List<Character>>(raw) }.getOrDefault(emptyList())
@@ -236,22 +345,22 @@ class SettingsStore(private val context: Context) {
     }
 
     // ===== 音量 =====
-    val volume: Flow<Int> = context.settingsDataStore.data.map { p ->
+    val volume: Flow<Int> = dataStore.data.map { p ->
         p[Keys.VOLUME] ?: 60
     }
 
     suspend fun setVolume(vol: Int) {
-        context.settingsDataStore.edit { it[Keys.VOLUME] = vol }
+        dataStore.edit { it[Keys.VOLUME] = vol }
     }
 
     // ===== 音乐 =====
-    val musicFavorites: Flow<Set<String>> = context.settingsDataStore.data.map { p ->
+    val musicFavorites: Flow<Set<String>> = dataStore.data.map { p ->
         p[Keys.MUSIC_FAVORITES] ?: emptySet()
     }
 
     suspend fun toggleMusicFavorite(key: String): Boolean {
         var added = false
-        context.settingsDataStore.edit { p ->
+        dataStore.edit { p ->
             val current = p[Keys.MUSIC_FAVORITES] ?: emptySet()
             if (key in current) {
                 p[Keys.MUSIC_FAVORITES] = current - key
@@ -264,119 +373,185 @@ class SettingsStore(private val context: Context) {
         return added
     }
 
-    val musicRepeatMode: Flow<Int> = context.settingsDataStore.data.map { p ->
+    val musicRepeatMode: Flow<Int> = dataStore.data.map { p ->
         p[Keys.MUSIC_REPEAT_MODE] ?: 0
     }
 
     suspend fun setMusicRepeatMode(mode: Int) {
-        context.settingsDataStore.edit { it[Keys.MUSIC_REPEAT_MODE] = mode }
+        dataStore.edit { it[Keys.MUSIC_REPEAT_MODE] = mode }
+    }
+
+    /** 播放列表（本地导入 + 用户添加的在线曲），JSON List<BgmTrack>。 */
+    val musicPlaylist: Flow<List<BgmTrack>> = dataStore.data.map { p ->
+        val raw = p[Keys.MUSIC_PLAYLIST] ?: ""
+        if (raw.isBlank()) emptyList()
+        else runCatching { voiceJson.decodeFromString<List<BgmTrack>>(raw) }.getOrDefault(emptyList())
+    }
+
+    suspend fun setMusicPlaylist(list: List<BgmTrack>) {
+        dataStore.edit { it[Keys.MUSIC_PLAYLIST] = voiceJson.encodeToString(list) }
+    }
+
+    /**
+     * 原子更新播放列表（读-改-写在单个 DataStore edit 事务内，避免并发 lost update）。
+     * 上限由 [com.rhodesisland.terminal.data.repository.MusicLibraryRepository] 在导入处强制。
+     */
+    suspend fun updateMusicPlaylist(transform: (List<BgmTrack>) -> List<BgmTrack>) {
+        dataStore.edit { p ->
+            val raw = p[Keys.MUSIC_PLAYLIST] ?: ""
+            val current: List<BgmTrack> = if (raw.isBlank()) emptyList()
+            else runCatching { voiceJson.decodeFromString<List<BgmTrack>>(raw) }.getOrDefault(emptyList())
+            p[Keys.MUSIC_PLAYLIST] = voiceJson.encodeToString(transform(current))
+        }
+    }
+
+    /** 随机播放开关。 */
+    val musicShuffle: Flow<Boolean> = dataStore.data.map { p ->
+        p[Keys.MUSIC_SHUFFLE] ?: false
+    }
+
+    suspend fun setMusicShuffle(enabled: Boolean) {
+        dataStore.edit { it[Keys.MUSIC_SHUFFLE] = enabled }
     }
 
     // ===== 本地 AI =====
-    val activeProvider: Flow<ChatProviderType> = context.settingsDataStore.data.map { p ->
+    val activeProvider: Flow<ChatProviderType> = dataStore.data.map { p ->
         val v = p[Keys.ACTIVE_PROVIDER] ?: "CLOUD"
         if (v == "LOCAL") ChatProviderType.LOCAL else ChatProviderType.CLOUD
     }
 
     suspend fun setActiveProvider(type: ChatProviderType) {
-        context.settingsDataStore.edit { it[Keys.ACTIVE_PROVIDER] = type.name }
+        dataStore.edit { it[Keys.ACTIVE_PROVIDER] = type.name }
     }
 
-    val activeLocalModelId: Flow<String?> = context.settingsDataStore.data.map { p ->
+    val activeLocalModelId: Flow<String?> = dataStore.data.map { p ->
         p[Keys.ACTIVE_LOCAL_MODEL]
     }
 
     suspend fun setActiveLocalModelId(id: String?) {
-        context.settingsDataStore.edit { p ->
+        dataStore.edit { p ->
             if (id == null) p.remove(Keys.ACTIVE_LOCAL_MODEL)
             else p[Keys.ACTIVE_LOCAL_MODEL] = id
         }
     }
 
-    val llmContextLen: Flow<Int> = context.settingsDataStore.data.map { p ->
+    val llmContextLen: Flow<Int> = dataStore.data.map { p ->
         p[Keys.LLM_CONTEXT_LEN] ?: AppConfig.LLM.DEFAULT_CONTEXT_LEN
     }
 
-    val llmThreads: Flow<Int> = context.settingsDataStore.data.map { p ->
+    val llmThreads: Flow<Int> = dataStore.data.map { p ->
         p[Keys.LLM_THREADS] ?: AppConfig.LLM.DEFAULT_THREADS
     }
 
-    val llmTemperature: Flow<Float> = context.settingsDataStore.data.map { p ->
+    val llmTemperature: Flow<Float> = dataStore.data.map { p ->
         p[Keys.LLM_TEMPERATURE] ?: AppConfig.LLM.DEFAULT_TEMPERATURE
     }
 
-    val llmMaxTokens: Flow<Int> = context.settingsDataStore.data.map { p ->
+    /**
+     * 缺少偏好键时才使用 2048 新默认；这里只读回退、不写回 DataStore，已有 4096/65536 等
+     * 用户选择原样保留（Task 5 absent-preference-only 约束）。
+     */
+    val llmMaxTokens: Flow<Int> = dataStore.data.map { p ->
         p[Keys.LLM_MAX_TOKENS] ?: AppConfig.LLM.DEFAULT_MAX_TOKENS
     }
 
     /** 推理后端偏好（默认 AUTO）*/
-    val llmBackend: Flow<BackendPreference> = context.settingsDataStore.data.map { p ->
+    val llmBackend: Flow<BackendPreference> = dataStore.data.map { p ->
         BackendPreference.fromKey(p[Keys.LLM_BACKEND])
     }
 
     suspend fun setLlmBackend(preference: BackendPreference) {
-        context.settingsDataStore.edit { it[Keys.LLM_BACKEND] = preference.storageKey }
+        dataStore.edit { it[Keys.LLM_BACKEND] = preference.storageKey }
     }
 
-    /** CPU 推理提频开关（默认开）。非 root 下用系统提频机制把大核频率尽量推高，详见 CpuBoostController。 */
-    val llmCpuBoost: Flow<Boolean> = context.settingsDataStore.data.map { p ->
+    /** 推理性能模式（默认 BALANCED）。Task 6 引入；具体模式行为由后续 resolved-plans 任务解析。 */
+    val llmPerformanceMode: Flow<InferencePerformanceMode> = dataStore.data.map { p ->
+        InferencePerformanceMode.fromStorageKey(p[Keys.LLM_PERFORMANCE_MODE])
+    }
+
+    suspend fun setLlmPerformanceMode(mode: InferencePerformanceMode) {
+        dataStore.edit { it[Keys.LLM_PERFORMANCE_MODE] = mode.storageKey }
+    }
+
+    /**
+     * 一次聚合本地推理设置的不可变快照（Task 6）。
+     *
+     * 单个 `data.map` 读取全部相关键，替换 provider 侧逐字段 `.first()` 的多次读取；
+     * 缺失键一律回退默认值（只读、不写回）。
+     */
+    val localInferenceSettings: Flow<LocalInferenceSettings> = dataStore.data.map {
+        LocalInferenceSettings.fromPreferences(it)
+    }
+
+    /** CPU 推理提频开关（legacy，默认开；Task 6 起不再权威，详见 [LocalInferenceSettings]）。 */
+    val llmCpuBoost: Flow<Boolean> = dataStore.data.map { p ->
         p[Keys.LLM_CPU_BOOST] ?: true
     }
 
     suspend fun setLlmCpuBoost(enabled: Boolean) {
-        context.settingsDataStore.edit { it[Keys.LLM_CPU_BOOST] = enabled }
+        dataStore.edit { it[Keys.LLM_CPU_BOOST] = enabled }
     }
 
-    /** CPU lookahead 投机解码开关（默认关）。n-gram 投机解码无需 draft 模型，仅 MNN CPU 后端生效，改值触发下次重载。
+    /** CPU lookahead 投机解码开关（legacy，默认关）。n-gram 投机解码无需 draft 模型，仅 MNN CPU 后端生效，改值触发下次重载。
      *  默认关：首轮无 n-gram 历史时 draft 全 miss，每步多跑 draft_predict_length 个前向却只产 1 token，
      *  在慢模型上反而数倍拖慢首条回复；多轮重复/代码类文本再开可获 1.5–3× 提速。 */
-    val llmLookahead: Flow<Boolean> = context.settingsDataStore.data.map { p ->
+    val llmLookahead: Flow<Boolean> = dataStore.data.map { p ->
         p[Keys.LLM_LOOKAHEAD] ?: false
     }
 
     suspend fun setLlmLookahead(enabled: Boolean) {
-        context.settingsDataStore.edit { it[Keys.LLM_LOOKAHEAD] = enabled }
+        dataStore.edit { it[Keys.LLM_LOOKAHEAD] = enabled }
     }
 
     // ===== 深度思考模式（本地 + 云端通用）=====
     /** 深度思考开关（默认关）。开启时展示推理过程并（对支持的供应商）请求思考。 */
-    val deepThinking: Flow<Boolean> = context.settingsDataStore.data.map { p ->
+    val deepThinking: Flow<Boolean> = dataStore.data.map { p ->
         p[Keys.DEEP_THINKING] ?: false
     }
 
     suspend fun setDeepThinking(enabled: Boolean) {
-        context.settingsDataStore.edit { it[Keys.DEEP_THINKING] = enabled }
+        dataStore.edit { it[Keys.DEEP_THINKING] = enabled }
+    }
+
+    // ===== 本地思考档位（仅本地生效，默认 AUTO）=====
+    /** 本地思考档位（默认 AUTO）。只影响本地生成策略，云端不读取。 */
+    val localThinkingLevel: Flow<LocalThinkingLevel> = dataStore.data.map { p ->
+        LocalThinkingLevel.fromStorageKey(p[Keys.THINKING_LEVEL])
+    }
+
+    suspend fun setLocalThinkingLevel(level: LocalThinkingLevel) {
+        dataStore.edit { it[Keys.THINKING_LEVEL] = level.storageKey }
     }
 
     // ===== 性能浮窗液态玻璃 =====
     /** 性能浮窗液态玻璃开关（默认开）。开启：背景模糊 + 镜面高光 + 旋转虹彩光晕；关闭：普通深色面板。背景模糊需 Android 12+。 */
-    val liquidGlass: Flow<Boolean> = context.settingsDataStore.data.map { p ->
+    val liquidGlass: Flow<Boolean> = dataStore.data.map { p ->
         p[Keys.LIQUID_GLASS] ?: true
     }
 
     suspend fun setLiquidGlass(enabled: Boolean) {
-        context.settingsDataStore.edit { it[Keys.LIQUID_GLASS] = enabled }
+        dataStore.edit { it[Keys.LIQUID_GLASS] = enabled }
     }
 
     // ===== 通讯界面自定义背景 =====
     /** 自定义背景开关（默认关）。开启且路径列表非空 -> 轮播自定义图片；否则回退内置 PRTS 背景轮播。 */
-    val chatBgEnabled: Flow<Boolean> = context.settingsDataStore.data.map { p ->
+    val chatBgEnabled: Flow<Boolean> = dataStore.data.map { p ->
         p[Keys.CHAT_BG_ENABLED] ?: false
     }
 
     suspend fun setChatBgEnabled(enabled: Boolean) {
-        context.settingsDataStore.edit { it[Keys.CHAT_BG_ENABLED] = enabled }
+        dataStore.edit { it[Keys.CHAT_BG_ENABLED] = enabled }
     }
 
     /** 自定义背景图片路径列表（有序）。 */
-    val chatBgPaths: Flow<List<String>> = context.settingsDataStore.data.map { p ->
+    val chatBgPaths: Flow<List<String>> = dataStore.data.map { p ->
         val raw = p[Keys.CHAT_BG_PATHS] ?: ""
         if (raw.isBlank()) emptyList()
         else runCatching { voiceJson.decodeFromString<List<String>>(raw) }.getOrDefault(emptyList())
     }
 
     suspend fun setChatBgPaths(paths: List<String>) {
-        context.settingsDataStore.edit { it[Keys.CHAT_BG_PATHS] = voiceJson.encodeToString(paths) }
+        dataStore.edit { it[Keys.CHAT_BG_PATHS] = voiceJson.encodeToString(paths) }
     }
 
     /**
@@ -384,7 +559,7 @@ class SettingsStore(private val context: Context) {
      * 20 张上限由 [com.rhodesisland.terminal.data.repository.ChatBackgroundRepository] 在 addUris 处强制。
      */
     suspend fun updateChatBgPaths(transform: (List<String>) -> List<String>) {
-        context.settingsDataStore.edit { p ->
+        dataStore.edit { p ->
             val raw = p[Keys.CHAT_BG_PATHS] ?: ""
             val current: List<String> = if (raw.isBlank()) emptyList()
             else runCatching { voiceJson.decodeFromString<List<String>>(raw) }.getOrDefault(emptyList())
@@ -395,94 +570,69 @@ class SettingsStore(private val context: Context) {
 
     // ===== 角色问候（角色主动消息）=====
     /** 角色问候开关（默认关）。开启后所选角色在白天随机时间主动发消息，仅云端 AI 可用。 */
-    val greetingEnabled: Flow<Boolean> = context.settingsDataStore.data.map { p ->
+    val greetingEnabled: Flow<Boolean> = dataStore.data.map { p ->
         p[Keys.GREETING_ENABLED] ?: false
     }
 
     suspend fun setGreetingEnabled(enabled: Boolean) {
-        context.settingsDataStore.edit { it[Keys.GREETING_ENABLED] = enabled }
+        dataStore.edit { it[Keys.GREETING_ENABLED] = enabled }
     }
 
     /** 主动发消息的角色 id 集合（可多选，默认空）。 */
-    val greetingCharacterIds: Flow<Set<String>> = context.settingsDataStore.data.map { p ->
+    val greetingCharacterIds: Flow<Set<String>> = dataStore.data.map { p ->
         p[Keys.GREETING_CHARACTER_IDS] ?: emptySet()
     }
 
     suspend fun setGreetingCharacterIds(ids: Set<String>) {
-        context.settingsDataStore.edit { it[Keys.GREETING_CHARACTER_IDS] = ids }
+        dataStore.edit { it[Keys.GREETING_CHARACTER_IDS] = ids }
     }
 
     /** 每天主动消息条数（默认 [AppConfig.Greeting.DEFAULT_DAILY_COUNT]）。 */
-    val greetingDailyCount: Flow<Int> = context.settingsDataStore.data.map { p ->
+    val greetingDailyCount: Flow<Int> = dataStore.data.map { p ->
         p[Keys.GREETING_DAILY_COUNT] ?: AppConfig.Greeting.DEFAULT_DAILY_COUNT
     }
 
     suspend fun setGreetingDailyCount(count: Int) {
-        context.settingsDataStore.edit { it[Keys.GREETING_DAILY_COUNT] = count }
+        dataStore.edit { it[Keys.GREETING_DAILY_COUNT] = count }
     }
 
     /** 当日配额：日期(yyyy-MM-dd) -> 已发条数。 */
-    val greetingQuota: Flow<Pair<String, Int>> = context.settingsDataStore.data.map { p ->
+    val greetingQuota: Flow<Pair<String, Int>> = dataStore.data.map { p ->
         (p[Keys.GREETING_QUOTA_DATE] ?: "") to (p[Keys.GREETING_QUOTA_COUNT] ?: 0)
     }
 
     /** 写回当日配额（Worker 每发一条自增、跨天重置时调用）。 */
     suspend fun setGreetingQuota(date: String, count: Int) {
-        context.settingsDataStore.edit {
+        dataStore.edit {
             it[Keys.GREETING_QUOTA_DATE] = date
             it[Keys.GREETING_QUOTA_COUNT] = count
-        }
-    }
-
-    /** 上一次主动问候的角色 id（null 表示尚未发过）。用于多角色轮换，避免连续挑同一角色。 */
-    val greetingLastCharId: Flow<String?> = context.settingsDataStore.data.map { p ->
-        p[Keys.GREETING_LAST_CHAR_ID]
-    }
-
-    suspend fun setGreetingLastCharId(id: String?) {
-        context.settingsDataStore.edit { p ->
-            if (id == null) p.remove(Keys.GREETING_LAST_CHAR_ID)
-            else p[Keys.GREETING_LAST_CHAR_ID] = id
-        }
-    }
-
-    /** 下一次该投递问候的目标时间（epoch ms；0 表示尚未设置，由调度器初始化）。 */
-    val greetingNextFireAt: Flow<Long> = context.settingsDataStore.data.map { p ->
-        p[Keys.GREETING_NEXT_FIRE_AT] ?: 0L
-    }
-
-    /** 写回下一次投递目标时间（<=0 表示清除/未设置）。 */
-    suspend fun setGreetingNextFireAt(epochMs: Long) {
-        context.settingsDataStore.edit { p ->
-            if (epochMs <= 0L) p.remove(Keys.GREETING_NEXT_FIRE_AT)
-            else p[Keys.GREETING_NEXT_FIRE_AT] = epochMs
         }
     }
 
     // ===== 配置变更检测（移植自 iFeng SettingsManager.hasConfigChanged / acknowledgeConfigChange）=====
 
     /** 上次成功加载模型时生效的线程数（冷启动默认与当前默认值对齐，避免误报变更）*/
-    val lastAppliedThreads: Flow<Int> = context.settingsDataStore.data.map { p ->
+    val lastAppliedThreads: Flow<Int> = dataStore.data.map { p ->
         p[Keys.LLM_LAST_THREADS] ?: AppConfig.LLM.DEFAULT_THREADS
     }
 
     /** 上次成功加载模型时生效的上下文长度 */
-    val lastAppliedContextLen: Flow<Int> = context.settingsDataStore.data.map { p ->
+    val lastAppliedContextLen: Flow<Int> = dataStore.data.map { p ->
         p[Keys.LLM_LAST_CONTEXT_LEN] ?: AppConfig.LLM.DEFAULT_CONTEXT_LEN
     }
 
     /** 上次成功加载模型时生效的后端偏好 */
-    val lastAppliedBackend: Flow<BackendPreference> = context.settingsDataStore.data.map { p ->
+    val lastAppliedBackend: Flow<BackendPreference> = dataStore.data.map { p ->
         BackendPreference.fromKey(p[Keys.LLM_LAST_BACKEND])
     }
 
     /** 上次成功加载模型时生效的 lookahead 开关（默认关，与 [llmLookahead] 对齐，避免新装误报变更）*/
-    val lastAppliedLookahead: Flow<Boolean> = context.settingsDataStore.data.map { p ->
+    val lastAppliedLookahead: Flow<Boolean> = dataStore.data.map { p ->
         p[Keys.LLM_LAST_LOOKAHEAD] ?: false
     }
 
     /** 上次成功加载模型时生效的采样温度（MNN 采样器在 load 时构建，温度改值须重载）*/
-    val lastAppliedTemperature: Flow<Float> = context.settingsDataStore.data.map { p ->
+    val lastAppliedTemperature: Flow<Float> = dataStore.data.map { p ->
         p[Keys.LLM_LAST_TEMPERATURE] ?: AppConfig.LLM.DEFAULT_TEMPERATURE
     }
 
@@ -508,12 +658,23 @@ class SettingsStore(private val context: Context) {
      * 非 effective threads。单次 edit 事务保证原子性。
      */
     suspend fun acknowledgeLlmConfig(threads: Int, contextLen: Int, backend: BackendPreference, lookahead: Boolean, temperature: Float) {
-        context.settingsDataStore.edit { p ->
+        dataStore.edit { p ->
             p[Keys.LLM_LAST_THREADS] = threads
             p[Keys.LLM_LAST_CONTEXT_LEN] = contextLen
             p[Keys.LLM_LAST_BACKEND] = backend.storageKey
             p[Keys.LLM_LAST_LOOKAHEAD] = lookahead
             p[Keys.LLM_LAST_TEMPERATURE] = temperature
+        }
+    }
+
+    /** 最近一次成功加载实际应用的 plan 配置哈希（Task 7）；供诊断/后续健康记录。 */
+    val llmLastConfigHash: Flow<String?> = dataStore.data.map { p ->
+        p[Keys.LLM_LAST_CONFIG_HASH]
+    }
+
+    suspend fun setLlmLastConfigHash(hash: String?) {
+        dataStore.edit { p ->
+            if (hash != null) p[Keys.LLM_LAST_CONFIG_HASH] = hash else p.remove(Keys.LLM_LAST_CONFIG_HASH)
         }
     }
 
@@ -523,7 +684,7 @@ class SettingsStore(private val context: Context) {
         temperature: Float? = null,
         maxTokens: Int? = null,
     ) {
-        context.settingsDataStore.edit { p ->
+        dataStore.edit { p ->
             contextLen?.let { p[Keys.LLM_CONTEXT_LEN] = it }
             threads?.let { p[Keys.LLM_THREADS] = it }
             temperature?.let { p[Keys.LLM_TEMPERATURE] = it }

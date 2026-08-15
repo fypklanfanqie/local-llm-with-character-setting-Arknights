@@ -1,7 +1,7 @@
 <resources>
     <string name="app_name">罗德岛通讯终端</string>
-    <string name="tab_chat">通讯</string>
-    <string name="tab_characters">干员</string>
+    <string name="tab_chat">聊天</string>
+    <string name="tab_characters">角色</string>
     <string name="tab_music">音乐</string>
     <string name="tab_settings">设置</string>
     <string name="tab_models">模型</string>

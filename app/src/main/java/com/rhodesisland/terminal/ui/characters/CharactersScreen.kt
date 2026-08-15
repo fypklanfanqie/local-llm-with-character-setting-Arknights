@@ -4,20 +4,24 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -36,7 +40,11 @@ import androidx.compose.ui.unit.sp
 import com.rhodesisland.terminal.AppContainer
 import com.rhodesisland.terminal.config.Characters
 import com.rhodesisland.terminal.data.model.Character
-import com.rhodesisland.terminal.ui.theme.PrtsColors
+import com.rhodesisland.terminal.ui.glass.GlassLargeTitle
+import com.rhodesisland.terminal.ui.glass.GlassSheet
+import com.rhodesisland.terminal.ui.glass.frostedGlass
+import com.rhodesisland.terminal.ui.glass.monogramGradient
+import com.rhodesisland.terminal.ui.theme.GlassShapes
 import com.rhodesisland.terminal.util.CharacterImageStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -61,100 +69,82 @@ fun CharactersScreen(
 
     var showCreate by remember { mutableStateOf(false) }
     var showImport by remember { mutableStateOf(false) }
+    var showPersona by remember { mutableStateOf<Character?>(null) }
     var toast by remember { mutableStateOf<String?>(null) }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(PrtsColors.BgPrimary)
+            .background(androidx.compose.ui.graphics.Color.Transparent)
             .windowInsetsPadding(WindowInsets.statusBars),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-        // 标题
-        Text(
-            "OPERATOR // SELECT",
-            modifier = Modifier.padding(16.dp),
-            color = PrtsColors.GoldDim,
-            fontSize = 12.sp,
-            fontFamily = FontFamily.Monospace,
-            letterSpacing = 3.sp,
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                "干员选择",
-                color = PrtsColors.GoldBright,
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f),
-            )
-            // 新建自定义角色
-            TextButton(onClick = { showCreate = true }) {
-                Icon(Icons.Filled.Add, contentDescription = null, tint = PrtsColors.Gold, modifier = Modifier.size(16.dp))
-                Text("新建", color = PrtsColors.Gold, fontSize = 12.sp)
-            }
-            TextButton(onClick = { showImport = true }) { Text("导入", color = PrtsColors.GoldDim, fontSize = 12.sp) }
-            TextButton(onClick = {
-                scope.launch {
-                    val list = container.characterRepository.exportCustom()
-                    if (list.isEmpty()) {
-                        toast = "没有自定义角色可导出"
-                    } else {
-                        clipboard.setText(AnnotatedString(Json.encodeToString(list)))
-                        toast = "已复制 ${list.size} 个自定义角色 JSON"
-                    }
+            GlassLargeTitle(title = "角色") {
+                TextButton(onClick = { showCreate = true }) {
+                    Icon(Icons.Filled.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("新建", color = MaterialTheme.colorScheme.primary)
                 }
-            }) { Text("导出", color = PrtsColors.GoldDim, fontSize = 12.sp) }
-        }
+                TextButton(onClick = { showImport = true }) { Text("导入", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                TextButton(onClick = {
+                    scope.launch {
+                        val list = container.characterRepository.exportCustom()
+                        if (list.isEmpty()) {
+                            toast = "没有自定义角色可导出"
+                        } else {
+                            clipboard.setText(AnnotatedString(Json.encodeToString(list)))
+                            toast = "已复制 ${list.size} 个自定义角色 JSON"
+                        }
+                    }
+                }) { Text("导出", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
 
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
-            modifier = Modifier.fillMaxSize().padding(8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            items(characters) { char ->
-                CharacterCard(
-                    character = char,
-                    isActive = char.id == activeCharacter,
-                    imageUrl = if (char.isCustom && char.image.isNotBlank()) char.image else container.assetRepository.getSelectionPicture(char.id),
-                    onSelect = {
-                        scope.launch {
-                            container.settingsRepository.setActiveCharacter(char.id)
-                            onNavigateToChat()
-                        }
-                    },
-                    onVoiceClick = {
-                        scope.launch {
-                            val voiceUrl = container.assetRepository.getVoice(char.id)
-                            if (voiceUrl.isNotBlank()) {
-                                container.audioManager.playVoice(voiceUrl, volume)
-                            }
-                        }
-                    },
-                    onDelete = if (char.isCustom) {
-                        {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(bottom = 24.dp),
+            ) {
+                items(characters) { char ->
+                    CharacterCard(
+                        character = char,
+                        isActive = char.id == activeCharacter,
+                        imageUrl = if (char.isCustom && char.image.isNotBlank()) char.image else container.assetRepository.getSelectionPicture(char.id),
+                        onSelect = {
                             scope.launch {
-                                // 删除角色前清理其本地立绘文件（网络 URL / 空 image 安全跳过）
-                                CharacterImageStore.delete(context, char.image)
-                                container.characterRepository.removeCustom(char.id)
+                                container.settingsRepository.setActiveCharacter(char.id)
+                                onNavigateToChat()
                             }
-                        }
-                    } else null,
-                )
+                        },
+                        onVoiceClick = {
+                            scope.launch {
+                                val voiceUrl = container.assetRepository.getVoice(char.id)
+                                if (voiceUrl.isNotBlank()) {
+                                    container.audioManager.playVoice(voiceUrl, volume)
+                                }
+                            }
+                        },
+                        onDelete = if (char.isCustom) {
+                            {
+                                scope.launch {
+                                    CharacterImageStore.delete(context, char.image)
+                                    container.characterRepository.removeCustom(char.id)
+                                }
+                            }
+                        } else null,
+                        onViewPersona = { showPersona = char },
+                    )
+                }
             }
         }
-    }
 
-    // 提示
-    toast?.let { msg ->
-        Snackbar(
-            modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp),
-            action = { TextButton(onClick = { toast = null }) { Text("知道了", color = PrtsColors.Gold) } },
-        ) { Text(msg, color = PrtsColors.GoldBright, fontSize = 12.sp) }
-    }
+        toast?.let { msg ->
+            Snackbar(
+                modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
+                action = { TextButton(onClick = { toast = null }) { Text("知道了") } },
+            ) { Text(msg) }
+        }
     }
 
     if (showCreate) {
@@ -183,6 +173,17 @@ fun CharactersScreen(
             },
         )
     }
+
+    showPersona?.let { char ->
+        PersonaSheet(
+            character = char,
+            imageUrl = if (char.isCustom && char.image.isNotBlank())
+                char.image
+            else
+                container.assetRepository.getSelectionPicture(char.id),
+            onDismiss = { showPersona = null },
+        )
+    }
 }
 
 @Composable
@@ -193,63 +194,134 @@ private fun CharacterCard(
     onSelect: () -> Unit,
     onVoiceClick: () -> Unit,
     onDelete: (() -> Unit)?,
+    onViewPersona: () -> Unit,
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onSelect),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isActive) PrtsColors.BgCard.copy(alpha = 0.9f) else PrtsColors.BgTertiary
-        ),
-        shape = RoundedCornerShape(4.dp),
-        border = androidx.compose.foundation.BorderStroke(
-            1.dp,
-            if (isActive) PrtsColors.Gold else PrtsColors.Border
-        ),
+    val scheme = MaterialTheme.colorScheme
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(GlassShapes.card)
+            .frostedGlass(GlassShapes.card, shadowElevation = if (isActive) 12.dp else 6.dp)
+            .then(if (isActive) Modifier.border(2.dp, scheme.primary, GlassShapes.card) else Modifier)
+            .clickable(onClick = onSelect)
+            .padding(12.dp),
     ) {
-        Box {
-            Column(
-                modifier = Modifier.padding(12.dp).fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                // 立绘：点击既播放语音，也选中该角色
-                OperatorPortrait(
-                    imageUrl = imageUrl,
-                    name = character.name,
-                    onClick = {
-                        onVoiceClick()
-                        onSelect()
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(150.dp)
-                        .clip(RoundedCornerShape(4.dp)),
-                )
-                Spacer(Modifier.height(8.dp))
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            CharacterPortrait(
+                imageUrl = imageUrl,
+                name = character.name,
+                onClick = {
+                    onVoiceClick()
+                    onSelect()
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .clip(RoundedCornerShape(16.dp)),
+            )
+            Spacer(Modifier.height(10.dp))
+            if (character.code.isNotBlank() || character.isCustom) {
                 Text(
                     character.code.ifBlank { if (character.isCustom) "CUSTOM" else "" },
-                    color = PrtsColors.GoldDim,
-                    fontSize = 10.sp,
+                    color = scheme.onSurfaceVariant,
+                    fontSize = 9.5.sp,
                     fontFamily = FontFamily.Monospace,
+                    letterSpacing = 1.sp,
                 )
-                Text(
-                    character.name,
-                    color = PrtsColors.GoldBright,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-                if (character.role.isNotBlank()) {
-                    Text(character.role, color = PrtsColors.TextSecondary, fontSize = 11.sp)
-                }
-                if (character.race.isNotBlank()) {
-                    Text(character.race, color = PrtsColors.TextDim, fontSize = 10.sp)
-                }
             }
-            // 自定义角色删除按钮
-            if (onDelete != null) {
-                IconButton(
-                    onClick = onDelete,
-                    modifier = Modifier.align(Alignment.TopEnd).size(28.dp),
-                ) {
-                    Icon(Icons.Filled.Delete, contentDescription = "删除", tint = PrtsColors.DangerBright, modifier = Modifier.size(16.dp))
+            Text(
+                character.name,
+                color = scheme.onSurface,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            if (character.role.isNotBlank()) {
+                Text(character.role, color = scheme.onSurfaceVariant, fontSize = 11.5.sp)
+            }
+            Spacer(Modifier.height(4.dp))
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .clickable(onClick = onViewPersona)
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Filled.Info,
+                    contentDescription = null,
+                    tint = scheme.onSurfaceVariant,
+                    modifier = Modifier.size(12.dp),
+                )
+                Spacer(Modifier.width(4.dp))
+                Text("查看人设", color = scheme.onSurfaceVariant, fontSize = 11.5.sp)
+            }
+        }
+        if (isActive) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .clip(GlassShapes.pill)
+                    .background(scheme.primary)
+                    .padding(horizontal = 8.dp, vertical = 3.dp),
+            ) {
+                Text("使用中", color = scheme.onPrimary, fontSize = 9.5.sp, fontWeight = FontWeight.SemiBold)
+            }
+        }
+        if (onDelete != null) {
+            IconButton(
+                onClick = onDelete,
+                modifier = Modifier.align(Alignment.TopStart).size(26.dp),
+            ) {
+                Icon(Icons.Filled.Delete, contentDescription = "删除", tint = scheme.error, modifier = Modifier.size(15.dp))
+            }
+        }
+    }
+}
+
+/**
+ * 角色人设底部抽屉：圆形小头像 + 姓名 + 可滚动、可选择的详细人设正文。
+ */
+@Composable
+fun PersonaSheet(
+    character: Character,
+    imageUrl: String,
+    onDismiss: () -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    GlassSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            CharacterPortrait(
+                imageUrl = imageUrl,
+                name = character.name,
+                modifier = Modifier.size(64.dp).clip(CircleShape),
+            )
+            Spacer(Modifier.height(10.dp))
+            Text(
+                character.name,
+                style = MaterialTheme.typography.titleLarge,
+                color = scheme.onSurface,
+            )
+            Spacer(Modifier.height(14.dp))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 360.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                SelectionContainer {
+                    Text(
+                        text = extractPersonaBody(character.systemPrompt),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = scheme.onSurfaceVariant,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 }
             }
         }
@@ -257,25 +329,66 @@ private fun CharacterCard(
 }
 
 /**
+ * 角色立绘：有图用图，否则按姓名稳定渐变 + 首字占位。
+ */
+@Composable
+fun CharacterPortrait(
+    imageUrl: String,
+    name: String,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val portraitModifier = if (onClick != null) modifier.clickable(onClick = onClick) else modifier
+    val placeholder: @Composable () -> Unit = {
+        Box(
+            modifier = portraitModifier.background(Brush.linearGradient(monogramGradient(name))),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                name.take(1),
+                color = androidx.compose.ui.graphics.Color.White,
+                fontSize = 42.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+    }
+
+    if (imageUrl.isBlank()) {
+        placeholder()
+        return
+    }
+
+    coil.compose.SubcomposeAsyncImage(
+        model = imageUrl,
+        contentDescription = name,
+        modifier = portraitModifier,
+        contentScale = ContentScale.Crop,
+        loading = { placeholder() },
+        error = { placeholder() },
+    )
+}
+
+/**
  * 新建自定义角色弹窗
  */
 @Composable
-private fun CustomCharacterDialog(
+fun CustomCharacterDialog(
     onDismiss: () -> Unit,
     onConfirm: (Character) -> Unit,
 ) {
+    val scheme = MaterialTheme.colorScheme
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var name by remember { mutableStateOf("") }
     var code by remember { mutableStateOf("") }
     var role by remember { mutableStateOf("") }
     var race by remember { mutableStateOf("") }
-    var image by remember { mutableStateOf("") }  // 本地立绘 file:// URI，空则无
+    var image by remember { mutableStateOf("") }
     var savingImage by remember { mutableStateOf(false) }
     var saveError by remember { mutableStateOf(false) }
     var systemPrompt by remember { mutableStateOf("") }
 
-    // 相册选择器：PickVisualMedia 在 Android 13+ 走系统照片选择器，低版本自动回退到 ACTION_OPEN_DOCUMENT
     val imagePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
     ) { uri ->
@@ -283,7 +396,6 @@ private fun CustomCharacterDialog(
             savingImage = true
             saveError = false
             scope.launch(Dispatchers.IO) {
-                // 重新选择时清理上一张本地立绘，避免遗留孤儿文件
                 CharacterImageStore.delete(context, image)
                 val saved = CharacterImageStore.save(context, uri)
                 withContext(Dispatchers.Main) {
@@ -296,9 +408,9 @@ private fun CustomCharacterDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = PrtsColors.BgTertiary,
-        titleContentColor = PrtsColors.GoldBright,
-        title = { Text("新建自定义角色") },
+        containerColor = scheme.surfaceContainerHigh,
+        titleContentColor = scheme.onSurface,
+        title = { Text("新建自定义角色", color = scheme.onSurface) },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -308,8 +420,7 @@ private fun CustomCharacterDialog(
                 Field("代号 / 编号", code) { code = it }
                 Field("职位 / 定位", role) { role = it }
                 Field("种族", race) { race = it }
-                // 立绘：从手机本地相册上传，复制到应用内部存储后以 file:// 形式存入 Character.image
-                Text("立绘（可选）", color = PrtsColors.TextDim, fontSize = 10.sp)
+                Text("立绘（可选）", color = scheme.onSurfaceVariant, fontSize = 11.sp)
                 PortraitPicker(
                     imageUri = image,
                     saving = savingImage,
@@ -325,21 +436,16 @@ private fun CustomCharacterDialog(
                     },
                 )
                 if (saveError) {
-                    Text("立绘保存失败，请重试", color = PrtsColors.DangerBright, fontSize = 10.sp)
+                    Text("立绘保存失败，请重试", color = scheme.error, fontSize = 11.sp)
                 }
-                Text("人格设定（System Prompt）*", color = PrtsColors.TextDim, fontSize = 10.sp)
-                BasicTextField(
+                Text("人格设定（System Prompt）*", color = scheme.onSurfaceVariant, fontSize = 11.sp)
+                GlassField(
                     value = systemPrompt,
                     onValueChange = { systemPrompt = it },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(120.dp)
-                        .background(PrtsColors.BgInput, RoundedCornerShape(4.dp))
-                        .padding(8.dp),
-                    textStyle = TextStyle(color = PrtsColors.TextPrimary, fontSize = 13.sp),
+                    modifier = Modifier.fillMaxWidth().height(120.dp),
                 )
                 if (name.isBlank() || systemPrompt.isBlank()) {
-                    Text("名称与人格设定为必填项", color = PrtsColors.WarnYellow, fontSize = 10.sp)
+                    Text("名称与人格设定为必填项", color = MaterialTheme.colorScheme.tertiary, fontSize = 11.sp)
                 }
             }
         },
@@ -362,17 +468,14 @@ private fun CustomCharacterDialog(
                         ),
                     )
                 },
-            ) { Text("创建", color = if (savingImage) PrtsColors.GoldDim else PrtsColors.Gold) }
+            ) { Text("创建", color = if (savingImage) scheme.onSurfaceVariant else scheme.primary) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消", color = PrtsColors.TextDim) }
+            TextButton(onClick = onDismiss) { Text("取消", color = scheme.onSurfaceVariant) }
         },
     )
 }
 
-/**
- * 立绘选择器：点击调用系统相册选择照片，复制到内部存储后显示预览；可移除重选。
- */
 @Composable
 private fun PortraitPicker(
     imageUri: String,
@@ -380,18 +483,19 @@ private fun PortraitPicker(
     onPick: () -> Unit,
     onClear: () -> Unit,
 ) {
+    val scheme = MaterialTheme.colorScheme
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(150.dp)
-            .clip(RoundedCornerShape(4.dp))
-            .background(PrtsColors.BgInput)
+            .clip(RoundedCornerShape(14.dp))
+            .frostedGlass(RoundedCornerShape(14.dp), shadowElevation = 0.dp)
             .clickable(enabled = !saving) { onPick() },
         contentAlignment = Alignment.Center,
     ) {
         when {
             saving -> CircularProgressIndicator(
-                color = PrtsColors.Gold,
+                color = scheme.primary,
                 strokeWidth = 2.dp,
                 modifier = Modifier.size(28.dp),
             )
@@ -406,25 +510,13 @@ private fun PortraitPicker(
                     onClick = onClear,
                     modifier = Modifier.align(Alignment.TopEnd).size(28.dp),
                 ) {
-                    Icon(
-                        Icons.Filled.Close,
-                        contentDescription = "移除立绘",
-                        tint = PrtsColors.DangerBright,
-                        modifier = Modifier.size(16.dp),
-                    )
+                    Icon(Icons.Filled.Close, contentDescription = "移除立绘", tint = scheme.error, modifier = Modifier.size(16.dp))
                 }
             }
-            else -> Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Icon(
-                    Icons.Filled.AddPhotoAlternate,
-                    contentDescription = null,
-                    tint = PrtsColors.Gold.copy(alpha = 0.7f),
-                    modifier = Modifier.size(32.dp),
-                )
+            else -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(Icons.Filled.AddPhotoAlternate, contentDescription = null, tint = scheme.primary.copy(alpha = 0.7f), modifier = Modifier.size(32.dp))
                 Spacer(Modifier.height(6.dp))
-                Text("点击上传手机本地照片", color = PrtsColors.TextDim, fontSize = 11.sp)
+                Text("点击上传手机本地照片", color = scheme.onSurfaceVariant, fontSize = 11.sp)
             }
         }
     }
@@ -438,97 +530,63 @@ private fun ImportCharacterDialog(
     onDismiss: () -> Unit,
     onImport: (String) -> Unit,
 ) {
+    val scheme = MaterialTheme.colorScheme
     var text by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = PrtsColors.BgTertiary,
-        titleContentColor = PrtsColors.GoldBright,
-        title = { Text("导入自定义角色") },
+        containerColor = scheme.surfaceContainerHigh,
+        titleContentColor = scheme.onSurface,
+        title = { Text("导入自定义角色", color = scheme.onSurface) },
         text = {
             Column {
-                Text("粘贴导出的角色 JSON：", color = PrtsColors.TextDim, fontSize = 11.sp)
+                Text("粘贴导出的角色 JSON：", color = scheme.onSurfaceVariant, fontSize = 11.sp)
                 Spacer(Modifier.height(6.dp))
-                BasicTextField(
+                GlassField(
                     value = text,
                     onValueChange = { text = it },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(140.dp)
-                        .background(PrtsColors.BgInput, RoundedCornerShape(4.dp))
-                        .padding(8.dp),
-                    textStyle = TextStyle(color = PrtsColors.TextPrimary, fontSize = 12.sp),
+                    modifier = Modifier.fillMaxWidth().height(140.dp),
                 )
             }
         },
         confirmButton = {
             TextButton(onClick = { onImport(text) }, enabled = text.isNotBlank()) {
-                Text("导入", color = PrtsColors.Gold)
+                Text("导入", color = scheme.primary)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消", color = PrtsColors.TextDim) }
+            TextButton(onClick = onDismiss) { Text("取消", color = scheme.onSurfaceVariant) }
         },
     )
 }
 
 @Composable
 private fun Field(label: String, value: String, onValueChange: (String) -> Unit) {
+    val scheme = MaterialTheme.colorScheme
     Column {
-        Text(label, color = PrtsColors.TextDim, fontSize = 10.sp)
+        Text(label, color = scheme.onSurfaceVariant, fontSize = 11.sp)
         Spacer(Modifier.height(4.dp))
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(PrtsColors.BgInput, RoundedCornerShape(4.dp))
-                .padding(8.dp),
-            textStyle = TextStyle(color = PrtsColors.TextPrimary, fontSize = 13.sp),
-            singleLine = true,
-        )
+        GlassField(value = value, onValueChange = onValueChange, modifier = Modifier.fillMaxWidth())
     }
 }
 
-/**
- * 干员立绘组件（Coil 渲染，缺失/加载失败时显示风格化占位图）
- */
+/** 玻璃输入框：半透明填充 + 圆角。 */
 @Composable
-fun OperatorPortrait(
-    imageUrl: String,
-    name: String,
+private fun GlassField(
+    value: String,
+    onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
-    onClick: (() -> Unit)? = null,
+    singleLine: Boolean = false,
 ) {
-    val portraitModifier = if (onClick != null) modifier.clickable(onClick = onClick) else modifier
-    val placeholder: @Composable () -> Unit = {
-        Box(
-            modifier = portraitModifier.background(
-                Brush.linearGradient(
-                    listOf(PrtsColors.BgCard, PrtsColors.BgTertiary)
-                )
-            ),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                name.take(1),
-                color = PrtsColors.Gold.copy(alpha = 0.5f),
-                fontSize = 48.sp,
-                fontWeight = FontWeight.Bold,
-            )
-        }
-    }
-
-    if (imageUrl.isBlank()) {
-        placeholder()
-        return
-    }
-
-    coil.compose.SubcomposeAsyncImage(
-        model = imageUrl,
-        contentDescription = name,
-        modifier = portraitModifier,
-        contentScale = ContentScale.Crop,
-        loading = { placeholder() },
-        error = { placeholder() },
+    val scheme = MaterialTheme.colorScheme
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(scheme.surface.copy(alpha = 0.6f))
+            .padding(10.dp),
+        textStyle = TextStyle(color = scheme.onSurface, fontSize = 13.sp),
+        singleLine = singleLine,
+        cursorBrush = androidx.compose.ui.graphics.SolidColor(scheme.primary),
     )
 }

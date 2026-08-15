@@ -1,5 +1,6 @@
 package com.rhodesisland.terminal.ui.navigation
 
+import android.app.Activity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
@@ -12,21 +13,31 @@ import androidx.compose.ui.layout.Measurable
 import androidx.compose.ui.layout.MeasureScope
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.automirrored.outlined.Chat
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Storage
-import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.Text
+import androidx.compose.material.icons.outlined.MusicNote
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Storage
+import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 import androidx.navigation.NavDestination.Companion.hierarchy
-import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -34,123 +45,226 @@ import androidx.navigation.compose.rememberNavController
 import com.rhodesisland.terminal.AppContainer
 import com.rhodesisland.terminal.ui.characters.CharactersScreen
 import com.rhodesisland.terminal.ui.chat.ChatScreen
+import com.rhodesisland.terminal.ui.feed.CharacterFeedScreen
+import com.rhodesisland.terminal.ui.feed.FeedRoute
+import com.rhodesisland.terminal.ui.glass.GlassNavBar
+import com.rhodesisland.terminal.ui.glass.GlassNavItem
 import com.rhodesisland.terminal.ui.models.ModelManagerScreen
 import com.rhodesisland.terminal.ui.music.MusicScreen
 import com.rhodesisland.terminal.ui.settings.BackendSettingsScreen
 import com.rhodesisland.terminal.ui.settings.SettingsScreen
-import com.rhodesisland.terminal.ui.theme.PrtsColors
+import com.rhodesisland.terminal.ui.theme.LocalDynamicAccent
+import com.rhodesisland.terminal.ui.video.EncounterScreen
+import androidx.compose.ui.graphics.Color
 
 /**
  * 底部导航 Tab 定义
  *
  * 移除了"积分"Tab（付费功能已删除）
  * 新增"模型"Tab（本地 AI 模型管理）
+ * 图标细线化：未选中 Outlined 描边 / 选中 Filled 实心（iOS SF Symbols 风）。
  */
-sealed class BottomTab(val route: String, val label: String, val icon: ImageVector) {
-    object Chat : BottomTab("chat", "通讯", Icons.Filled.Chat)
-    object Characters : BottomTab("characters", "干员", Icons.Filled.Person)
-    object Music : BottomTab("music", "音乐", Icons.Filled.MusicNote)
-    object Models : BottomTab("models", "模型", Icons.Filled.Storage)
-    object Settings : BottomTab("settings", "设置", Icons.Filled.Settings)
+sealed class BottomTab(val route: String, val label: String, val icon: ImageVector, val selectedIcon: ImageVector) {
+    object Chat : BottomTab("chat", "通讯", Icons.AutoMirrored.Outlined.Chat, Icons.AutoMirrored.Filled.Chat)
+    object Characters : BottomTab("characters", "角色", Icons.Outlined.Person, Icons.Filled.Person)
+    object Music : BottomTab("music", "音乐", Icons.Outlined.MusicNote, Icons.Filled.MusicNote)
+    object Models : BottomTab("models", "模型", Icons.Outlined.Storage, Icons.Filled.Storage)
+    object Settings : BottomTab("settings", "设置", Icons.Outlined.Settings, Icons.Filled.Settings)
 }
 
 @Composable
-fun AppNavGraph(container: AppContainer) {
+fun AppNavGraph(container: AppContainer, initialChatOpen: Boolean = false) {
     val navController = rememberNavController()
+    // 聊天 Tab 的内嵌导航控制器：提升到 AppNavGraph 作用域，跨 Tab 切换存活，
+    // 保证「feed → chat」的嵌套栈在切走再切回时不丢（否则每次回来都重置回 feed）。
+    val feedNavController = rememberNavController()
+    // 冷启动来自问候通知时只消费一次，避免每次从其他 Tab 切回通讯都重复跳转到聊天页。
+    var hasHandledInitialChat by rememberSaveable { mutableStateOf(false) }
     val tabs = listOf(BottomTab.Chat, BottomTab.Characters, BottomTab.Music, BottomTab.Models, BottomTab.Settings)
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
 
+    // 系统栏图标颜色复位：非通讯 Tab 都是亮色页面（浅色极光底），强制回深色图标；
+    // 通讯 Tab 由 feed/chat 页面各自按背景驱动（深色立绘/照片 → 白色图标），此处不覆盖。
+    val view = LocalView.current
+    val window = (LocalContext.current as? Activity)?.window
+    val isChatTab = currentDestination?.hierarchy?.any { it.route == BottomTab.Chat.route } == true
+    LaunchedEffect(isChatTab) {
+        if (!isChatTab) {
+            val controller = window?.let { WindowCompat.getInsetsController(it, view) }
+            controller?.isAppearanceLightStatusBars = true
+            controller?.isAppearanceLightNavigationBars = true
+        }
+    }
+
+    // 通讯页立绘主题色：由通讯页上报，在此为整个 Scaffold（含 dock 栏）提供，
+    // 仅在通讯页可见时非空，其它 Tab 自动复位为默认紫罗兰。
+    var accentColor by remember { mutableStateOf<Color?>(null) }
+
+    CompositionLocalProvider(LocalDynamicAccent provides accentColor) {
     androidx.compose.material3.Scaffold(
         modifier = Modifier.fillMaxSize(),
-        containerColor = PrtsColors.BgPrimary,
+        containerColor = Color.Transparent,
         // 各页面已在自身根布局上用 windowInsetsPadding(WindowInsets.statusBars) 处理顶部 inset，
         // 这里若再用默认 contentWindowInsets(=systemBars) 会重复加一遍状态栏 padding，
         // 导致顶部留出 ~2× 状态栏高度的空白黑条（聊天页因有图片背景尤为明显）。
         // 置 0 交由各页自处理；底部 NavigationBar 自带 navigationBars inset，行为不变。
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
-            NavigationBar(
-                containerColor = androidx.compose.ui.graphics.Color(0xFF0E0E16),
-                contentColor = PrtsColors.Gold,
-            ) {
-                tabs.forEach { tab ->
-                    val selected = currentDestination?.hierarchy?.any { it.route == tab.route } == true
-                    NavigationBarItem(
-                        selected = selected,
-                        onClick = {
-                            navController.navigate(tab.route) {
-                                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                        icon = { Icon(tab.icon, contentDescription = tab.label) },
-                        label = { Text(tab.label, style = androidx.compose.material3.MaterialTheme.typography.labelSmall) },
-                        colors = androidx.compose.material3.NavigationBarItemDefaults.colors(
-                            selectedIconColor = PrtsColors.Gold,
-                            selectedTextColor = PrtsColors.Gold,
-                            unselectedIconColor = PrtsColors.TextDim,
-                            unselectedTextColor = PrtsColors.TextDim,
-                            indicatorColor = androidx.compose.ui.graphics.Color(0x33C9A87C),
-                        ),
-                    )
-                }
-            }
+            val currentTabRoute = tabs.firstOrNull { tab ->
+                currentDestination?.hierarchy?.any { it.route == tab.route } == true
+            }?.route
+            GlassNavBar(
+                items = tabs.map {
+                    GlassNavItem(route = it.route, label = it.label, icon = it.icon, selectedIcon = it.selectedIcon)
+                },
+                currentRoute = currentTabRoute ?: "",
+                onSelect = { route ->
+                    android.util.Log.d("AppNavGraph", "onSelect: route=$route currentTabRoute=$currentTabRoute")
+                    if (route == currentTabRoute) {
+                        // 重选当前 Tab：通讯 Tab 内若已进到聊天页，则回到卡片流首页。
+                        if (route == BottomTab.Chat.route) {
+                            feedNavController.popBackStack(FeedRoute.FEED, inclusive = false)
+                        }
+                        return@GlassNavBar
+                    }
+                    navController.navigate(route) {
+                        // 弹出到起始 Tab（通讯），保存其它 Tab 的状态；
+                        // 用 route 字符串避免 findStartDestination().id 在嵌套导航下可能的不确定性。
+                        popUpTo(BottomTab.Chat.route) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
+            )
         }
     ) { padding ->
+        // Scaffold 内容底部 padding（= 底栏高度）作为 bottomBarHeight 传入：通讯 Tab 全屏铺背景、
+        // 交互内容用它抬到 dock 之上；其余 Tab 用它（tabBottomPadding）预留底栏空间。
+        val bottomBarHeight = padding.calculateBottomPadding()
         // 键盘弹出时「隐藏」底栏：底栏始终绘制但被键盘自然覆盖（视觉隐藏）。内容底部留白取
         // max(底栏高度, IME 高度) = padding(=底栏高度 N) + (IME - N).coerceAtLeast(0)，由
         // ClampedImeBottomPadding 在 measure 阶段读取 IME（仅 relayout、不触发重组），配合
         // MainActivity 请求的最高刷新率让上移动画跑满帧、不丢帧。
         // NavHost 放在 Scaffold content 内，应用 padding 避免被底部导航栏遮挡
+        // 背景极光已由 MainActivity 的 GlassBackdrop + MeshBackground 全屏提供；此处不铺内层，
+        // 避免双重渲染，也让半透明玻璃面板采样到的背板与可见背景严格一致。
+        // 通讯 Tab（feed / chat）需铺满整屏：立绘 / 聊天背景要一直延伸到浮动 dock 与系统导航栏
+        // 背后、直达屏幕最底部，因此不在此处为它预留底栏高度（dock 作为浮层叠在最上）。
+        // 其余 Tab 仍预留底栏 + 钳制 IME，保持原行为。
+        // 注：曾用 extendBelow(bottomBarHeight) 让背景「溢出」到 dock 背后，但 NavHost 内部
+        // 用 AnimatedContent 会按自身边界裁剪内容，溢出部分被裁掉 -> 背景仍止于 dock 上方，
+        // 下方露出浅色极光底（即「底部一大块白色」）。改为通讯 Tab 直接全屏即可根治。
+        val tabBottomPadding = Modifier
+            .fillMaxSize()
+            .padding(padding)
+            .then(ClampedImeBottomPadding(WindowInsets.ime, padding))
+
         NavHost(
             navController = navController,
             startDestination = BottomTab.Chat.route,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .then(ClampedImeBottomPadding(WindowInsets.ime, padding)),
+            modifier = Modifier.fillMaxSize(),
         ) {
             composable(BottomTab.Chat.route) {
-                ChatScreen(container = container, onNavigateToCharacters = {
-                    navController.navigate(BottomTab.Characters.route) {
-                        launchSingleTop = true
+                // 聊天 Tab = 「刷抖音」卡片流(feed) + 完整聊天(chat) 的内嵌导航。
+                // startDestination 恒为 feed：冷启动来自问候通知时在其上压入 chat（栈底保留 feed，
+                // 返回键可回到卡片流，而非直接退出 App）。
+                NavHost(
+                    navController = feedNavController,
+                    startDestination = FeedRoute.FEED,
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    composable(FeedRoute.FEED) {
+                        CharacterFeedScreen(
+                            container = container,
+                            bottomBarHeight = bottomBarHeight,
+                            onAccent = { accentColor = it },
+                            onOpenChat = { charId ->
+                                feedNavController.navigate(FeedRoute.CHAT) { launchSingleTop = true }
+                            },
+                            onNavigateToCharacters = {
+                                navController.navigate(BottomTab.Characters.route) { launchSingleTop = true }
+                            },
+                            onOpenEncounter = {
+                                feedNavController.navigate(FeedRoute.ENCOUNTER) { launchSingleTop = true }
+                            },
+                        )
                     }
-                })
+                    composable(FeedRoute.CHAT) {
+                        ChatScreen(
+                            container = container,
+                            // 底栏高度：供聊天交互层把输入栏抬到 dock 之上（背景层已独立全屏铺满）。
+                            bottomBarHeight = bottomBarHeight,
+                            onBack = { feedNavController.popBackStack() },
+                            onNavigateToCharacters = {
+                                navController.navigate(BottomTab.Characters.route) { launchSingleTop = true }
+                            },
+                        )
+                    }
+                    composable(FeedRoute.ENCOUNTER) {
+                        EncounterScreen(
+                            container = container,
+                            // 底栏高度：浮层 dock 之上预留交互内容空间（背景层全屏铺满）。
+                            bottomBarHeight = bottomBarHeight,
+                            onBack = { feedNavController.popBackStack() },
+                        )
+                    }
+                }
+                // 冷启动来自问候通知：直达该角色会话（栈底仍为 feed，返回可回到卡片流）。
+                // 用 rememberSaveable 的 flag 保证只执行一次，防止切回通讯 Tab 时重复跳转。
+                LaunchedEffect(Unit) {
+                    if (initialChatOpen && !hasHandledInitialChat) {
+                        hasHandledInitialChat = true
+                        feedNavController.navigate(FeedRoute.CHAT) { launchSingleTop = true }
+                    }
+                }
             }
             composable(BottomTab.Characters.route) {
-                CharactersScreen(container = container, onNavigateToChat = {
-                    navController.navigate(BottomTab.Chat.route) {
-                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                })
+                Box(tabBottomPadding) { CharactersScreen(
+                    container = container,
+                    onNavigateToChat = {
+                        // 切到聊天 Tab（保底栏状态）
+                        navController.navigate(BottomTab.Chat.route) {
+                            popUpTo(BottomTab.Chat.route) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                        // 网格选完角色 → 直达嵌套聊天（弹掉 feed，避免回来又停在卡片流）
+                        feedNavController.navigate(FeedRoute.CHAT) {
+                            popUpTo(FeedRoute.FEED)
+                            launchSingleTop = true
+                        }
+                    },
+                ) }
             }
             composable(BottomTab.Music.route) {
-                MusicScreen(container = container)
+                Box(tabBottomPadding) { MusicScreen(container = container) }
             }
             composable(BottomTab.Models.route) {
-                ModelManagerScreen(container = container)
+                Box(tabBottomPadding) { ModelManagerScreen(container = container) }
             }
             composable(BottomTab.Settings.route) {
-                SettingsScreen(
-                    container = container,
-                    onNavigateToBackendSettings = {
-                        navController.navigate("backend_settings") { launchSingleTop = true }
-                    },
-                )
+                Box(tabBottomPadding) {
+                    SettingsScreen(
+                        container = container,
+                        onNavigateToBackendSettings = {
+                            navController.navigate("backend_settings") { launchSingleTop = true }
+                        },
+                    )
+                }
             }
             composable("backend_settings") {
-                BackendSettingsScreen(
-                    container = container,
-                    onBack = { navController.popBackStack() },
-                )
+                Box(tabBottomPadding) {
+                    BackendSettingsScreen(
+                        container = container,
+                        onBack = { navController.popBackStack() },
+                    )
+                }
             }
-        }
     }
+}
+}
 }
 
 /**
@@ -164,7 +278,7 @@ fun AppNavGraph(container: AppContainer) {
  * IME 在 [measure] 阶段经 [WindowInsets.getBottom] 读取（snapshot 状态）-> 仅触发 relayout，
  * 不触发重组，故 IME 动画逐帧更新时不会重组内容、不丢帧（配合高刷新率可跑满 120fps）。
  */
-private class ClampedImeBottomPadding(
+internal class ClampedImeBottomPadding(
     private val ime: WindowInsets,
     private val reserved: PaddingValues,
 ) : LayoutModifier {

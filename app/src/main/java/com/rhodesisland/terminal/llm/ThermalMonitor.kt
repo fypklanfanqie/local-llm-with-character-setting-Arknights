@@ -5,9 +5,30 @@ import android.os.Build
 import android.os.PowerManager
 import android.util.Log
 import androidx.annotation.RequiresApi
+import com.rhodesisland.terminal.llm.profile.InferencePerformanceMode
 import java.util.concurrent.Executor
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+
+/** 应用层热档位（纯 Kotlin，可 JVM 测试）。映射见 [ThermalMonitor.levelOf]。 */
+enum class ThermalLevel { NONE, LIGHT, MODERATE, SEVERE, CRITICAL, EMERGENCY }
+
+/**
+ * 一次热状态变化对当前/下一轮的决策（Task 8）。
+ *
+ * - [removeBoostNow]：立即撤销提频（热回调线程安全地关闭 hint session；线程优先级下轮恢复）。
+ * - [stopNow]：请求停止生成并返回 THERMAL_STOP（不计后端失败）。
+ * - [reloadAfterTurn]：本轮结束后标记重载（热降级配置仅对下一轮 load 生效）。
+ * - [nextThreadCap]：下一轮加载线程上限；0 = 不限制。
+ * - [effectiveMode]：降级后的实际有效模式（MODERATE+ 恒为 BALANCED，撤销 sustained）。
+ */
+data class ThermalDecision(
+    val removeBoostNow: Boolean,
+    val stopNow: Boolean,
+    val reloadAfterTurn: Boolean,
+    val nextThreadCap: Int,
+    val effectiveMode: InferencePerformanceMode,
+)
 
 /**
  * 温度监控自动降频
@@ -114,6 +135,65 @@ class ThermalMonitor(
     /** 当前原始热状态值（供调用方自行决策） */
     fun currentStatus(): Int = currentThermalStatus
 
+    /** 当前应用层热档位。 */
+    fun currentLevel(): ThermalLevel = levelOf(currentThermalStatus)
+
+    companion object {
+        private const val TAG = "ThermalMonitor"
+
+        /** PowerManager 热状态 -> 应用层档位。 */
+        fun levelOf(status: Int): ThermalLevel = when (status) {
+            PowerManager.THERMAL_STATUS_NONE -> ThermalLevel.NONE
+            PowerManager.THERMAL_STATUS_LIGHT -> ThermalLevel.LIGHT
+            PowerManager.THERMAL_STATUS_MODERATE -> ThermalLevel.MODERATE
+            PowerManager.THERMAL_STATUS_SEVERE -> ThermalLevel.SEVERE
+            PowerManager.THERMAL_STATUS_CRITICAL -> ThermalLevel.CRITICAL
+            PowerManager.THERMAL_STATUS_EMERGENCY -> ThermalLevel.EMERGENCY
+            else -> ThermalLevel.NONE
+        }
+
+        /**
+         * 热状态转变决策（Task 8 Step 1，纯函数）。
+         * 对齐设计规格：MODERATE 降 MAXIMUM_SPEED->BALANCED 且撤销 sustained；
+         * SEVERE 立即撤销提频、本轮后重载、下一轮最多 2 线程；CRITICAL/EMERGENCY 请求
+         * THERMAL_STOP（不计后端失败）；NONE/LIGHT 保持请求模式不降级。
+         *
+         * @param bigCoreCount 大核数（<=0 按 4 估算），用于 MODERATE 按比例降线程。
+         */
+        fun decide(
+            level: ThermalLevel,
+            requestedMode: InferencePerformanceMode,
+            bigCoreCount: Int,
+        ): ThermalDecision {
+            val bc = if (bigCoreCount > 0) bigCoreCount else 4
+            return when (level) {
+                ThermalLevel.NONE, ThermalLevel.LIGHT ->
+                    ThermalDecision(
+                        removeBoostNow = false, stopNow = false, reloadAfterTurn = false,
+                        nextThreadCap = 0, effectiveMode = requestedMode,
+                    )
+                ThermalLevel.MODERATE ->
+                    ThermalDecision(
+                        removeBoostNow = false, stopNow = false, reloadAfterTurn = true,
+                        nextThreadCap = (bc / 2).coerceAtLeast(1),
+                        effectiveMode = InferencePerformanceMode.BALANCED,
+                    )
+                ThermalLevel.SEVERE ->
+                    ThermalDecision(
+                        removeBoostNow = true, stopNow = false, reloadAfterTurn = true,
+                        nextThreadCap = minOf(2, bc),
+                        effectiveMode = InferencePerformanceMode.BALANCED,
+                    )
+                ThermalLevel.CRITICAL, ThermalLevel.EMERGENCY ->
+                    ThermalDecision(
+                        removeBoostNow = true, stopNow = true, reloadAfterTurn = true,
+                        nextThreadCap = 1,
+                        effectiveMode = InferencePerformanceMode.BALANCED,
+                    )
+            }
+        }
+    }
+
     fun stopMonitoring() {
         val pm = powerManager
         if (pm != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -163,9 +243,5 @@ class ThermalMonitor(
         fun currentStatus(pm: PowerManager): Int =
             runCatching { pm.getCurrentThermalStatus() }
                 .getOrDefault(PowerManager.THERMAL_STATUS_NONE)
-    }
-
-    companion object {
-        private const val TAG = "ThermalMonitor"
     }
 }

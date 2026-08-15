@@ -74,7 +74,11 @@ class PerformanceOverlayView(context: Context) : FrameLayout(context) {
             setPadding(dp(10), dp(7), dp(10), dp(5))
         }
 
-        // Collapsed icon — tap to expand
+        // Collapsed icon — tap to expand.
+        // 注意：展开/折叠统一由外层 dragListener 的 ACTION_UP（点击判定）触发，这里**不**再挂
+        // setOnClickListener——玻璃态 consume=false 时事件会继续分发给子 View，子点击 + 父监听
+        // 同时 toggleExpansion() 会造成「展开后立即折叠」（无法展开）。dragListener 在两种面板态
+        // （consume=false 玻璃 / consume=true 普通）下都收得到事件，是唯一可靠的触发路径。
         collapsedIcon = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
@@ -83,7 +87,6 @@ class PerformanceOverlayView(context: Context) : FrameLayout(context) {
                 textSize = 20f
             }
             addView(icon)
-            setOnClickListener { toggleExpansion() }
         }
         contentLayout.addView(collapsedIcon)
 
@@ -107,7 +110,7 @@ class PerformanceOverlayView(context: Context) : FrameLayout(context) {
             setImageResource(android.R.drawable.arrow_down_float)
             setColorFilter(Color.parseColor("#888899"))
             layoutParams = LinearLayout.LayoutParams(dp(16), dp(16))
-            setOnClickListener { toggleExpansion() }
+            // 同 collapsedIcon：收起也由外层 dragListener 触发，避免玻璃态双击/双 toggle。
         }
         titleBar.addView(btnCollapse)
         contentLayout.addView(titleBar)

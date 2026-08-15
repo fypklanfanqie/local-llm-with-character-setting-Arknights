@@ -17,6 +17,12 @@ serialization = "1.6.3"
 liquidglass = "1.0.3"
 work = "2.9.1"
 
+# Testing（Task 2 遥测基线引入；版本需与 AGP 8.5 / Kotlin 2.0 / Room 2.6.1 兼容）
+junit = "4.13.2"
+androidxTestCore = "1.6.1"
+androidxTestRunner = "1.6.1"
+androidxTestExtJunit = "1.2.1"
+
 [libraries]
 # AndroidX Core
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -69,6 +75,20 @@ liquidglass-core = { group = "com.qmdeve.liquidglass", name = "core", version.re
 
 # WorkManager (角色问候后台调度：跨重启存活的自延续 OneTimeWorkRequest 链)
 androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "work" }
+work-testing = { group = "androidx.work", name = "work-testing", version.ref = "work" }
+
+# Testing
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
+androidx-room-testing = { group = "androidx.room", name = "room-testing", version.ref = "room" }
+androidx-test-core = { group = "androidx.test", name = "core", version.ref = "androidxTestCore" }
+androidx-test-runner = { group = "androidx.test", name = "runner", version.ref = "androidxTestRunner" }
+androidx-test-ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidxTestExtJunit" }
+mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver", version.ref = "okhttp" }
+
+# Compose UI testing（Task 3 滚动 instrumentation；版本由 compose BOM 统一）
+androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
+androidx-compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

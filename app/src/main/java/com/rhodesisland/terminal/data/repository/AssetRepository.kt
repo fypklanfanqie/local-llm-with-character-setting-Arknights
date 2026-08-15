@@ -5,6 +5,7 @@ import android.net.Uri
 import android.webkit.URLUtil
 import com.rhodesisland.terminal.config.AppConfig
 import com.rhodesisland.terminal.config.AssetPaths
+import kotlinx.serialization.Serializable
 import java.io.IOException
 
 /**
@@ -135,6 +136,7 @@ class AssetRepository(private val context: Context) {
     }
 }
 
+@Serializable
 data class BgmTrack(
     val file: String,
     val name: String,

@@ -1,6 +1,12 @@
 package com.rhodesisland.terminal.llm.backend
 
 import com.rhodesisland.terminal.data.model.ChatMessage
+import com.rhodesisland.terminal.llm.GenerationExecutionControl
+import com.rhodesisland.terminal.llm.metrics.NativeGenerationSummary
+import com.rhodesisland.terminal.llm.template.ThinkingOutputClassifier
+import com.rhodesisland.terminal.llm.thinking.ThinkingPolicyTelemetry
+import com.rhodesisland.terminal.llm.profile.InferencePerformanceMode
+import com.rhodesisland.terminal.llm.profile.PowerPolicy
 
 /**
  * 推理后端抽象接口
@@ -40,26 +46,21 @@ interface InferenceBackend {
     val lastErrorMessage: String?
 
     /**
-     * 加载模型并初始化后端。
+     * 加载模型并初始化后端（Task 7）。
+     *
+     * 运行时配置由 [com.rhodesisland.terminal.llm.profile.InferenceProfileResolver] 生成并规范化为
+     * [nativeConfigJson]，[loadConfigHash] 是其唯一重载指纹：同路径 + 同哈希已加载则热复用，
+     * 否则按新配置重建。采样参数（temperature/topP/repeatPenalty）已内含于配置 JSON。
+     *
      * @param modelPath `.mnn` 目录的 `config.json` 路径
-     * @param contextLength 上下文长度
-     * @param threads CPU 线程数
-     * @param lookahead CPU 模式下是否启用 lookahead n-gram 投机解码（仅 MNN CPU 后端生效；
-     *        非 cpu 后端忽略）。改值需重载模型才生效。
-     * @param temperature 采样温度。MNN 采样器在 load() 内一次性构建，须在加载前传入才能生效；
-     *        改值由 [BackendManager] 纳入重载指纹，触发下次重载。
-     * @param topP top-p 采样（MNN 键 `topP`）。AppConfig 常量。
-     * @param repeatPenalty 重复惩罚（MNN 键 `repetition_penalty`）。AppConfig 常量。
-     * @return true 成功；false 失败（返回 false 触发回退）
+     * @param nativeConfigJson 规范化 native set_config JSON（由 resolver 生成）
+     * @param loadConfigHash 配置指纹；模型重载判定的唯一依据
+     * @return true 成功（可能为热复用）；false 失败（返回 false 触发回退）
      */
     suspend fun initialize(
         modelPath: String,
-        contextLength: Int,
-        threads: Int,
-        lookahead: Boolean,
-        temperature: Float,
-        topP: Float,
-        repeatPenalty: Float,
+        nativeConfigJson: String,
+        loadConfigHash: String,
     ): Boolean
 
     /**
@@ -67,11 +68,21 @@ interface InferenceBackend {
      *
      * MNN 后端把 [messages] 交给 MNN，由模型自带 chat 模板格式化（支持 Qwen/Llama/Gemma/Phi 等多模板）。
      *
+     * 本方法**不累积**完整回复：每个 delta 经 [onToken] 实时转发，[onToken] 返回 false 表示策略
+     * 截断（后端设 abort、记 [completionReason] 为 POLICY_TRUNCATION）。完整回复由调用方
+     * [com.rhodesisland.terminal.provider.local.LocalChatProvider] 作为唯一累加器拼接。
+     *
      * @param messages 完整对话历史（system + user/assistant 轮次）
      * @param enableThinking 是否启用深度思考。经 set_config 注入 jinja context `enable_thinking`，
      *        控制推理模型（Qwen3/R1）chat 模板是否生成 `<think>` 推理段；运行时生效，无需重载模型。
      *        无该分支的模板（Llama/Gemma）忽略，无害。
-     * @return 完整生成文本
+     * @param onToken 流式回调；返回 false 触发策略截断（abort + POLICY_TRUNCATION）。
+     * @param batchMaxBytes native 流式批处理缓冲上限（字节）。首个完整可见字符立即回调，
+     *        其余按字节或时间达标批量 flush（首 delta 即时性 + 回调次数削减）。Task 6 性能模式
+     *        接入前用 Balanced 默认 256。
+     * @param batchMaxMs native 流式批处理缓冲时间上限（ms）。Balanced 16；Maximum Speed 24–32。
+     * @return native 返回的紧凑版本化 GenerationSummary（[NativeGenerationSummary.parse] 校验过的；
+     *         解析失败/未走 native 返回 null）
      */
     suspend fun generateStreamMessages(
         messages: List<ChatMessage>,
@@ -81,7 +92,44 @@ interface InferenceBackend {
         repeatPenalty: Float,
         enableThinking: Boolean,
         onToken: (String) -> Boolean,
-    ): String
+        batchMaxBytes: Int = DEFAULT_BATCH_MAX_BYTES,
+        batchMaxMs: Int = DEFAULT_BATCH_MAX_MS,
+        downgradeReasons: List<String> = emptyList(),
+        executionControl: GenerationExecutionControl? = null,
+        powerPolicy: PowerPolicy = PowerPolicy.DEFAULT,
+        /** 遥测（Task 1）：请求/生效性能模式，避免记录为 null。 */
+        requestedMode: InferencePerformanceMode? = null,
+        effectiveMode: InferencePerformanceMode? = null,
+        /** 遥测：本次尝试实际应用的配置指纹（loadConfigHash），而非路径哈希。 */
+        loadConfigHash: String? = null,
+        /** 遥测：后端尝试链（按序变体名，用于分析回退路径）。 */
+        attemptTrace: List<String> = emptyList(),
+        /** 遥测：首次冷加载 / 配置变化重载耗时（ms）；复用加载为 null。 */
+        coldLoadMs: Long? = null,
+        warmLoadMs: Long? = null,
+        /** Task 1 v2：native decode 步长（1=逐 token，默认；2..4=多 token 步进，native clamp 到 [1,4]）。
+         *  即使 step>1，native 每步内仍逐 token 检查 EOS/maxTokens/abort，取消粒度恒为 1 token。 */
+        decodeStepTokens: Int = 1,
+        // Task 2：思考请求 / 模板能力 / 思考分类器（遥测信封；带默认值，旧调用方不受影响）。
+        /** 本轮是否请求了深度思考（deepThinking 设置值）。 */
+        thinkingRequested: Boolean? = null,
+        /** 模板能力枚举名（ThinkingTemplateCapability）。 */
+        templateCapability: String? = null,
+        /** 思考分类器实例：实现方在生成结束 finally 内收口分类（ThinkingEffect / EmptyResponseClass），
+         *  随遥测 finalize 一并写入记录（取代原 provider 侧补记路径）。 */
+        thinkingClassifier: ThinkingOutputClassifier? = null,
+        // Task 5：本地思考档位策略快照（单次透传；思考关闭/云端为 null）。
+        thinkingPolicy: ThinkingPolicyTelemetry? = null,
+        // Task 15：内存准入的上下文降级（配置值 -> 实际值；未降级为 null）。
+        configuredContextTokens: Int? = null,
+        actualContextTokens: Int? = null,
+    ): NativeGenerationSummary?
+
+    /** 流式批处理 Balanced 默认参数（Task 6 性能模式接入前的稳定取值，与设计文档 §流式行一致）。 */
+    companion object {
+        const val DEFAULT_BATCH_MAX_BYTES = 256
+        const val DEFAULT_BATCH_MAX_MS = 16
+    }
 
     /** 中断当前生成（非阻塞，下一轮 token 前检测） */
     suspend fun stopGeneration()
@@ -122,13 +170,14 @@ enum class BackendPreference(val storageKey: String, val displayName: String) {
 /**
  * 后端性能指标。
  * @param tokensPerSecond 当前生成速度（tokens/s）
- * @param gpuUtilization GPU/NPU 占用率近似值 0..1（CPU 后端恒为 0）
+ * @param gpuUtilization GPU/NPU 占用率近似值 0..1；不可用时为 null（CPU 后端恒为 null，
+ *        OpenCL/QNN 后端目前亦无可靠读取口径，统一以 null 表示 N/A，不再使用 0.85f 假值）
  * @param memoryUsedMB 占用内存近似值（MB）
  * @param backendName 来源后端名
  */
 data class BackendMetrics(
     val tokensPerSecond: Float,
-    val gpuUtilization: Float,
+    val gpuUtilization: Float?,
     val memoryUsedMB: Long,
     val backendName: String,
 )

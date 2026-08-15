@@ -23,15 +23,18 @@ object AppConfig {
 
     // ===== 本地 LLM 默认参数 =====
     object LLM {
-        const val DEFAULT_CONTEXT_LEN = 2048
+        // 4096（非 2048）：现代小模型（Qwen2.5 / Gemma2 / Llama3.2 / SmolLM2 等）均支持 ≥8192，
+        // 4096 通用安全且让长对话少丢上下文。设置页可调到 32768（受模型实际支持限制）。
+        const val DEFAULT_CONTEXT_LEN = 4096
         const val DEFAULT_THREADS = 4
         // 0.8（非 0.9）：小模型角色扮演在高温下易「上头」，从单角色回复滑向编造多角色剧本并无限生成
         // （配合 LocalChatProvider 的 system prompt 输出规范 + onToken 剧本标记截断兜底）。0.8 保留角色
         // 语气多样性的同时显著降低跑偏概率。
         const val DEFAULT_TEMPERATURE = 0.8f
-        // 1024（非 2048）：正常聊天回复罕超 1024 token；缩小上限让模型即便「上头」也早停，避免长篇
-        // 剧本耗满上下文。与 onToken 截断兜底互为防线。
-        const val DEFAULT_MAX_TOKENS = 1024
+        // 缺省输出上限 2048：只影响 DataStore 中尚无 llm_max_tokens 键的新安装/未设置用户。
+        // 已存储值不迁移、不覆盖；65536 仍保留为设置页显式高级选项「不限」（native 硬循环边界）。
+        const val MAX_TOKENS_UNLIMITED = 65536
+        const val DEFAULT_MAX_TOKENS = 2048
         const val DEFAULT_TOP_P = 0.9f
         // 1.2（非 1.1）：小模型无重复惩罚时会逐字复读角色卡循环；mixed_samplers 现已含 "penalty"
         // 生效（见 mnn_jni.cpp set_config）。1.1 偏弱压不住结构性复读，1.2 在 max_penalty=10 内安全。
@@ -40,9 +43,10 @@ object AppConfig {
 
     // ===== 聊天历史 =====
     // 每个会话（conversation）最多保留的消息条数；超出按时间修剪最旧消息。
-    const val MAX_HISTORY_PER_CONVERSATION = 50
-    // 单次请求喂给模型上下文的最大消息条数（取该会话最近 N 条）。
-    const val MAX_CONTEXT_MESSAGES = 20
+    const val MAX_HISTORY_PER_CONVERSATION = 100
+    // 单次请求交给 provider 规划的历史候选上限。云端发送最近 N 条；本地由 PromptWindowPlanner
+    // 在候选中保留 system + 最近完整 user/assistant 轮次，预留输出/模板空间，不再依赖模型静默左截断。
+    const val MAX_CONTEXT_MESSAGES = 100
 
     // ===== 角色问候（角色主动消息）=====
     // 开启后，所选角色会在白天随机时间主动给用户发消息（早安/晚安/关心/开话题）。
@@ -59,11 +63,7 @@ object AppConfig {
         const val CONTEXT_MESSAGES = 6
         // 单次生成超时（秒）
         const val GENERATE_TIMEOUT_MS = 60_000L
-        // PeriodicWork 周期（分钟）。WorkManager 最短允许 15 分钟。
-        // 用周期性 Worker 取代脆弱的自延续链：错失一次下个周期仍会触发，链条不会因进程被杀而永久断裂。
-        const val HEARTBEAT_INTERVAL_MIN = 15L
-        // 云 API 生成失败后下一次投递的退避间隔（毫秒）。
-        // 写入 next_fire_at，让 PeriodicWork 在此间隔后再尝试，避免每个周期都失败重试。
+        // 云 API 失败后重排的间隔（毫秒），避免 WorkManager retry 风暴
         const val RETRY_DELAY_MS = 45 * 60 * 1000L
     }
 }

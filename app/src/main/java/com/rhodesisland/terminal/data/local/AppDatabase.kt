@@ -2,7 +2,10 @@ package com.rhodesisland.terminal.data.local
 
 import android.content.Context
 import androidx.room.*
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.rhodesisland.terminal.config.AppConfig
+import com.rhodesisland.terminal.data.model.MessageCompletionState
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -20,6 +23,11 @@ data class ConversationEntity(
     val title: String,
     val createdAt: Long,
     val updatedAt: Long,
+    /**
+     * Seedance 自动视频开关存储值（0/1，默认 0）。
+     * v4->v5 迁移新增列，旧行默认关闭；新会话由 Repository 落默认值。
+     */
+    val autoVideoEnabled: Boolean = false,
 )
 
 /**
@@ -40,6 +48,16 @@ data class ChatHistoryEntity(
     val filesJson: String = "",     // JSON 数组
     val fileNamesJson: String = "", // JSON 数组
     val timestamp: Long,
+    /**
+     * 模型可见原始文本（Task 3）。本地助手消息存原始版本，重放历史时优先取它喂回模型，保证 KV 前缀精确；
+     * 旧库行 / 用户消息 / 云端消息为 null，调用方回退 [content]。v2->v3 迁移新增列，默认 null。
+     */
+    val modelContent: String? = null,
+    /**
+     * 消息完成状态存储键（Task 6）：本地助手消息用户停止时记录；默认 'complete'。
+     * v3->v4 迁移新增列，旧行回退 COMPLETE。
+     */
+    val completionState: String = MessageCompletionState.COMPLETE.storageKey,
 )
 
 @Dao
@@ -100,6 +118,10 @@ interface ConversationDao {
     @Query("UPDATE conversation SET updatedAt = :updatedAt WHERE id = :id")
     suspend fun touch(id: Long, updatedAt: Long)
 
+    /** 更新会话的 Seedance 自动视频开关；返回受影响行数（0 = 会话不存在）。 */
+    @Query("UPDATE conversation SET autoVideoEnabled = :enabled WHERE id = :id")
+    suspend fun updateAutoVideoEnabled(id: Long, enabled: Boolean): Int
+
     @Query("SELECT * FROM conversation WHERE characterId = :characterId ORDER BY updatedAt DESC")
     fun observeByCharacter(characterId: String): Flow<List<ConversationEntity>>
 
@@ -130,17 +152,138 @@ interface ConversationDao {
 }
 
 @Database(
-    entities = [ChatHistoryEntity::class, ConversationEntity::class],
-    version = 2,
+    entities = [ChatHistoryEntity::class, ConversationEntity::class, SeedanceVideoEntity::class],
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun chatDao(): ChatDao
     abstract fun conversationDao(): ConversationDao
+    abstract fun seedanceVideoDao(): SeedanceVideoDao
 
     companion object {
         @Volatile
         private var INSTANCE: AppDatabase? = null
+
+        /**
+         * v2 -> v3：为 chat_history 新增可空列 modelContent（模型可见原始文本）。
+         *
+         * 旧行该列为 null，调用方以 `modelContent ?: content` 兼容。此路径不再用
+         * fallbackToDestructiveMigration——历史消息含不可重建的用户对话，破坏性迁移会清空全部聊天记录。
+         */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE chat_history ADD COLUMN modelContent TEXT")
+            }
+        }
+
+        /**
+         * v3 -> v4：为 chat_history 新增非空列 completionState（消息完成状态，Task 6）。
+         *
+         * 默认 'complete'：旧历史消息全部解释为正常完成；不丢失任何历史与 modelContent。
+         */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "ALTER TABLE chat_history ADD COLUMN completionState TEXT NOT NULL DEFAULT 'complete'"
+                )
+            }
+        }
+
+        /**
+         * v4 -> v5：Seedance 自动视频（Task 2）。
+         *
+         * - conversation 新增非空列 autoVideoEnabled（默认 0，旧会话自动视频关闭）；
+         * - 新建 seedance_video 表（列集/顺序/类型与 [SeedanceVideoEntity] 完全一致，
+         *   索引名遵循 Room 命名 `index_<表>_<列...>`，Room 打开迁移库时按此做 schema 校验）；
+         * - 不声明到 conversation/chat_history 的级联外键：删除聊天/会话不级联删除视频任务。
+         *
+         * 不使用破坏性回退：聊天历史与既有会话数据必须原样保留。
+         */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "ALTER TABLE conversation ADD COLUMN autoVideoEnabled INTEGER NOT NULL DEFAULT 0"
+                )
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `seedance_video` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`taskUuid` TEXT NOT NULL, " +
+                        "`triggerType` TEXT NOT NULL, " +
+                        "`sourceConversationId` INTEGER NOT NULL, " +
+                        "`sourceUserMessageId` INTEGER, " +
+                        "`sourceAssistantMessageId` INTEGER NOT NULL, " +
+                        "`characterIdSnapshot` TEXT NOT NULL, " +
+                        "`characterNameSnapshot` TEXT NOT NULL, " +
+                        "`characterRoleSnapshot` TEXT NOT NULL, " +
+                        "`characterSystemPromptSnapshot` TEXT NOT NULL, " +
+                        "`userTextSnapshot` TEXT NOT NULL, " +
+                        "`assistantTextSnapshot` TEXT NOT NULL, " +
+                        "`sceneDescriptionSnapshot` TEXT NOT NULL, " +
+                        "`promptBaseUrlSnapshot` TEXT NOT NULL, " +
+                        "`promptModelSnapshot` TEXT NOT NULL, " +
+                        "`promptJson` TEXT, " +
+                        "`finalPrompt` TEXT, " +
+                        "`characterImageSourceSnapshot` TEXT NOT NULL, " +
+                        "`backgroundImageSourceSnapshot` TEXT, " +
+                        "`characterImagePath` TEXT, " +
+                        "`characterImageMime` TEXT, " +
+                        "`characterImageSha256` TEXT, " +
+                        "`backgroundImagePath` TEXT, " +
+                        "`backgroundImageMime` TEXT, " +
+                        "`backgroundImageSha256` TEXT, " +
+                        "`modelVariant` TEXT NOT NULL, " +
+                        "`resolution` TEXT NOT NULL, " +
+                        "`ratio` TEXT NOT NULL, " +
+                        "`durationSeconds` INTEGER NOT NULL, " +
+                        "`generateAudio` INTEGER NOT NULL, " +
+                        "`watermark` INTEGER NOT NULL, " +
+                        "`state` TEXT NOT NULL, " +
+                        "`remoteStatus` TEXT, " +
+                        "`generationAttempt` INTEGER NOT NULL, " +
+                        "`submissionAttemptId` TEXT, " +
+                        "`submissionStartedAt` INTEGER, " +
+                        "`requestFingerprint` TEXT, " +
+                        "`remoteTaskId` TEXT, " +
+                        "`remoteVideoUrl` TEXT, " +
+                        "`remoteVideoUrlObservedAt` INTEGER, " +
+                        "`remoteVideoUrlExpiresAt` INTEGER, " +
+                        "`remoteRequestId` TEXT, " +
+                        "`previousRemoteTasksJson` TEXT NOT NULL, " +
+                        "`localVideoPath` TEXT, " +
+                        "`videoMime` TEXT, " +
+                        "`videoByteSize` INTEGER, " +
+                        "`videoSha256` TEXT, " +
+                        "`downloadedAt` INTEGER, " +
+                        "`automaticRetryCount` INTEGER NOT NULL, " +
+                        "`nextRetryAt` INTEGER, " +
+                        "`errorStage` TEXT, " +
+                        "`errorCode` TEXT, " +
+                        "`errorMessage` TEXT, " +
+                        "`retryDisposition` TEXT, " +
+                        "`requiresCostConfirmation` INTEGER NOT NULL, " +
+                        "`createdAt` INTEGER NOT NULL, " +
+                        "`updatedAt` INTEGER NOT NULL" +
+                        ")"
+                )
+                database.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_seedance_video_sourceAssistantMessageId_triggerType` " +
+                        "ON `seedance_video` (`sourceAssistantMessageId`, `triggerType`)"
+                )
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_seedance_video_sourceConversationId_createdAt` " +
+                        "ON `seedance_video` (`sourceConversationId`, `createdAt`)"
+                )
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_seedance_video_state_nextRetryAt` " +
+                        "ON `seedance_video` (`state`, `nextRetryAt`)"
+                )
+                database.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_seedance_video_remoteTaskId` " +
+                        "ON `seedance_video` (`remoteTaskId`)"
+                )
+            }
+        }
 
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
@@ -150,7 +293,7 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "rhodes_chat.db"
-                ).fallbackToDestructiveMigration().build().also { INSTANCE = it }
+                ).addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build().also { INSTANCE = it }
             }
         }
     }

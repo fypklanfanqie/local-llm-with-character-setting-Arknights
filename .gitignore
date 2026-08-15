@@ -23,8 +23,16 @@ app/release/
 # Native build artifacts (compiled by CMake/externalNativeBuild, not prebuilt)
 app/src/main/jniLibs/*/libllama_jni.so
 
+# JVM crash logs
+hs_err_pid*.log
+replay_pid*.log
+
 # Backup / legacy files
 _elf_backup/
+backup/
+
+# Claude Code internal
+.claude/
 
 # Python cache
 __pycache__/

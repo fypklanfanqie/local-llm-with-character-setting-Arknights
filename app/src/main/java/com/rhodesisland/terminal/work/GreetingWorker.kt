@@ -1,11 +1,7 @@
 package com.rhodesisland.terminal.work
 
 import android.content.Context
-import android.content.pm.ServiceInfo
-import android.os.Build
-import android.os.PowerManager
 import androidx.work.CoroutineWorker
-import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import com.rhodesisland.terminal.AppContainer
 import com.rhodesisland.terminal.RhodesApp
@@ -16,10 +12,7 @@ import com.rhodesisland.terminal.data.remote.ChatMessageDto
 import com.rhodesisland.terminal.data.repository.SettingsRepository
 import com.rhodesisland.terminal.notification.AppLifecycleObserver
 import com.rhodesisland.terminal.notification.GreetingNotificationManager
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonPrimitive
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -28,17 +21,14 @@ import java.util.Locale
 import kotlin.random.Random
 
 /**
- * 角色问候 Worker：由 [GreetingScheduler] 的 PeriodicWork 每 15 分钟驱动一次。检查投递目标时间
- * `next_fire_at`，到点则调用云端 API 让所选角色主动发一条符合人设的消息，落库到该角色活跃会话，
- * 发类微信通知，并写回下一个目标时间。
+ * 角色问候 Worker：在白天随机时间触发，调用云端 API 让所选角色主动发一条符合人设的消息，
+ * 落库到该角色活跃会话，发类微信通知，并自调度下一次。
  *
- * 由**周期性工作**驱动而非自延续链：错失一次下个周期仍会触发，链条不会因进程被杀而永久断裂
- * （修复「退出 App 后收不到问候 / 只有一个角色发过一次」）。仅云端模式生效；本地/关闭/未选角色/
- * 不在时段/配额满时静默跳过。所有路径都以 success 返回（靠周期保活，不靠 reschedule 自延续），
- * 避免 WorkManager 指数退避 retry 风暴。
+ * 仅云端模式生效；本地模式 / 关闭时静默重排或终止链条。所有失败路径都以 success 返回
+ * 并自行 reschedule，避免 WorkManager 指数退避 retry 风暴。
  *
  * 测试模式（[GreetingScheduler.KEY_TEST]）：用户在设置页点「测试」触发，10s 后执行，
- * 跳过开关/配额/时段门控，始终弹通知预览，不计配额、不更新目标时间。
+ * 跳过开关/配额/时段门控，始终弹通知预览，不计配额、不重排。
  */
 class GreetingWorker(
     appContext: Context,
@@ -48,156 +38,61 @@ class GreetingWorker(
     private val dateFmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
     private val thinkRegex = Regex("<think>.*?</think>", RegexOption.DOT_MATCHES_ALL)
 
-    companion object {
-        /** 门控设置读取重试次数（每次含 DataStore 5s 超时）。冷启动 I/O 阻塞是暂时性的，重试通常可成功。 */
-        private const val GATING_READ_ATTEMPTS = 3
-        /** 门控读取重试间隔（ms）。 */
-        private const val GATING_READ_RETRY_MS = 2_000L
-        /** 设置写入（配额/上次角色/目标时间）超时（ms），防止 DataStore 阻塞拖垮 Worker。 */
-        private const val WRITE_TIMEOUT_MS = 5_000L
-
-        /** 问候生成前台化信息：低优先级 ongoing 通知 + dataSync 类型（Android 14）。 */
-        fun buildGreetingForegroundInfo(context: Context): ForegroundInfo {
-            val notification = GreetingNotificationManager.buildProgressNotification(context)
-            return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                ForegroundInfo(
-                    GreetingNotificationManager.PROGRESS_NOTIFICATION_ID,
-                    notification,
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
-                )
-            } else {
-                ForegroundInfo(GreetingNotificationManager.PROGRESS_NOTIFICATION_ID, notification)
-            }
-        }
-
-        /** 取一个 PARTIAL_WAKE_LOCK 保 60s 生成期间 CPU 唤醒；超时兜底防泄漏。失败返回 null。 */
-        fun acquireGreetingWakeLock(context: Context): PowerManager.WakeLock? = runCatching {
-            val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
-            pm?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG)?.apply {
-                setReferenceCounted(false)
-                acquire(WAKE_LOCK_TIMEOUT_MS)
-            }
-        }.getOrNull()
-
-        fun releaseWakeLock(wakeLock: PowerManager.WakeLock?) {
-            runCatching { if (wakeLock?.isHeld == true) wakeLock.release() }
-        }
-
-        private const val WAKE_LOCK_TAG = "rhodes:greeting"
-        private const val WAKE_LOCK_TIMEOUT_MS = 120_000L // 略大于 GENERATE_TIMEOUT_MS(60s) 兜底
-    }
-
     override suspend fun doWork(): Result {
         val container = (applicationContext as RhodesApp).container
         val settings = container.settingsRepository
         val context = applicationContext
 
-        // 测试模式：10s 预览，独立于日常周期链
+        // 测试模式：10s 预览，独立于日常链
         if (inputData.getBoolean(GreetingScheduler.KEY_TEST, false)) {
             return runTestGreeting(container, settings, context)
         }
 
+        // 1. 门控：未开启 -> 链终止（下次开 App 或重新开启时 ensureScheduled/reschedule 重启）
+        if (!settings.getGreetingEnabledNow()) return Result.success()
+
+        // 本地模式 -> 静默重排到次日早晨（保持链条存活，切回云端即恢复）
+        if (settings.getActiveProviderNow() != ChatProviderType.CLOUD) {
+            GreetingScheduler.reschedule(context, settings)
+            return Result.success()
+        }
+
+        val charIds = settings.getGreetingCharacterIdsNow()
+        if (charIds.isEmpty()) {
+            // 未选角色 -> 重排等待用户选择
+            GreetingScheduler.reschedule(context, settings)
+            return Result.success()
+        }
+        val dailyCount = settings.getGreetingDailyCountNow()
+
+        // 2. 每日配额（跨天自动重置）
+        val (quotaDate, quotaCount) = settings.getGreetingQuotaNow()
         val today = dateFmt.format(Date())
+        val used = if (quotaDate == today) quotaCount else 0
+        if (used >= dailyCount) {
+            GreetingScheduler.reschedule(context, settings) // -> 次日早晨
+            return Result.success()
+        }
 
-        // 1. 一次性读取门控状态（带重试，区分「已关闭」与「读不到」）。
-        //    读不到 -> 直接 success：本 Worker 由 PeriodicWork 周期驱动，下个周期还会触发，
-        //    天然保活，无需自延续 reschedule。这正是修复「退出 App 后链条断裂」的关键--
-        //    周期性工作错失一次下轮仍会跑，不依赖「发一条->排下一条」的自延续（自延续错失一次即永久断裂）。
-        val state = readGatingState(settings, today)
-        if (state == null) return Result.success() // 读不到设置：等下个周期再读，保活
-        if (!state.enabled) return Result.success() // 明确关闭 -> 由 ensureScheduled/reschedule cancel
-
-        // 本地模式 -> 静默等待（周期工作继续跑，切回云端即恢复）
-        if (settings.getActiveProviderNow() != ChatProviderType.CLOUD) return Result.success()
-        if (state.charIds.isEmpty()) return Result.success() // 未选角色 -> 等用户选择
-
-        val now = System.currentTimeMillis()
+        // 3. 时段：仅 HOUR_START..HOUR_END 触发，避免深夜打扰
         val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-        val remaining = state.dailyCount - state.used // 今日剩余配额（state.used 已按 today 跨天重置）
-
-        // 2. 不在时段 / 配额已满：把 next_fire_at 推到下一个 HOUR_START（即次日早晨），本周期不投递。
-        //    computeNextDelay 对「不在时段 / remaining<=0」返回到下一个 HOUR_START 的延迟。
-        if (hour < AppConfig.Greeting.HOUR_START || hour >= AppConfig.Greeting.HOUR_END || remaining <= 0) {
-            val nextFire = GreetingScheduler.computeNextFireAt(now, remaining)
-            withTimeoutOrNull(WRITE_TIMEOUT_MS) { settings.setGreetingNextFireAt(nextFire) }
-            GreetingAlarmScheduler.armNext(context, nextFire)
+        if (hour < AppConfig.Greeting.HOUR_START || hour >= AppConfig.Greeting.HOUR_END) {
+            GreetingScheduler.reschedule(context, settings) // -> 下一个 HOUR_START
             return Result.success()
         }
 
-        // 3. 在时段内且有配额：检查是否到了该投递的目标时间（next_fire_at）。
-        val nextFire = settings.getGreetingNextFireAtNow()
-        if (nextFire <= 0L) {
-            // 首次启用尚未初始化：补算一个随机目标时间，本周期不投递，等下个周期再发
-            // （避免开启后立刻发，应等下一个随机时刻）。
-            val initFire = GreetingScheduler.computeNextFireAt(now, remaining)
-            withTimeoutOrNull(WRITE_TIMEOUT_MS) { settings.setGreetingNextFireAt(initFire) }
-            GreetingAlarmScheduler.armNext(context, initFire)
-            return Result.success()
-        }
-        if (now < nextFire) return Result.success() // 还没到点，等下个周期
-
-        // 4. 到点了：轮换选一个角色并投递（避免连续挑同一角色，让多角色都有机会）
-        val charId = pickCharacter(settings, state.charIds)
+        // 4. 随机选一个角色并投递
+        val charId = charIds.elementAt(Random.nextInt(charIds.size))
         val delivered = deliverGreeting(container, settings, context, charId, alwaysNotify = false)
 
-        // 5. 写回下一次目标时间 + 配额 + 上次角色（超时包裹，防 DataStore 写入阻塞拖垮 Worker）。
-        //    成功 -> 按剩余配额算下个随机时刻；失败 -> 退避 RETRY_DELAY_MS，避免每周期都失败重试。
-        val newRemaining = (remaining - 1).coerceAtLeast(0)
-        val nextDelay = if (delivered) GreetingScheduler.computeNextDelay(now, newRemaining)
-                        else AppConfig.Greeting.RETRY_DELAY_MS
-        val nextFireAt = now + nextDelay
-        withTimeoutOrNull(WRITE_TIMEOUT_MS) {
-            settings.setGreetingNextFireAt(nextFireAt)
-            if (delivered) {
-                settings.setGreetingQuota(today, state.used + 1)
-                settings.setGreetingLastCharId(charId)
-            }
+        if (delivered) {
+            settings.setGreetingQuota(today, used + 1)
+            GreetingScheduler.reschedule(context, settings)
+        } else {
+            // 生成失败：不计配额，稍后重试
+            GreetingScheduler.scheduleNext(context, AppConfig.Greeting.RETRY_DELAY_MS)
         }
-        GreetingAlarmScheduler.armNext(context, nextFireAt)
         return Result.success()
-    }
-
-    /** 门控快照：一次性承载 Worker 决策所需的全部设置。 */
-    private data class GatingState(
-        val enabled: Boolean,
-        val charIds: Set<String>,
-        val dailyCount: Int,
-        val used: Int, // 今日已发（跨天已归零）
-    )
-
-    /**
-     * 读取门控状态，带重试以应对冷启动时 DataStore 文件 I/O 暂时性阻塞（国产 ROM 常见）。
-     * 关键字段（开关/角色集）多次重试仍读不到 -> 返回 null，调用方本周期跳过、等下个周期再读，
-     * **切勿**误判为「已关闭」--PeriodicWork 会保活，无需自延续。
-     */
-    private suspend fun readGatingState(settings: SettingsRepository, today: String): GatingState? {
-        repeat(GATING_READ_ATTEMPTS) { attempt ->
-            val enabled = settings.getGreetingEnabledOrNull()
-            val charIds = settings.getGreetingCharacterIdsOrNull()
-            if (enabled != null && charIds != null) {
-                val dailyCount = settings.getGreetingDailyCountNow()
-                val (date, count) = settings.getGreetingQuotaNow()
-                val used = if (date == today) count else 0
-                return GatingState(enabled, charIds, dailyCount, used)
-            }
-            if (attempt < GATING_READ_ATTEMPTS - 1) delay(GATING_READ_RETRY_MS)
-        }
-        return null
-    }
-
-    /**
-     * 从已选角色中挑一个发问候。多于一个角色时**严格轮询**：取上次问候角色在排序表中的下一个
-     * （循环），保证所选每个角色都被轮流投递、不会长期冷落某一个（修复「选了多个却只有当前
-     * 干员在发」）。读不到上次记录或上次角色已不在选择集时退化为随机起点，随后继续轮询。
-     * 配合 doWork 发完后写回 lastCharId，跨天也连续轮询（次日从上次的下一个接续）。
-     */
-    private suspend fun pickCharacter(settings: SettingsRepository, charIds: Set<String>): String {
-        if (charIds.size == 1) return charIds.first()
-        val sorted = charIds.sorted() // 固定排序，保证轮询顺序稳定
-        val last = settings.getLastGreetingCharIdNow()
-        val idx = last?.let { sorted.indexOf(it).takeIf { i -> i >= 0 } }
-        return if (idx != null) sorted[(idx + 1) % sorted.size]
-        else sorted[Random.nextInt(sorted.size)]
     }
 
     /** 测试模式：仍需云端；从已选角色随机挑一个（无则用当前活跃角色），始终弹通知预览。 */
@@ -236,27 +131,13 @@ class GreetingWorker(
         val apiConfig = settings.getApiConfigNow()
         if (apiConfig.apiKey.isBlank()) return false
 
-        // 前台化 + WakeLock：保护最长 60s 的云端生成不被国产 ROM 冻结/杀进程。
-        // setForeground 失败（如通知权限被拒）则降级为仅持锁 + 周期保活，不阻断投递。
-        val wakeLock = acquireGreetingWakeLock(context)
-        try {
-            setForeground(buildGreetingForegroundInfo(context))
-        } catch (ce: CancellationException) {
-            releaseWakeLock(wakeLock)
-            throw ce
-        } catch (e: Exception) {
-            android.util.Log.w("GreetingWorker", "setForeground 降级（仅持锁）: ${e.message}")
-        }
-        val message: String? = try {
+        val message = try {
             withTimeout(AppConfig.Greeting.GENERATE_TIMEOUT_MS) {
                 generateGreeting(container.directLlmClient, apiConfig, char, history)
             }
         } catch (e: Exception) {
-            null
-        } finally {
-            releaseWakeLock(wakeLock)
+            return false
         }
-        if (message == null) return false
         if (message.isBlank()) return false
 
         // 落库为 assistant 消息（Room Flow 会推送到前台正在看该会话的 UI -> 实时冒泡）

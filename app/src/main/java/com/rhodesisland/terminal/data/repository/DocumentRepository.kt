@@ -48,10 +48,12 @@ class DocumentRepository(
         return multimodalKeywords.any { m.contains(it) }
     }
 
-    /** 读取文件为 base64（流式编码，避免大文件整块读入内存导致 OOM） */
+    /** 读取文件为 base64（流式编码，避免大文件整块读入内存导致 OOM）；超大文件拒绝。 */
     suspend fun readFileAsBase64(path: String): String = withContext(Dispatchers.IO) {
+        val f = File(path)
+        if (f.length() > MAX_IMAGE_BYTES) throw IOException("文件过大，无法上传")
         val output = ByteArrayOutputStream()
-        File(path).inputStream().use { input ->
+        f.inputStream().use { input ->
             Base64OutputStream(output, Base64.NO_WRAP).use { b64Out ->
                 input.copyTo(b64Out, bufferSize = 8192)
             }
@@ -59,9 +61,11 @@ class DocumentRepository(
         output.toString(Charsets.US_ASCII.name())
     }
 
-    /** 读取 content URI 为 base64（不含 data: 前缀），失败返回 null */
+    /** 读取 content URI 为 base64（不含 data: 前缀），失败或超大返回 null */
     suspend fun uriToBase64(context: Context, uri: String): String? = withContext(Dispatchers.IO) {
         try {
+            val length = contentLength(context, uri)
+            if (length != null && length > MAX_IMAGE_BYTES) return@withContext null
             val resolved = Uri.parse(uri)
             val input = context.contentResolver.openInputStream(resolved) ?: return@withContext null
             val output = ByteArrayOutputStream()
@@ -74,6 +78,13 @@ class DocumentRepository(
         } catch (e: Exception) {
             null
         }
+    }
+
+    /** 读取 content URI 的声明长度（字节）；未知/失败返回 null。 */
+    private fun contentLength(context: Context, uri: String): Long? = try {
+        context.contentResolver.openAssetFileDescriptor(Uri.parse(uri), "r")?.use { it.length }
+    } catch (e: Exception) {
+        null
     }
 
     /** 把 content URI 复制到缓存临时文件，供需要可 seek 文件描述符的场景（PdfRenderer）使用；失败返回 null */
@@ -119,11 +130,27 @@ class DocumentRepository(
     private suspend fun readTextFile(context: Context, uri: String): String {
         return try {
             context.contentResolver.openInputStream(Uri.parse(uri))?.use {
-                it.readBytes().toString(Charsets.UTF_8).trim()
+                readBoundedUtf8(it, MAX_TEXT_BYTES)
             } ?: ""
         } catch (e: Exception) {
             ""
         }
+    }
+
+    /** 有界读取 UTF-8 文本：超过 [maxBytes] 截断，防大日志/大文件整读撑爆堆。 */
+    private fun readBoundedUtf8(input: java.io.InputStream, maxBytes: Long): String {
+        val out = ByteArrayOutputStream()
+        val buf = ByteArray(8192)
+        var total = 0L
+        while (total < maxBytes) {
+            val n = input.read(buf)
+            if (n < 0) break
+            val toWrite = minOf(n.toLong(), maxBytes - total).toInt()
+            out.write(buf, 0, toWrite)
+            total += toWrite
+            if (toWrite < n) break
+        }
+        return out.toString(Charsets.UTF_8.name()).trim()
     }
 
     /** PDF -> PdfRenderer 逐页渲染 -> 多模态模型提取文字。需当前模型支持多模态。 */
@@ -132,6 +159,7 @@ class DocumentRepository(
         if (!isMultimodalModel(cfg.model)) {
             throw Exception("PDF 提取需多模态模型，请在设置切换（如 GPT-4o / Qwen-VL）")
         }
+        contentLength(context, uri)?.let { if (it > MAX_PDF_BYTES) throw Exception("PDF 文件过大") }
         val tmp = copyUriToTempFile(context, uri, "doc.pdf") ?: throw Exception("无法读取 PDF 文件")
         try {
             val (images, truncated) = renderPdfPages(tmp, MAX_PDF_PAGES)
@@ -219,6 +247,15 @@ class DocumentRepository(
     companion object {
         /** PDF 提取页数上限（控制请求体积与成本） */
         private const val MAX_PDF_PAGES = 6
+
+        /** 纯文本附件读取上限（字节）：超过截断。 */
+        private const val MAX_TEXT_BYTES = 2L * 1024 * 1024
+
+        /** 图片附件大小上限（字节）：OCR/上传用，超大拒绝避免 base64 膨胀与内存峰值。 */
+        private const val MAX_IMAGE_BYTES = 20L * 1024 * 1024
+
+        /** PDF 附件大小上限（字节）：仅渲染前 6 页，超大 PDF 拷贝即浪费。 */
+        private const val MAX_PDF_BYTES = 50L * 1024 * 1024
 
         private val TEXT_EXTENSIONS = setOf(
             "txt", "md", "markdown", "csv", "json", "xml", "log",

@@ -1,7 +1,5 @@
 package com.rhodesisland.terminal.ui.settings
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -21,59 +19,66 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.rhodesisland.terminal.ui.theme.PrtsColors
+import com.rhodesisland.terminal.ui.glass.frostedGlass
+import com.rhodesisland.terminal.ui.theme.GlassShapes
 
 /**
- * 使用指南弹窗（迁移自网页版 #guide-overlay）。
- * 内容针对 Android 本地版调整：补充本地大模型、去掉 Live2D。
+ * 使用指南弹窗：玻璃全屏面板，可滚动正文。
  */
 @Composable
 fun GuideDialog(onDismiss: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         Surface(
             modifier = Modifier.fillMaxSize().padding(12.dp),
-            color = PrtsColors.BgSecondary,
-            shape = RoundedCornerShape(8.dp),
-            border = BorderStroke(1.dp, PrtsColors.AcrylicBorder),
+            color = androidx.compose.ui.graphics.Color.Transparent,
         ) {
-            Column(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(GlassShapes.sheet)
+                    .frostedGlass(
+                        GlassShapes.sheet,
+                        tint = scheme.surfaceContainerHigh.copy(alpha = 0.95f),
+                        shadowElevation = 0.dp,
+                    ),
+            ) {
                 // 顶部标题栏
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        "RHODES ISLAND // USER GUIDE",
-                        color = PrtsColors.Gold,
-                        fontSize = 13.sp,
-                        fontFamily = FontFamily.Monospace,
-                        letterSpacing = 2.sp,
+                        "使用指南",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = scheme.onSurface,
                         modifier = Modifier.weight(1f),
                     )
                     IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Filled.Close, contentDescription = "关闭", tint = PrtsColors.TextSecondary)
+                        Icon(Icons.Filled.Close, contentDescription = "关闭", tint = scheme.onSurfaceVariant)
                     }
                 }
-                HorizontalDivider(color = PrtsColors.AcrylicBorder)
+                HorizontalDivider(color = scheme.outline.copy(alpha = 0.5f))
 
-                // 正文（可滚动）
                 Column(
                     modifier = Modifier
                         .weight(1f)
@@ -83,14 +88,14 @@ fun GuideDialog(onDismiss: () -> Unit) {
                 ) {
                     GuideSection("🌐 应用简介") {
                         Text(
-                            "罗德岛通讯终端是一款明日方舟同人角色扮演聊天应用。你可以与罗德岛的干员们进行沉浸式对话，感受每位干员独特的性格与语气。",
-                            color = PrtsColors.TextSecondary, fontSize = 12.sp,
+                            "Chat by your side 是一款 AI 角色扮演聊天应用。你可以与 20 位精选人设进行沉浸式对话，感受每位角色独特的性格与语气。",
+                            color = scheme.onSurfaceVariant, fontSize = 12.sp, lineHeight = 17.sp,
                         )
                         Spacer(Modifier.height(8.dp))
-                        FeatureRow("💬", "角色扮演对话", "内置 20 位罗德岛干员，每位拥有独立人格设定与对话风格；支持新建 / 导入 / 导出自定义角色，基于 LLM 大语言模型驱动。")
+                        FeatureRow("💬", "角色扮演对话", "内置 20 位精选人设（男女混合），每位拥有独立人格设定与对话风格；支持新建 / 导入 / 导出自定义角色，基于 LLM 大语言模型驱动。")
                         FeatureRow("☁️", "云端 / 本地双引擎", "聊天页一键切换云端 API（SSE 流式）与本地 MNN 离线推理，对话记录按角色独立保存。")
                         FeatureRow("🎤", "TTS 语音合成", "角色消息可一键朗读，采用火山引擎豆包语音合成 + 声音复刻，支持中日双语。")
-                        FeatureRow("🎵", "背景音乐系统", "内置 185 首明日方舟主题曲与氛围音乐（网易云外链 + 本地资源），支持播放 / 拖动进度 / 音量 / EP 筛选 / 搜索 / 收藏 / 歌词。")
+                        FeatureRow("🎵", "音乐播放", "支持搜索网易云音乐在线播放，也可导入本地音乐文件；支持播放 / 进度拖动 / 音量 / 歌词显示。")
                         FeatureRow("📎", "文件 / 图片对话", "支持上传图片（最多 3 张）、PDF（逐页渲染提取文字，前 6 页）与纯文本文件，直连多模态模型识别。Office 文档需转为 PDF。")
                         FeatureRow("📱", "本地大模型", "可选 MNN 本地推理（Qwen / Llama / Gemma / DeepSeek-R1 等 14 个模型），无需联网与 API Key。")
                         FeatureRow("🧠", "深度思考", "展示模型推理过程并支持折叠；云端 Qwen / DeepSeek-R1 等可开关，本地推理模型同样支持。")
@@ -100,15 +105,15 @@ fun GuideDialog(onDismiss: () -> Unit) {
                     GuideSection("🔌 云端 API 接入") {
                         BodyText("云端对话需要你提供大语言模型 API。支持所有兼容 OpenAI Chat Completions 格式的服务，应用直连 SSE 流式，不经代理。")
                         StepTitle("方式一：DeepSeek（推荐，国内可用）")
-                        StepText("访问 platform.deepseek.com 注册 → 创建 API Key → 设置「模型商」选 DeepSeek → 填入 Key → 选择模型（V4-Flash / V4-Pro）→ 保存。")
+                        StepText("访问 platform.deepseek.com 注册 -> 创建 API Key -> 设置「模型商」选 DeepSeek -> 填入 Key -> 选择模型（V4-Flash / V4-Pro）-> 保存。")
                         StepTitle("方式二：OpenAI")
-                        StepText("访问 platform.openai.com 创建 Key 并充值 → 设置选 OpenAI → 填入 Key，可选 GPT-4o / 4.1 / o4 等。")
+                        StepText("访问 platform.openai.com 创建 Key 并充值 -> 设置选 OpenAI -> 填入 Key，可选 GPT-4o / 4.1 / o4 等。")
                         StepTitle("方式三：通义千问（阿里百炼）")
-                        StepText("访问 bailian.console.aliyun.com 开通 dashscope → 设置选「通义千问」→ 填入 API Key → 选择 Qwen3.7-Max / Plus 等。")
+                        StepText("访问 bailian.console.aliyun.com 开通 dashscope -> 设置选「通义千问」-> 填入 API Key -> 选择 Qwen3.7-Max / Plus 等。")
                         StepTitle("方式四：智谱 GLM")
-                        StepText("访问 open.bigmodel.cn → 设置选「智谱 GLM」→ 填入 API Key → 选择 GLM-5.2 / 5.1 等。")
+                        StepText("访问 open.bigmodel.cn -> 设置选「智谱 GLM」-> 填入 API Key -> 选择 GLM-5.2 / 5.1 等。")
                         StepTitle("自定义接口（硅基流动 / 月之暗面 等）")
-                        StepText("提供商选「自定义」→ 手动输入 API Base URL（如硅基流动 https://api.siliconflow.cn/v1）→ 填入 Key 与模型名，只要返回 OpenAI 格式的 /chat/completions 即可。")
+                        StepText("提供商选「自定义」-> 手动输入 API Base URL（如硅基流动 https://api.siliconflow.cn/v1）-> 填入 Key 与模型名，只要返回 OpenAI 格式的 /chat/completions 即可。")
                     }
 
                     GuideSection("📱 本地大模型（离线）") {
@@ -131,7 +136,7 @@ fun GuideDialog(onDismiss: () -> Unit) {
 
                     GuideSection("🔊 TTS 语音配置") {
                         BodyText("TTS 采用火山引擎豆包语音合成，通过内置 CloudRun 代理转发请求，无需配置域名白名单。")
-                        StepText("1. 注册火山引擎账号 → 开通「语音合成」服务，获取 API Key。")
+                        StepText("1. 注册火山引擎账号 -> 开通「语音合成」服务，获取 API Key。")
                         StepText("2. 在设置 TTS 区域填入 API Key 并保存。")
                         StepText("3. 去火山引擎「声音复刻」克隆角色声音，获得 S_xxx 格式音色 ID。")
                         StepText("4. 在「角色音色映射」区域为每个角色分别填入中 / 日音色 ID，留空则用默认音色。")
@@ -139,7 +144,7 @@ fun GuideDialog(onDismiss: () -> Unit) {
                     }
 
                     GuideSection("📖 使用技巧") {
-                        TipRow("切换角色", "点击聊天顶部头像 / 干员名进入干员选择页切换角色，对话记录按角色独立保存。")
+                        TipRow("切换角色", "点击聊天顶部头像 / 角色名进入角色选择页切换角色，对话记录按角色独立保存。")
                         TipRow("云端 / 本地", "聊天顶部「☁ 云端 / 📱 本地」分段切换推理引擎，本地模式离线运行并显示性能浮窗。")
                         TipRow("会话管理", "点击顶部会话图标打开对话记录抽屉，可新建 / 重命名 / 删除对话，每个角色支持多个会话。")
                         TipRow("深度思考", "顶部 🧠 开关展示推理过程；思考段流式展开后自动折叠，可手动点开查看。")
@@ -148,21 +153,20 @@ fun GuideDialog(onDismiss: () -> Unit) {
                         TipRow("上传文件", "输入框 + 添加图片（最多 3 张）、📎 添加文件；图片需多模态模型，PDF 自动提取前 6 页，Office 需转 PDF。")
                         TipRow("自定义背景", "设置页「自定义背景图片」可从相册选最多 20 张图片作为聊天背景轮播。")
                         TipRow("代码与公式", "回复中的代码块自动语法高亮并可复制；支持渲染 LaTeX 数学公式（行内 $...$ 与块级 $$...$$）。")
-                        TipRow("自定义角色", "干员页「新建」可创建自定义角色（含立绘上传与人格设定），支持导入 / 导出 JSON。")
+                        TipRow("自定义角色", "角色页「新建」可创建自定义角色（含头像与人格设定），支持导入 / 导出 JSON。")
                     }
                 }
 
-                // 底部关闭
-                HorizontalDivider(color = PrtsColors.AcrylicBorder)
+                HorizontalDivider(color = scheme.outline.copy(alpha = 0.5f))
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(12.dp),
                     horizontalArrangement = Arrangement.End,
                 ) {
                     Button(
                         onClick = onDismiss,
-                        colors = ButtonDefaults.buttonColors(containerColor = PrtsColors.Gold.copy(alpha = 0.15f)),
+                        colors = ButtonDefaults.buttonColors(containerColor = scheme.primary),
                     ) {
-                        Text("关闭指南", color = PrtsColors.Gold)
+                        Text("关闭指南", color = scheme.onPrimary)
                     }
                 }
             }
@@ -172,52 +176,56 @@ fun GuideDialog(onDismiss: () -> Unit) {
 
 @Composable
 private fun GuideSection(title: String, content: @Composable () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(title, color = PrtsColors.GoldBright, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        Text(title, color = scheme.onSurface, fontSize = 15.sp, fontWeight = FontWeight.Bold)
         content()
     }
 }
 
 @Composable
 private fun FeatureRow(icon: String, title: String, desc: String) {
+    val scheme = MaterialTheme.colorScheme
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
         verticalAlignment = Alignment.Top,
     ) {
         Text(icon, fontSize = 14.sp, modifier = Modifier.padding(end = 8.dp))
         Column {
-            Text(title, color = PrtsColors.Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            Text(desc, color = PrtsColors.TextSecondary, fontSize = 11.sp, lineHeight = 16.sp)
+            Text(title, color = scheme.primary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text(desc, color = scheme.onSurfaceVariant, fontSize = 11.sp, lineHeight = 16.sp)
         }
     }
 }
 
 @Composable
 private fun BodyText(text: String) {
-    Text(text, color = PrtsColors.TextSecondary, fontSize = 12.sp, lineHeight = 17.sp)
+    Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, lineHeight = 17.sp)
 }
 
 @Composable
 private fun StepTitle(text: String) {
-    Text(text, color = PrtsColors.Gold, fontSize = 12.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 4.dp))
+    Text(text, color = MaterialTheme.colorScheme.primary, fontSize = 12.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 4.dp))
 }
 
 @Composable
 private fun StepText(text: String) {
-    Text(text, color = PrtsColors.TextSecondary, fontSize = 11.sp, lineHeight = 16.sp, modifier = Modifier.padding(start = 8.dp))
+    Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp, lineHeight = 16.sp, modifier = Modifier.padding(start = 8.dp))
 }
 
 @Composable
 private fun TipRow(title: String, desc: String) {
+    val scheme = MaterialTheme.colorScheme
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.Top) {
-        Text("•", color = PrtsColors.Gold, fontSize = 12.sp, modifier = Modifier.padding(end = 6.dp))
+        Text("•", color = scheme.primary, fontSize = 12.sp, modifier = Modifier.padding(end = 6.dp))
         Text(
             buildAnnotatedString {
-                withStyle(SpanStyle(color = PrtsColors.Gold, fontWeight = FontWeight.Bold)) { append("$title：") }
-                withStyle(SpanStyle(color = PrtsColors.TextSecondary)) { append(desc) }
+                withStyle(SpanStyle(color = scheme.primary, fontWeight = FontWeight.Bold)) { append("$title：") }
+                withStyle(SpanStyle(color = scheme.onSurfaceVariant)) { append(desc) }
             },
             fontSize = 11.sp,
             lineHeight = 16.sp,
         )
     }
 }
+

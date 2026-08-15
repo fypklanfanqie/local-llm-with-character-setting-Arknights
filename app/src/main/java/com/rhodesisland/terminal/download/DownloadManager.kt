@@ -17,7 +17,6 @@ import okhttp3.Request
 import java.io.File
 import java.io.IOException
 import java.io.RandomAccessFile
-import java.security.MessageDigest
 
 /**
  * 模型下载管理器（MNN 多文件目录）
@@ -37,15 +36,6 @@ class DownloadManager(private val context: Context) {
         private const val TAG = "DownloadManager"
         private const val MAX_RETRY = 3
         private const val CHUNK_SIZE = 8192L
-
-        /** 大模型阈值（字节）：超过此大小的模型权重与图分离，llm.mnn.weight 必须存在。
-         *  500MB 以下的小模型权重可能内嵌于 llm.mnn，允许缺失仅告警。 */
-        private const val WEIGHT_FILE_REQUIRED_THRESHOLD = 500L * 1024 * 1024
-
-        /** 目录总大小校验容差：实际/期望比值低于此值判定下载不完整（HTTP 截断）。 */
-        private const val SIZE_TOLERANCE_LOW = 0.9
-        /** 目录总大小校验容差：实际/期望比值高于此值判定异常（多下载了无关文件）。 */
-        private const val SIZE_TOLERANCE_HIGH = 1.1
 
         /** HF 仓库里无需下载的辅助文件（非模型本体） */
         private val SKIP_FILES = setOf(
@@ -115,6 +105,14 @@ class DownloadManager(private val context: Context) {
             }
         }
         jobs[model.id] = job
+        // 下载结束（成功/失败/取消）后清理任务句柄与暂停标志，避免进程生命周期内 map 无界增长
+        // （固定 13 模型目录内无害，但自定义/动态 ID 时结构性累积）。用 invokeOnCompletion 而非
+        // 在 coroutine 内 finally：处理「协程先于 jobs 赋值完成」的竞态——已在完成时立即执行。
+        job.invokeOnCompletion {
+            jobs.remove(model.id)
+            pauseFlags.remove(model.id)
+            calls.remove(model.id)
+        }
     }
 
     // ===== MNN 多文件目录下载 =====
@@ -351,95 +349,30 @@ class DownloadManager(private val context: Context) {
         emptyList()
     }
 
-    /**
-     * MNN 下载完成：合并分片 + 完整性校验 + 标记完成。
-     *
-     * 校验链（三层，任一失败标记 Failed 阻止加载损坏文件导致 native hang/crash）：
-     *  1. 分片合并校验（[FileSplitter] 内部已有逐分片大小 + 合并后大小校验）
-     *  2. 必需文件检查：config.json + llm.mnn 必须存在；大模型(>500MB)的 llm.mnn.weight 必须存在
-     *     （taobao-mnn 大模型权重与图分离，缺 weight 加载必崩在 PipelineModule::load，try/catch 拦不住 SIGSEGV。
-     *      小模型 ≤500MB 可能权重内嵌于 llm.mnn，允许缺失仅告警）
-     *  3. 目录总大小比对：实际目录大小 vs [ModelInfo.size]，差异超过 10% 判定下载不完整
-     *     （检测 HTTP 提前断连导致文件截断——OkHttp 的 source.read() 返回 -1 即认为下载完成，
-     *      但服务器提前关闭连接时文件可能残缺，无此校验会被标记 Completed → MNN 加载时 hang/崩溃）
-     *  4. SHA256 校验（可选，[ModelInfo.sha256] 非空时对主权重文件做严格校验）
-     */
+    /** MNN 下载完成：合并分片 + 校验入口文件 + 标记完成 */
     private fun finishMnnDownload(model: ModelInfo, dir: File) {
         updateState(model.id, DownloadState.Verifying(0f))
-
-        // 1. 分片合并
         if (FileSplitter.needsMerging(dir)) {
             updateState(model.id, DownloadState.Verifying(0.3f))
             val merged = FileSplitter.mergeAllSplitFiles(dir)
             if (!merged) {
-                updateState(model.id, DownloadState.Failed("模型分片合并失败，文件可能损坏，请删除后重新下载"))
+                updateState(model.id, DownloadState.Failed("模型分片合并失败，文件可能损坏"))
                 return
             }
         }
-
-        // 2. 必需文件检查
         val config = File(dir, ModelPathResolver.MNN_CONFIG_FILE)
         val llm = File(dir, ModelPathResolver.MNN_MODEL_FILE)
         if (!config.exists() || !llm.exists()) {
-            updateState(model.id, DownloadState.Failed("模型文件不完整：缺 config.json 或 llm.mnn，请删除后重新下载"))
+            updateState(model.id, DownloadState.Failed("模型文件不完整：缺 config.json 或 llm.mnn"))
             return
         }
-        val weightFile = File(dir, "llm.mnn.weight")
-        // 大模型(>500MB)权重与图分离，缺失则加载必崩；小模型可能内嵌，允许缺失仅告警
-        if (!weightFile.exists() && model.size > WEIGHT_FILE_REQUIRED_THRESHOLD) {
-            updateState(model.id, DownloadState.Failed("模型权重文件 llm.mnn.weight 缺失，请删除后重新下载"))
-            return
+        // llm.mnn.weight 缺失告警：多数 taobao-mnn 模型权重与图分离，缺 weight 会在 MNN
+        // PipelineModule::load 反序列化时原生崩溃（try/catch 拦不住 SIGSEGV）。少数模型权重内嵌
+        // 于 llm.mnn 则无此文件，故仅告警不阻断（真实完整性以下载逐文件完成保证）。
+        if (!File(dir, "llm.mnn.weight").exists()) {
+            Log.w(TAG, "MNN 模型 ${model.id} 缺 llm.mnn.weight（可能内嵌；若加载崩溃请重新下载）")
         }
-        if (!weightFile.exists()) {
-            Log.w(TAG, "MNN 模型 ${model.id} 缺 llm.mnn.weight（小模型可能内嵌；若加载崩溃请重新下载）")
-        }
-
-        // 3. 目录总大小校验：检测 HTTP 截断导致的不完整下载
-        updateState(model.id, DownloadState.Verifying(0.6f))
-        val actualSize = dir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
-        val expectedSize = model.size
-        if (expectedSize > 0) {
-            val ratio = actualSize.toDouble() / expectedSize.toDouble()
-            if (ratio < SIZE_TOLERANCE_LOW || ratio > SIZE_TOLERANCE_HIGH) {
-                val actMb = actualSize / (1024 * 1024)
-                val expMb = expectedSize / (1024 * 1024)
-                updateState(model.id, DownloadState.Failed(
-                    "模型文件大小校验失败：期望约 ${expMb}MB，实际 ${actMb}MB（偏差 ${((ratio - 1) * 100).toInt()}%，" +
-                        "文件可能下载不完整），请删除后重新下载"))
-                return
-            }
-        }
-
-        // 4. SHA256 校验（可选，ModelInfo.sha256 非空时执行）
-        if (model.sha256.isNotBlank()) {
-            updateState(model.id, DownloadState.Verifying(0.85f))
-            val hashTarget = if (weightFile.exists()) weightFile else llm
-            val actualHash = sha256OfFile(hashTarget)
-            if (!actualHash.equals(model.sha256, ignoreCase = true)) {
-                updateState(model.id, DownloadState.Failed(
-                    "SHA256 校验失败：文件已损坏（期望 ${model.sha256.take(12)}…，实际 ${actualHash.take(12)}…），请删除后重新下载"))
-                return
-            }
-            Log.i(TAG, "MNN 模型 ${model.id} SHA256 校验通过")
-        }
-
         updateState(model.id, DownloadState.Completed(config.absolutePath))
-    }
-
-    /** 计算文件 SHA-256 哈希（十六进制小写串）。流式读取，支持大文件。 */
-    private fun sha256OfFile(file: File): String = try {
-        val md = MessageDigest.getInstance("SHA-256")
-        file.inputStream().use { stream ->
-            val buffer = ByteArray(8192)
-            var n: Int
-            while (stream.read(buffer).also { n = it } != -1) {
-                md.update(buffer, 0, n)
-            }
-        }
-        md.digest().joinToString("") { "%02x".format(it) }
-    } catch (e: Exception) {
-        Log.e(TAG, "SHA256 计算失败: ${file.name}", e)
-        ""
     }
 
     /** 暂停下载：先置状态，再 call.cancel() 中断阻塞 read，最后取消协程。

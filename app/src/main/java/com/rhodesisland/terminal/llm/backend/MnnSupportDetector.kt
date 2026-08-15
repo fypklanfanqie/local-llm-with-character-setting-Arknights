@@ -1,7 +1,7 @@
 package com.rhodesisland.terminal.llm.backend
 
 import android.content.Context
-import java.io.File
+import com.chatbyyourside.llm.backend.MnnBridge
 
 /**
  * MNN 后端支持检测
@@ -17,25 +17,18 @@ import java.io.File
  */
 object MnnSupportDetector {
 
-    /** QNN NPU 是否就绪：骁龙旗舰 + QNN 运行时库已打包 + **非锁定量产设备**。
+    /** QNN NPU 是否就绪（标准构建，Task 11）：恒 false。
      *
-     * 直接 QNN HTP 需 app 访问 `/dev/fastrpc-cdsp`；锁定量产设备（bootloader 锁 + verified boot
-     * green + user ROM + SELinux 强制）的 SELinux 策略拒绝 untrusted_app（乃至 priv_app）打开该
-     * 设备 -> QNN transport 建不起来（`QNN_BACKEND_ERROR_CANNOT_INITIALIZE`=4000）-> deviceCreate
-     * 14001 -> MNN 原生崩在 `PipelineModule::load`（SIGSEGV 不可 catch，回退链失效）。
-     * 故锁定机直接判不可用，避免硬崩；解锁/Root（SELinux 宽容）机才放行（UI 另提示需关 SELinux）。
-     * 详见 memory `mnn-qnn-htp-selinux-blocked`。
+     * 标准构建不含 QNN 运行时（libQnn*.so 已从打包排除），且锁定量产设备 SELinux 拒绝 app 访问
+     * `/dev/fastrpc-cdsp`（QNN 直接 HTP 原生崩在 PipelineModule::load，SIGSEGV 不可 catch）。
+     * 故标准构建不可选择/自动启用 QNN；legacy `MNN_NPU` 偏好由 resolver 解析为 CPU 并带
+     * `QNN_UNAVAILABLE_IN_STANDARD_BUILD` 降级原因。未来实验 flavor 可在注入精确 SoC/运行时/模型矩阵
+     * 后覆写（保留 [NpuSupportDetector] 检测结构）。详见 memory `mnn-qnn-htp-selinux-blocked`。
      */
-    fun qnnReady(context: Context): Boolean {
-        val info = NpuSupportDetector.detect(context)
-        if (!info.supported) return false
-        val nativeDir = context.applicationInfo?.nativeLibraryDir ?: return false
-        if (!File(nativeDir, "libQnnHtp.so").exists() ||
-            !File(nativeDir, "libQnnSystem.so").exists()) return false
-        // 锁定量产设备 SELinux 拒绝 CDSP 访问，QNN 必崩 -> 直接判不可用
-        if (isBootloaderLocked()) return false
-        return true
-    }
+    fun qnnReady(context: Context): Boolean = false
+
+    /** 标准构建 QNN 不可用原因（供 UI/诊断展示）。 */
+    const val QNN_STANDARD_BUILD_UNAVAILABLE = "标准构建不含 QNN 运行时，NPU 不可用（QNN 仅实验 flavor 支持）"
 
     // ===== OpenCL（GPU）可用性 =====
     // MNN 的 OpenCL 后端在运行时 dlopen 系统 `libOpenCL.so`。锁定量产设备（如本机小米 Adreno）的

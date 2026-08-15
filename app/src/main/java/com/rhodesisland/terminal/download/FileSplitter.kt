@@ -7,6 +7,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
+import java.security.MessageDigest
 
 /**
  * 大文件分片合并工具（移植自 MNN `FileSplitter.kt`，Gson -> kotlinx.serialization）。
@@ -111,7 +112,7 @@ object FileSplitter {
         if (!chunksDir.exists()) return false
         val sortedChunks = splitInfo.chunks.sortedBy { it.chunkIndex }
 
-        // 预校验所有分片存在且大小匹配
+        // 预校验所有分片存在且大小匹配；有 checksum 时再做 SHA-256 校验（Task 12 Step 3）。
         var totalExpected = 0L
         for (chunk in sortedChunks) {
             val chunkFile = File(chunksDir, chunk.chunkFileName)
@@ -122,6 +123,14 @@ object FileSplitter {
             if (chunkFile.length() != chunk.chunkSize) {
                 Log.e(TAG, "分片大小不符: ${chunk.chunkFileName} (期望 ${chunk.chunkSize}, 实际 ${chunkFile.length()})")
                 return false
+            }
+            val expected = chunk.checksum
+            if (!expected.isNullOrBlank()) {
+                val actual = sha256(chunkFile)
+                if (!actual.equals(expected, ignoreCase = true)) {
+                    Log.e(TAG, "分片校验和不符: ${chunk.chunkFileName} (期望 $expected, 实际 $actual)")
+                    return false
+                }
             }
             totalExpected += chunk.chunkSize
         }
@@ -167,4 +176,15 @@ object FileSplitter {
             }
         }
     }
+    /** 文件 SHA-256（hex 小写）；用于合并前分片校验（Task 12 Step 3）。 */
+    fun sha256(file: File): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { ins ->
+            val buf = ByteArray(65536)
+            var n: Int
+            while (ins.read(buf).also { n = it } != -1) digest.update(buf, 0, n)
+        }
+        return digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
+    }
+
 }

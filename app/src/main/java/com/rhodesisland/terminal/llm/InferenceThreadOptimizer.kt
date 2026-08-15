@@ -1,6 +1,7 @@
 package com.rhodesisland.terminal.llm
 
 import android.util.Log
+import com.chatbyyourside.llm.CpuSysBridge
 
 /**
  * 推理线程亲和性 / CPU 拓扑探测

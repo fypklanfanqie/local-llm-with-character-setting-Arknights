@@ -47,13 +47,40 @@ data class ModelInfo(
     val tags: List<String> = emptyList(),
     val vendor: String = "",
     val recommended: Boolean = false,
-    /** 模型主权重文件（llm.mnn.weight 或 llm.mnn）的 SHA-256 哈希。留空则跳过 SHA256 校验，
-     *  仅靠目录总大小比对做完整性检查（[DownloadManager.finishMnnDownload]）。
-     *  从 HuggingFace/ModelScope 仓库文件页可获取，填入后下载完成会做严格校验。 */
-    val sha256: String = "",
+    /**
+     * 模型总参数量（B，十亿）。MoE 模型填**总参数量**（如 Qwen3.5-35B-A3B 填 35.0），
+     * 不是激活参数量——权重驻留与内存压力更接近总参数量，AUTO 的 GPU 门槛按此判定。
+     * null = 未知（自定义/旧元数据）；AUTO 下安全默认 CPU。
+     */
+    val totalParamsB: Float? = null,
 ) {
     /** 是否带 NPU 标签（MNN 模型市场里 QNN 预编译变体） */
     val isNpuVariant: Boolean get() = tags.any { it.equals("NPU", ignoreCase = true) }
+
+    /** AUTO 是否可用 GPU：总参数量已知且严格 `> [AUTO_GPU_THRESHOLD_B]`；未知一律 CPU。 */
+    val autoBackendModelClass: AutoBackendModelClass
+        get() = when {
+            totalParamsB == null -> AutoBackendModelClass.CPU_UNKNOWN_PARAMETERS
+            totalParamsB > AUTO_GPU_THRESHOLD_B -> AutoBackendModelClass.GPU_ELIGIBLE
+            else -> AutoBackendModelClass.CPU_BELOW_OR_EQUAL_THRESHOLD
+        }
+
+    companion object {
+        /** AUTO 大模型 GPU 门槛：总参数量严格大于 7B 才默认启用 GPU；恰好 7B 走 CPU。 */
+        const val AUTO_GPU_THRESHOLD_B = 7.0f
+    }
+}
+
+/** AUTO 按模型大小对 GPU 的启用分类（[ModelInfo.autoBackendModelClass]）。 */
+enum class AutoBackendModelClass {
+    /** 总参数量 > 7B：AUTO 可走 GPU 优先（健康时）。 */
+    GPU_ELIGIBLE,
+
+    /** 总参数量 <= 7B：AUTO 一律 CPU。 */
+    CPU_BELOW_OR_EQUAL_THRESHOLD,
+
+    /** 参数元数据未知：AUTO 安全默认 CPU。 */
+    CPU_UNKNOWN_PARAMETERS,
 }
 
 /**
@@ -115,22 +142,22 @@ val DEFAULT_MNN_MODELS: List<ModelInfo> = listOf(
     // 下载时按 ModelScope 国内 -> hf-mirror -> HuggingFace 多镜像回退（符合「国内镜像优先」）。
     // 注：原清单里的「Claude-4.6-Opus-Reasoning-Dist」蒸馏变体三源均 404 不存在，已移除；
     // 推理模型改用下方真实可下的 DeepSeek-R1 / Qwen3-Think 系列。
-    qwen35("Qwen3.5-0.8B-MNN", "Qwen3.5 0.8B", "MNN 优化版，专为移动端或嵌入式设备设计，体积小、效率高。", 522.28 * MIB),
-    qwen35("Qwen3.5-2B-MNN", "Qwen3.5 2B", "MNN 优化版，适合中端设备运行。", 1.29 * GIB, recommended = true),
-    qwen35("Qwen3.5-4B-MNN", "Qwen3.5 4B", "MNN 优化版，兼顾性能与移动端适配。", 2.65 * GIB, recommended = true),
-    qwen35("Qwen3.5-9B-MNN", "Qwen3.5 9B", "MNN 优化版，适合高性能移动设备或边缘计算场景。", 6.78 * GIB),
-    qwen35("Qwen3.5-35B-A3B-MNN", "Qwen3.5 35B-A3B", "超大参数 MNN 优化模型，可能采用稀疏化或量化技术，适用于高端设备或服务器部署。", 21.23 * GIB),
+    qwen35("Qwen3.5-0.8B-MNN", "Qwen3.5 0.8B", "MNN 优化版，专为移动端或嵌入式设备设计，体积小、效率高。", 522.28 * MIB, totalParamsB = 0.8f),
+    qwen35("Qwen3.5-2B-MNN", "Qwen3.5 2B", "MNN 优化版，适合中端设备运行。", 1.29 * GIB, totalParamsB = 2.0f, recommended = true),
+    qwen35("Qwen3.5-4B-MNN", "Qwen3.5 4B", "MNN 优化版，兼顾性能与移动端适配。", 2.65 * GIB, totalParamsB = 4.0f, recommended = true),
+    qwen35("Qwen3.5-9B-MNN", "Qwen3.5 9B", "MNN 优化版，适合高性能移动设备或边缘计算场景。", 6.78 * GIB, totalParamsB = 9.0f),
+    qwen35("Qwen3.5-35B-A3B-MNN", "Qwen3.5 35B-A3B", "超大参数 MNN 优化模型，可能采用稀疏化或量化技术，适用于高端设备或服务器部署。", 21.23 * GIB, totalParamsB = 35.0f),
     // 推理模型（Think）：均为国内 ModelScope+hf-mirror 双源可下的真实 MNN 推理模型，支持断点续传。
     // 字节数取自 ModelScope API 实测（sizeGb*1e9 精确还原，仅用于展示与剩余空间判断）。
-    mnn("DeepSeek-R1-1.5B-Qwen-MNN", "DeepSeek", 1.020644886, listOf("Think")),
-    mnn("Qwen3-4B-MNN", "Qwen", 2.713766729, listOf("Think")),
-    mnn("DeepSeek-R1-7B-Qwen-MNN", "DeepSeek", 4.647473365, listOf("Think")),
-    mnn("DeepSeek-R1-0528-Qwen3-8B-MNN", "DeepSeek", 5.507637931, listOf("Think")),
+    mnn("DeepSeek-R1-1.5B-Qwen-MNN", "DeepSeek", 1.020644886, listOf("Think"), totalParamsB = 1.5f),
+    mnn("Qwen3-4B-MNN", "Qwen", 2.713766729, listOf("Think"), totalParamsB = 4.0f),
+    mnn("DeepSeek-R1-7B-Qwen-MNN", "DeepSeek", 4.647473365, listOf("Think"), totalParamsB = 7.0f),
+    mnn("DeepSeek-R1-0528-Qwen3-8B-MNN", "DeepSeek", 5.507637931, listOf("Think"), totalParamsB = 8.0f),
     // 其他厂商
-    mnn("Llama-3.2-1B-Instruct-MNN", "Llama", 1.0, listOf("Chat")),
-    mnn("Llama-3.2-3B-Instruct-MNN", "Llama", 3.0, listOf("Chat")),
-    mnn("gemma-2-2b-it-MNN", "Gemma", 2.0, listOf("Chat")),
-    mnn("SmolLM2-360M-Instruct-MNN", "Smol", 0.36, listOf("Chat")),
+    mnn("Llama-3.2-1B-Instruct-MNN", "Llama", 1.0, listOf("Chat"), totalParamsB = 1.0f),
+    mnn("Llama-3.2-3B-Instruct-MNN", "Llama", 3.0, listOf("Chat"), totalParamsB = 3.0f),
+    mnn("gemma-2-2b-it-MNN", "Gemma", 2.0, listOf("Chat"), totalParamsB = 2.0f),
+    mnn("SmolLM2-360M-Instruct-MNN", "Smol", 0.36, listOf("Chat"), totalParamsB = 0.36f),
 )
 
 /** 2 进制 MiB / GiB（const 编译期常量，无顶层 val 初始化顺序问题），用于 [qwen35] 按标注
@@ -146,6 +173,7 @@ private fun qwen35(
     description: String,
     sizeBytes: Double,
     recommended: Boolean = false,
+    totalParamsB: Float,
 ): ModelInfo = ModelInfo(
     id = id,
     name = displayName,
@@ -158,19 +186,27 @@ private fun qwen35(
     tags = listOf("Think", "Vision"),
     vendor = "Qwen",
     recommended = recommended,
+    totalParamsB = totalParamsB,
 )
 
-private fun mnn(modelName: String, vendor: String, sizeGb: Double, tags: List<String>, recommended: Boolean = false): ModelInfo =
-    ModelInfo(
-        id = modelName,
-        name = modelName.removeSuffix("-MNN").replace("-", " "),
-        description = "$vendor · ${tags.joinToString("/")}",
-        size = (sizeGb * 1_000_000_000L).toLong(),
-        version = "mnn",
-        format = ModelFormat.MNN,
-        repo = "taobao-mnn/$modelName",
-        altRepos = listOf("MNN/$modelName"),
-        tags = tags,
-        vendor = vendor,
-        recommended = recommended,
-    )
+private fun mnn(
+    modelName: String,
+    vendor: String,
+    sizeGb: Double,
+    tags: List<String>,
+    recommended: Boolean = false,
+    totalParamsB: Float,
+): ModelInfo = ModelInfo(
+    id = modelName,
+    name = modelName.removeSuffix("-MNN").replace("-", " "),
+    description = "$vendor · ${tags.joinToString("/")}",
+    size = (sizeGb * 1_000_000_000L).toLong(),
+    version = "mnn",
+    format = ModelFormat.MNN,
+    repo = "taobao-mnn/$modelName",
+    altRepos = listOf("MNN/$modelName"),
+    tags = tags,
+    vendor = vendor,
+    recommended = recommended,
+    totalParamsB = totalParamsB,
+)

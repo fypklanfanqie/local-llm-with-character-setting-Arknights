@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import java.io.File
 import java.io.IOException
+import kotlin.random.Random
 
 /**
  * 音频管理器
@@ -31,6 +32,13 @@ class AudioManager(
 
     companion object {
         private const val TAG = "AudioManager"
+
+        /** 顺序播放：单曲播完停止。 */
+        const val REPEAT_SEQUENTIAL = 0
+        /** 列表循环：单曲播完自动切下一首，末尾回到开头。 */
+        const val REPEAT_ALL = 1
+        /** 单曲循环：当前曲目无限循环（ExoPlayer REPEAT_MODE_ONE）。 */
+        const val REPEAT_ONE = 2
     }
 
     // ===== 角色语音 =====
@@ -104,7 +112,11 @@ class AudioManager(
     private var bgmPlayer: ExoPlayer? = null
     private var bgmIndex = 0
     private var bgmPlaylist: List<BgmTrack> = emptyList()
-    private var repeatMode = 0  // 0=列表循环, 1=单曲循环
+    private var repeatMode = REPEAT_SEQUENTIAL  // 0=顺序播放, 1=列表循环, 2=单曲循环
+
+    /** 随机播放开关（手动 next/prev 随机选索引实现，不依赖 ExoPlayer shuffleMode） */
+    private val _isShuffle = MutableStateFlow(false)
+    val isShuffleFlow: StateFlow<Boolean> = _isShuffle
 
     /** 最近一次错误（资源缺失/加载失败），供 UI 提示 */
     private val _error = MutableStateFlow<String?>(null)
@@ -142,7 +154,7 @@ class AudioManager(
                 .build()
             // 列表循环用 REPEAT_MODE_OFF（播完触发 STATE_ENDED 后手动切下一首）；
             // 单曲循环用 REPEAT_MODE_ONE（ExoPlayer 自身循环，不会进入 STATE_ENDED）
-            bgmPlayer?.repeatMode = if (repeatMode == 1) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
+            bgmPlayer?.repeatMode = if (repeatMode == REPEAT_ONE) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
             bgmPlayer?.addListener(object : Player.Listener {
                 override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                     Log.w(TAG, "BGM play error: ${error.message}")
@@ -154,8 +166,8 @@ class AudioManager(
                 }
 
                 override fun onPlaybackStateChanged(state: Int) {
-                    // 列表循环模式下，当前曲目自然播完则自动切到下一首
-                    if (state == Player.STATE_ENDED && repeatMode == 0 && bgmPlaylist.isNotEmpty()) {
+                    // 列表循环模式下，当前曲目自然播完则自动切到下一首（shuffle 时 nextTrack 随机选）
+                    if (state == Player.STATE_ENDED && repeatMode == REPEAT_ALL && bgmPlaylist.isNotEmpty()) {
                         nextTrack(bgmPlaylist)?.let { bgmPlayer?.play() }
                     }
                 }
@@ -174,7 +186,7 @@ class AudioManager(
         _currentIndex.value = actualIndex
         val track = playlist[actualIndex]
         if (track.file.isBlank()) {
-            _error.value = "音频资源缺失，请将 ${track.name} 的 mp3 放入 assets/music/ 或配置 CDN"
+            _error.value = "音频资源缺失：${track.name} 暂无可用音频源，请在音乐页导入本地文件或检查网络"
             return null
         }
 
@@ -205,9 +217,57 @@ class AudioManager(
         }
     }
 
-    fun prevTrack(playlist: List<BgmTrack>): BgmTrack? = loadTrack(bgmIndex - 1, playlist)
+    fun prevTrack(playlist: List<BgmTrack>): BgmTrack? {
+        if (playlist.isEmpty()) return null
+        val index = if (_isShuffle.value && playlist.size > 1) randomIndex(playlist.size) else bgmIndex - 1
+        return loadTrack(index, playlist)
+    }
 
-    fun nextTrack(playlist: List<BgmTrack>): BgmTrack? = loadTrack(bgmIndex + 1, playlist)
+    fun nextTrack(playlist: List<BgmTrack>): BgmTrack? {
+        if (playlist.isEmpty()) return null
+        val index = if (_isShuffle.value && playlist.size > 1) randomIndex(playlist.size) else bgmIndex + 1
+        return loadTrack(index, playlist)
+    }
+
+    /** 随机一个 != 当前下标的索引（shuffle 切歌用）。 */
+    private fun randomIndex(size: Int): Int {
+        var r = bgmIndex
+        while (r == bgmIndex && size > 1) r = Random.nextInt(size)
+        return r
+    }
+
+    /**
+     * 播放列表增删后重映射当前下标：
+     * - 列表空 → 暂停并复位；
+     * - 当前曲 key 仍在 → 仅重映射下标，不打断播放；
+     * - 当前曲被删 → 加载邻近曲，若之前在播放则继续播放。
+     */
+    fun syncIndex(newPlaylist: List<BgmTrack>) {
+        if (newPlaylist.isEmpty()) {
+            bgmPlaylist = emptyList()
+            bgmIndex = 0
+            _currentIndex.value = 0
+            bgmPlayer?.pause()
+            return
+        }
+        val oldKey = bgmPlaylist.getOrNull(bgmIndex)?.key
+        bgmPlaylist = newPlaylist
+        val newIndex = oldKey?.let { key -> newPlaylist.indexOfFirst { it.key == key }.takeIf { it >= 0 } }
+        if (newIndex != null) {
+            bgmIndex = newIndex
+            _currentIndex.value = newIndex
+            return
+        }
+        val wasPlaying = bgmPlayer?.isPlaying == true
+        val fallback = bgmIndex.coerceIn(0, newPlaylist.lastIndex)
+        loadTrack(fallback, newPlaylist)?.let { if (wasPlaying) bgmPlayer?.play() }
+    }
+
+    fun setShuffle(enabled: Boolean) {
+        _isShuffle.value = enabled
+    }
+
+    fun isShuffleEnabled(): Boolean = _isShuffle.value
 
     fun seekTo(position: Long) {
         bgmPlayer?.seekTo(position)
@@ -239,8 +299,8 @@ class AudioManager(
 
     fun setRepeatMode(mode: Int) {
         repeatMode = mode
-        // 列表循环用 REPEAT_MODE_OFF（播完触发 STATE_ENDED 手动切歌）；单曲循环用 REPEAT_MODE_ONE
-        bgmPlayer?.repeatMode = if (mode == 1) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
+        // 单曲循环用 REPEAT_MODE_ONE（ExoPlayer 自身循环）；顺序/列表循环用 REPEAT_MODE_OFF（列表循环由 STATE_ENDED 手动切歌）
+        bgmPlayer?.repeatMode = if (mode == REPEAT_ONE) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
     }
 
     fun getRepeatMode(): Int = repeatMode

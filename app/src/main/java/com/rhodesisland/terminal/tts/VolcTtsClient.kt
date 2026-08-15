@@ -3,6 +3,8 @@ package com.rhodesisland.terminal.tts
 import android.util.Base64
 import com.rhodesisland.terminal.data.model.TtsConfig
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -16,6 +18,8 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.ResponseBody
+import java.io.ByteArrayOutputStream
 import java.util.UUID
 
 /**
@@ -134,18 +138,23 @@ class VolcTtsClient(
             }
             .build()
 
+        // 协程取消时中断阻塞的 OkHttp 合成：否则 ttsJob 取消后合成仍在跑直到读超时。
+        val call = client.newCall(request)
+        currentCoroutineContext()[Job]?.invokeOnCompletion { runCatching { call.cancel() } }
+
         // 执行请求（OkHttp execute 是阻塞的，在 IO 调度器运行）
-        val response = client.newCall(request).execute()
-        val responseBytes = response.body?.bytes()
-            ?: throw Exception("TTS 代理返回空响应体")
-
-        if (!response.isSuccessful) {
-            val errorSnippet = String(responseBytes).take(500)
-            throw Exception("TTS HTTP ${response.code}: $errorSnippet")
+        val response = call.execute()
+        response.use { resp ->
+            val body = resp.body ?: throw Exception("TTS 代理返回空响应体")
+            if (!resp.isSuccessful) {
+                // 错误响应体通常很小，有界读；只取前 500 字符，不整读大错误体。
+                val errorSnippet = String(body.bytes()).take(500)
+                throw Exception("TTS HTTP ${resp.code}: $errorSnippet")
+            }
+            // 流式解析 NDJSON（对齐网页版 synthesize() 的 JSON 行解析逻辑）：
+            // 逐行解码 base64 音频，只保留解码后字节，避免整读 + String + base64 StringBuilder + decode 四重副本。
+            parseV3ResponseStream(body)
         }
-
-        // 解析 NDJSON 响应（对齐网页版 synthesize() 的 JSON 行解析逻辑）
-        parseV3Response(responseBytes)
     }
 
     /** 检查 TTS 凭据是否已配置（对齐网页版 hasCredentials()） */
@@ -155,43 +164,47 @@ class VolcTtsClient(
 
     // ===== Private =====
 
-    /** 解析火山引擎 V3 NDJSON 响应，提取合并所有 base64 音频 chunk */
-    private fun parseV3Response(rawBytes: ByteArray): ByteArray {
-        val rawText = String(rawBytes)
-        val allBase64 = StringBuilder()
+    /** 流式解析火山引擎 V3 NDJSON：逐行读取，逐块解码 base64 音频，只保留解码后字节（单副本）。 */
+    private fun parseV3ResponseStream(body: ResponseBody): ByteArray {
+        val output = ByteArrayOutputStream()
+        val source = body.source()
         var errorInfo: JsonObject? = null
 
-        for (line in rawText.lines()) {
+        var line = source.readUtf8Line()
+        while (line != null) {
             val trimmed = line.trim()
-            if (trimmed.isEmpty()) continue
+            if (trimmed.isNotEmpty()) {
+                val obj = try {
+                    json.parseToJsonElement(trimmed).jsonObject
+                } catch (_: Exception) {
+                    null
+                }
+                if (obj != null) {
+                    // 收集音频 data（空字符串也判掉，对齐网页版 != null && !== ''）
+                    val data = obj["data"]?.jsonPrimitive?.contentOrNull
+                    if (!data.isNullOrEmpty()) {
+                        val decoded = Base64.decode(data.replace(Regex("\\s"), ""), Base64.DEFAULT)
+                        output.write(decoded)
+                    }
 
-            val obj = try {
-                json.parseToJsonElement(trimmed).jsonObject
-            } catch (_: Exception) {
-                continue
+                    // 捕获错误（code != 0 或 message != success，对齐网页版逻辑）
+                    val code = obj["code"]?.jsonPrimitive?.intOrNull
+                    val message = obj["message"]?.jsonPrimitive?.contentOrNull
+                    val error = obj["error"]?.jsonPrimitive?.booleanOrNull
+                    val isError = (code != null && code != 0) || error == true ||
+                        (message != null && message != "success")
+
+                    if (errorInfo == null && isError) {
+                        errorInfo = obj
+                        // 不立即抛异常：后续行可能仍含音频，先全部收集
+                    }
+                }
             }
-
-            // 收集音频 data（空字符串也判掉，对齐网页版 != null && !== ''）
-            val data = obj["data"]?.jsonPrimitive?.contentOrNull
-            if (!data.isNullOrEmpty()) {
-                allBase64.append(data.replace(Regex("\\s"), ""))
-            }
-
-            // 捕获错误（code != 0 或 message != success，对齐网页版逻辑）
-            val code = obj["code"]?.jsonPrimitive?.intOrNull
-            val message = obj["message"]?.jsonPrimitive?.contentOrNull
-            val error = obj["error"]?.jsonPrimitive?.booleanOrNull
-            val isError = (code != null && code != 0) || error == true ||
-                (message != null && message != "success")
-
-            if (errorInfo == null && isError) {
-                errorInfo = obj
-                // 不立即抛异常：后续行可能仍含音频，先全部收集
-            }
+            line = source.readUtf8Line()
         }
 
         // 有错误记录且无音频数据 → 抛出火山引擎错误
-        if (allBase64.isEmpty() && errorInfo != null) {
+        if (output.size() == 0 && errorInfo != null) {
             val err = errorInfo!!
             val errCode = err["code"]?.jsonPrimitive?.intOrNull?.toString() ?: ""
             val errMsg = err["message"]?.jsonPrimitive?.contentOrNull
@@ -201,11 +214,10 @@ class VolcTtsClient(
             throw Exception("火山引擎错误: ${desc.ifBlank { err.toString() }}")
         }
 
-        if (allBase64.isEmpty()) {
-            // 无音频也无错误信息 → 打印原始响应片段帮助诊断
-            throw Exception("火山引擎返回无音频数据 — 响应: ${rawText.take(300)}")
+        if (output.size() == 0) {
+            throw Exception("火山引擎返回无音频数据")
         }
 
-        return Base64.decode(allBase64.toString(), Base64.DEFAULT)
+        return output.toByteArray()
     }
 }

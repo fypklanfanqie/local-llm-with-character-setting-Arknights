@@ -11,4 +11,9 @@ data class Conversation(
     val title: String,
     val createdAt: Long,
     val updatedAt: Long,
+    /**
+     * Seedance 自动视频开关（按会话保存，新会话默认关闭）。
+     * 仅 CLOUD Provider 且助手正常完整结束时触发；本地聊天与停止后的部分回复不触发。
+     */
+    val autoVideoEnabled: Boolean = false,
 )

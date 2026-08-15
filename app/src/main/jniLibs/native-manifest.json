@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "mnnCommit": "af0142bcc7b76b7a5128373e285683dc04f55f69",
+  "ndkVersion": "26.1.10909125",
+  "androidApi": 24,
+  "abi": "arm64-v8a",
+  "flags": [
+    "llm",
+    "low_memory",
+    "cpu_weight_dequant_gemm",
+    "transformer_fuse",
+    "arm82",
+    "opencl",
+    "16k_pages",
+    "opencl_probe"
+  ],
+  "files": [
+    {
+      "name": "libMNN.so",
+      "sha256": "041e575a3886cc35a8a667f63a9d8fa73da9d2063ee3e54590aad74648ae2ec4",
+      "buildId": "75cae231d3eb7bfc56098d13f2fe4b364a355695",
+      "ptLoadAlignment": "0x4000"
+    },
+    {
+      "name": "libbackend_probe.so",
+      "sha256": "2693d9c188b0b4a66f3957ae936d19753538b5fb5600af30ea5bccb9d6f786d1",
+      "buildId": "90db59e93b45fb78149594b82d36304345b0ab6b",
+      "ptLoadAlignment": "0x4000"
+    },
+    {
+      "name": "libc++_shared.so",
+      "sha256": "4397241b4bd20a8e579bfb41d21107857e12985f6a01ca0c2a5f83380d1270b4",
+      "buildId": "b04675a35ad96f8a9dcaa073e3bd31d4536f00ad",
+      "ptLoadAlignment": "0x4000"
+    },
+    {
+      "name": "libcpu_sys_jni.so",
+      "sha256": "d32ca729b838dbdfd8b447153b2b992461d55b47e4d3fa7e38e0a214c99b3731",
+      "buildId": "1f741eaf0537becea3ca86b46244caa7f35aa0b4",
+      "ptLoadAlignment": "0x4000"
+    },
+    {
+      "name": "libmnn_jni.so",
+      "sha256": "8a71ed3c40bda750e6fd5bb323d3dbc11911e30da5f676263518da95a735f830",
+      "buildId": "def00f4c1a8c487781f51f58781ad33dfbc87267",
+      "ptLoadAlignment": "0x4000"
+    }
+  ],
+  "note": "All standard libs rebuilt locally with NDK 26.1.10909125 against pinned MNN af0142bc (MNN_SEP_BUILD=OFF so LLM engine links into libMNN.so). libMNN/libcpu_sys_jni/libmnn_jni/libbackend_probe are 16 KiB p_align. QNN libs not listed (excluded from packaging, Task 11). libbackend_probe.so 重编（修复 JNI 符号 extern C，NDK 27 编译，见 git 历史）。"
+}

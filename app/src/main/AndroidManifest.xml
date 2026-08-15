@@ -9,6 +9,9 @@
     <!-- 音频相关 -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
+    <!-- 性能监控浮窗（仅本地聊天界面显示，需「显示在其他应用上层」权限） -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
     <!-- 读取媒体文件（Android 13+ 细分权限） -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
@@ -21,34 +24,31 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
-    <!-- 前台服务：本地推理保活 + 问候 Worker 前台化（Android 14 需声明类型与对应权限） -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
-
-    <!-- WakeLock：推理/问候生成期间保持 CPU 唤醒 -->
-    <uses-permission android:name="android.permission.WAKE_LOCK" />
-
-    <!-- 电池优化白名单：请求忽略电池优化以保活后台问候 -->
-    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
-
-    <!-- 精确闹钟：问候 exact alarm 补时触发（Android 12+ 需用户授权，canScheduleExactAlarms 守卫） -->
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
-
-    <!-- 开机自启：重启后重新 arm 问候 alarm（WorkManager 自带 boot 恢复，此处补 alarm） -->
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Android 11+ 包可见性：朗读（系统 TTS）需要声明 TTS 服务查询，
+         否则无法绑定系统语音引擎（小米 HyperOS 会把未声明的绑定 BLOCKED，导致 onInit 失败）。 -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
 
     <application
         android:name=".RhodesApp"
         android:allowBackup="true"
         android:extractNativeLibs="true"
-        android:largeHeap="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
+        android:largeHeap="true"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.RhodesIslandTerminal"
         android:usesCleartextTraffic="true"
         tools:targetApi="31">
+
+        <!-- OpenCL 探测（Task 10）：声明可选 vendor OpenCL 库；探测进程动态加载，缺库不崩溃。 -->
+        <uses-native-library
+            android:name="libOpenCL.so"
+            android:required="false" />
 
         <activity
             android:name=".MainActivity"
@@ -62,31 +62,11 @@
             </intent-filter>
         </activity>
 
-        <!-- 本地推理保活前台服务（dataSync：生成期间防进程被冻结/杀死） -->
+        <!-- OpenCL 执行探测服务（Task 10）：独立进程，驱动崩溃不波及主进程。 -->
         <service
-            android:name=".service.InferenceForegroundService"
-            android:foregroundServiceType="dataSync"
+            android:name="com.chatbyyourside.llm.backend.OpenClProbeService"
+            android:process=":mnn_probe"
             android:exported="false" />
-
-        <!-- WorkManager 前台服务：问候 Worker setForeground 用，Android 14 需 app 显式声明类型 -->
-        <service
-            android:name="androidx.work.impl.foreground.SystemForegroundService"
-            android:foregroundServiceType="dataSync"
-            tools:node="merge" />
-
-        <!-- 问候 exact alarm 接收器（explicit PendingIntent 触发，无需 intent-filter） -->
-        <receiver
-            android:name=".work.GreetingAlarmReceiver"
-            android:exported="false" />
-
-        <!-- 开机后重新 arm 问候 alarm -->
-        <receiver
-            android:name=".work.BootReceiver"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-            </intent-filter>
-        </receiver>
     </application>
 
 </manifest>

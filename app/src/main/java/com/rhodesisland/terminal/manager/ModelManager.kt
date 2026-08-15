@@ -109,7 +109,13 @@ class ModelManager(
 
     /** 切换当前活跃本地模型 */
     suspend fun setActiveModel(modelId: String?) {
+        val previous = settings.getActiveLocalModelIdNow()
         settings.setActiveLocalModelId(modelId)
+        // 切换到不同模型后，旧模型权重/KV 不应继续驻留（否则模型管理页选新模型但旧模型仍占数 GB）。
+        // 释放为 deferred-safe：推理进行中延迟到 JNI 返回后释放；同模型重设不重复释放。
+        if (previous != modelId) {
+            backendManager.release()
+        }
     }
 
     /** 获取下载状态 */

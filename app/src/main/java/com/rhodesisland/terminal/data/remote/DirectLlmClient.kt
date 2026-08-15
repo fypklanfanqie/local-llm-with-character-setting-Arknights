@@ -79,11 +79,37 @@ class DirectLlmClient(
         apiKey: String,
         model: String,
         messages: List<ChatMessageDto>,
+    ): String = chatOnceInternal(baseUrl, apiKey, model, messages, responseFormatJson = false)
+
+    /** 非流式一次性对话，可请求结构化 JSON 输出。
+     *  仅当 [responseFormatJson]=true 且供应商在白名单内时才注入 response_format=json_object，
+     *  否则与 [chatOnce] 完全一致（仍依赖严格文本 JSON 指令）。 */
+    suspend fun chatOnceStructured(
+        baseUrl: String,
+        apiKey: String,
+        model: String,
+        messages: List<ChatMessageDto>,
+        responseFormatJson: Boolean,
+    ): String = chatOnceInternal(baseUrl, apiKey, model, messages, responseFormatJson)
+
+    private suspend fun chatOnceInternal(
+        baseUrl: String,
+        apiKey: String,
+        model: String,
+        messages: List<ChatMessageDto>,
+        responseFormatJson: Boolean,
     ): String = withContext(Dispatchers.IO) {
         val request = buildRequest(
             endpoint = buildEndpoint(baseUrl),
             apiKey = apiKey,
-            body = buildBody(model, messages, stream = false, baseUrl = baseUrl, deepThinking = false),
+            body = buildBody(
+                model = model,
+                messages = messages,
+                stream = false,
+                baseUrl = baseUrl,
+                deepThinking = false,
+                responseFormatJson = responseFormatJson && supportsJsonObjectResponse(baseUrl, model),
+            ),
             accept = null,
         )
         val call = client.newCall(request)
@@ -172,6 +198,7 @@ class DirectLlmClient(
         stream: Boolean,
         baseUrl: String,
         deepThinking: Boolean,
+        responseFormatJson: Boolean = false,
     ): String {
         val obj = buildJsonObject {
             put("model", model)
@@ -187,6 +214,10 @@ class DirectLlmClient(
             // 深度思考：对支持开关的供应商注入 enable_thinking（开=请求思考，关=显式停止）
             if (supportsThinkingToggle(baseUrl, model)) {
                 put("enable_thinking", deepThinking)
+            }
+            // 结构化输出：仅显式请求 JSON 模式时注入（白名单判定已在调用侧完成，见 supportsJsonObjectResponse）
+            if (responseFormatJson) {
+                put("response_format", buildJsonObject { put("type", "json_object") })
             }
         }
         return obj.toString()
@@ -244,6 +275,23 @@ class DirectLlmClient(
         val m = model.lowercase()
         return b.contains("dashscope") || b.contains("siliconflow") ||
             m.contains("qwen3") || m.contains("qwq")
+    }
+
+    /** 是否支持 response_format=json_object（结构化输出）。
+     *  仅白名单供应商：OpenAI（api.openai.com / gpt-*）、DeepSeek（baseUrl 或模型含 deepseek）、
+     *  Qwen（dashscope / siliconflow / qwen 系模型）。其余端点保守不注入，避免未知参数 400；
+     *  生成器对返回内容仍严格解析，不依赖本白名单兜底。 */
+    private fun supportsJsonObjectResponse(baseUrl: String, model: String): Boolean {
+        val b = baseUrl.lowercase()
+        val m = model.lowercase()
+        return b.contains("api.openai.com") ||
+            b.contains("deepseek") ||
+            b.contains("dashscope") ||
+            b.contains("siliconflow") ||
+            m.startsWith("gpt-") ||
+            m.startsWith("deepseek-") ||
+            m.startsWith("qwen") ||
+            m.startsWith("qwq")
     }
 
     /** 解析非流式 JSON 完整回复；若实为 SSE 文本则退化为逐行解析。 */

@@ -64,12 +64,13 @@ class PerformanceCollector(
 
     /** 采集全部指标，返回 [RealtimeMetrics] */
     fun collect(): RealtimeMetrics {
-        // Token 速率：本地推理进行中时优先用 native 精确值（gen_seq_len/decode_us，MNN 边 decode 边
-        // 更新 ctx 指标），替代按流式 flush 近似计数（CJK 一 token 多 flush 会偏高）；native 暂未刷新
-        // （如生成刚起步 decode_us=0）时回退 flush 近似值。非生成态归零（与 UI 终态一致）。
+        // Token 速率：本地推理进行中时读后端实时快照（onToken 回调算出的 tokens/s，原子读取、零 native 调用），
+        // 替代按流式 flush 近似计数（CJK 一 token 多 flush 会偏高）；快照暂未刷新（如生成刚起步 currentTps=0）
+        // 时回退 flush 近似值 [tokenRate]。精确 native tps（gen_seq_len/decode_us）仅在生成结束的 finally
+        // 受控点写入 InferenceTurnRecord，供基准/健康库消费，不进 500ms 浮窗。非生成态归零（与 UI 终态一致）。
         val activeTps = if (localChatProvider.isGenerating()) {
-            val native = localChatProvider.getActiveTps()
-            if (native > 0f) native else tokenRate
+            val snapshotTps = localChatProvider.getActiveTps()
+            if (snapshotTps > 0f) snapshotTps else tokenRate
         } else 0f
         return RealtimeMetrics(
             tokenRate = activeTps,
