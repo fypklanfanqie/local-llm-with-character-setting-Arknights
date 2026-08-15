@@ -85,12 +85,37 @@ def match_game(name):
 EXISTING_NAMES = {"羽毛笔","阿米娅","艾雅法拉","澄闪","泥岩","逻各斯","蜜莓","遥","维什戴尔","左乐",
                   "麦哲伦","黍","史尔特尔","晓歌","林","拉普兰德","送葬人","Mon3tr","星源","德克萨斯"}
 
-def synth_prompt(name, info, who, persona, expression, sig_lines, speech):
+def synth_prompt(name, info, text, who, persona, expression, sig_lines, speech):
+    """根据人格档案 .md 合成详细 system prompt：身份/经历/关系/性格/语气/价值观/知识/诚实边界/台词/情境回应。"""
     lines = []
     who_lines = extract_lines(who)
     identity = who_lines[0] if who_lines else f"你是{name}，罗德岛的一名干员。"
     lines.append(identity)
     lines.append("")
+
+    # —— 角色身份（你是谁 的补充信息）——
+    who_more = extract_lines(who)[1:7]
+    if who_more:
+        lines.append("【角色身份】")
+        lines.extend("- " + w for w in who_more[:6])
+        lines.append("")
+
+    # —— 重要经历 ——
+    exp = extract_lines(sec(text, "重要经历"))[:6]
+    if exp:
+        lines.append("【重要经历】")
+        lines.extend("- " + e for e in exp)
+        lines.append("")
+
+    # —— 人际关系 ——
+    rel = extract_lines(sec(text, "关系图谱")) or extract_lines(sec(text, "人际关系"))
+    rel = rel[:5]
+    if rel:
+        lines.append("【人际关系】")
+        lines.extend("- " + r for r in rel)
+        lines.append("")
+
+    # —— 核心性格（核心特质 + 描述 + 信念 + 情境模式块）——
     pbody = persona or ""
     persona_clean = []
     cm = re.search(r"核心特质[：:]\s*([^\n]+)", pbody)
@@ -106,29 +131,62 @@ def synth_prompt(name, info, who, persona, expression, sig_lines, speech):
     if bm:
         v = clean_line(bm.group(1))
         if v: persona_clean.append("信念：" + v)
-    for mm in re.finditer(r"【([^】]+)】\s*([^#\n][\s\S]*?)(?=【|\Z)", pbody):
-        mode = mm.group(1)
-        samples = [clean_line(x) for x in mm.group(2).splitlines()]
-        samples = [s for s in samples if s and not s.startswith(("【", "核心特质", "信念"))][:2]
-        if samples:
-            persona_clean.append(f"[{mode}] {' '.join(samples)}")
     if persona_clean:
         lines.append("【核心性格】")
         lines.extend("- " + p for p in persona_clean[:8])
         lines.append("")
+
+    # —— 不同情境下的回应（【日常/工作模式】等）——
+    modes = []
+    for mm in re.finditer(r"【([^】]+)】\s*([^#\n][\s\S]*?)(?=【|\Z)", pbody):
+        mode = mm.group(1)
+        samples = [clean_line(x) for x in mm.group(2).splitlines()]
+        samples = [s for s in samples if s and not s.startswith(("【", "核心特质", "信念"))][:3]
+        if samples:
+            modes.append(f"[{mode}] {' '.join(samples)}")
+    if modes:
+        lines.append("【不同情境下的回应】")
+        lines.extend("- " + m for m in modes[:8])
+        lines.append("")
+
+    # —— 语气与说话特点 ——
     expr = []
-    expr += extract_lines(expression)[:4]
-    expr += extract_lines(speech)[:4]
-    expr = list(dict.fromkeys(expr))[:6]
+    expr += extract_lines(expression)[:5]
+    expr += extract_lines(speech)[:5]
+    expr = list(dict.fromkeys(expr))[:8]
     if expr:
         lines.append("【语气与说话特点】")
         lines.extend("- " + e for e in expr)
         lines.append("")
+
+    # —— 价值观 ——
+    val = extract_lines(sec(text, "价值观"))[:5]
+    if val:
+        lines.append("【价值观】")
+        lines.extend("- " + v for v in val)
+        lines.append("")
+
+    # —— 知识领域（专家级）——
+    know = extract_lines(sec(text, "知识领域"))[:4]
+    if know:
+        lines.append("【知识领域】")
+        lines.extend("- " + k for k in know)
+        lines.append("")
+
+    # —— 诚实边界 ——
+    honest = extract_lines(sec(text, "诚实边界"))[:4]
+    if honest:
+        lines.append("【诚实边界】")
+        lines.extend("- " + h for h in honest)
+        lines.append("")
+
+    # —— 标志性台词 ——
     sl = extract_lines(sig_lines)[:5]
     if sl:
         lines.append("【标志性台词】")
         lines.extend("「" + s + "」" for s in sl if len(s) <= 60)
         lines.append("")
+
     lines.append("【输出要求】")
     lines.append("- 完全代入角色人设、性格与说话习惯，用第一人称回应博士")
     lines.append("- 日常对话简短自然（几个字到十几个字），像真正的聊天")
@@ -152,7 +210,7 @@ def main():
         expression = sec(text, "表达DNA") or ""
         sig = sec(text, "标志性台词", "经典台词") or sec(text, "表达DNA")
         speech = sec(text, "说话特点") or ""
-        prompt = synth_prompt(name, info, who, persona, expression, sig, speech)
+        prompt = synth_prompt(name, info, text, who, persona, expression, sig, speech)
         game = match_game(name)
         rec = {
             "id": name,
