@@ -1,5 +1,6 @@
 package com.rhodesisland.terminal.provider.cloud
 
+import com.rhodesisland.terminal.config.isFreeProxyBaseUrl
 import com.rhodesisland.terminal.data.model.ChatMessage
 import com.rhodesisland.terminal.data.model.ChatProviderType
 import com.rhodesisland.terminal.data.remote.ChatMessageDto
@@ -41,7 +42,8 @@ class CloudChatProvider(
         activeCall = null
 
         val apiConfig = settings.getApiConfigNow()
-        if (apiConfig.apiKey.isBlank()) {
+        // 内置免费服务商（Cloudflare 代理）无需客户端 key（key 由代理注入）；其余服务商必须配置
+        if (apiConfig.apiKey.isBlank() && !isFreeProxyBaseUrl(apiConfig.baseUrl)) {
             throw Exception("请先在设置页配置 API Key")
         }
 

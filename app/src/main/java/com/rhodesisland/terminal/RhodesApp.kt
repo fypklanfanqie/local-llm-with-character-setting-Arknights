@@ -5,10 +5,13 @@ import android.content.ComponentCallbacks2
 import android.content.res.Configuration
 import android.os.Process
 import android.util.Log
+import coil.ImageLoader
+import coil.ImageLoaderFactory
 import com.rhodesisland.terminal.data.local.AppDatabase
 import com.rhodesisland.terminal.notification.AppLifecycleObserver
 import com.rhodesisland.terminal.notification.GreetingNotificationManager
 import com.rhodesisland.terminal.service.InferenceForegroundService
+import com.rhodesisland.terminal.util.PrtsImageLoader
 import com.rhodesisland.terminal.work.GreetingScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -20,12 +23,19 @@ import com.chatbyyourside.llm.backend.OpenClProbeService
  * 全局 Application 入口
  * 初始化 AppContainer（手动 DI 容器）
  */
-class RhodesApp : Application() {
+class RhodesApp : Application(), ImageLoaderFactory {
     lateinit var container: AppContainer
         private set
 
     /** 应用级协程作用域：用于启动时触发角色问候后台调度（不阻塞 onCreate）。 */
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    /** Coil 图片加载器：PRTS 立绘需要浏览器头 + 反热链 cookie（见 PrtsImageLoader）。 */
+    override fun newImageLoader(): ImageLoader =
+        ImageLoader.Builder(this)
+            .okHttpClient(PrtsImageLoader.okHttpClient)
+            .crossfade(true)
+            .build()
 
     // Task 15/16：内存压力释放安全网——系统 trim 到「明确内存紧张」档时释放已加载模型
     // （BackendManager.release 为 deferred-safe：生成中延迟到 JNI 返回后释放）。**不调整后台驻留
@@ -62,6 +72,9 @@ class RhodesApp : Application() {
         if (isMnnProbeProcess()) return
 
         container = AppContainer(this)
+
+        // PRTS 立绘反热链 cookie 预热：一次请求拿到 sec cookie，此后全量干员立绘（网络图）可正常加载。
+        appScope.launch(Dispatchers.IO) { PrtsImageLoader.prewarm() }
 
         // 角色问候：通知 channel + 前后台观察 + 确保后台调度链存活
         GreetingNotificationManager.createChannel(this)

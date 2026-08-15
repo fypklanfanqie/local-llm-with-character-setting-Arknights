@@ -22,8 +22,7 @@ data class ModelProvider(
     val requiresApiKey: Boolean = true,
 )
 
-val PRESET_PROVIDERS: List<ModelProvider> = listOf(
-    ModelProvider(
+val PRESET_PROVIDERS: List<ModelProvider> = listOf(    ModelProvider(
         id = "deepseek",
         displayName = "DeepSeek",
         baseUrl = "https://api.deepseek.com",
@@ -84,3 +83,9 @@ val PRESET_PROVIDERS: List<ModelProvider> = listOf(
         requiresApiKey = false,
     ),
 )
+
+/** 该 baseUrl 是否为内置免费服务商（Cloudflare 代理）：客户端无需配置 API key，key 由代理注入。 */
+fun isFreeProxyBaseUrl(baseUrl: String): Boolean =
+    PRESET_PROVIDERS.any {
+        it.id == "siliconflow-free" && baseUrl.trimEnd('/') == it.baseUrl.trimEnd('/')
+    }

@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -46,6 +47,7 @@ import com.rhodesisland.terminal.ui.glass.frostedGlass
 import com.rhodesisland.terminal.ui.glass.monogramGradient
 import com.rhodesisland.terminal.ui.theme.GlassShapes
 import com.rhodesisland.terminal.util.CharacterImageStore
+import com.rhodesisland.terminal.util.PrtsImageLoader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -71,6 +73,19 @@ fun CharactersScreen(
     var showImport by remember { mutableStateOf(false) }
     var showPersona by remember { mutableStateOf<Character?>(null) }
     var toast by remember { mutableStateOf<String?>(null) }
+
+    // 干员搜索：按名称 / 代号过滤（全量 384 位干员）
+    var searchQuery by remember { mutableStateOf("") }
+    val filteredCharacters = remember(characters, searchQuery) {
+        val q = searchQuery.trim()
+        if (q.isEmpty()) characters
+        else characters.filter {
+            it.name.contains(q, ignoreCase = true) || it.code.contains(q, ignoreCase = true)
+        }
+    }
+
+    // 确保 PRTS 立绘反热链 cookie 就绪（启动预热可能失败/延迟，进角色页再补一次，幂等）
+    LaunchedEffect(Unit) { PrtsImageLoader.prewarm() }
 
     Box(
         modifier = Modifier
@@ -99,6 +114,53 @@ fun CharactersScreen(
                 }) { Text("导出", color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
 
+            // 干员搜索框
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 6.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .frostedGlass(RoundedCornerShape(12.dp))
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Filled.Search,
+                    contentDescription = "搜索",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                BasicTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    modifier = Modifier.weight(1f).padding(vertical = 8.dp),
+                    textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp),
+                    singleLine = true,
+                    cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
+                    decorationBox = { inner ->
+                        if (searchQuery.isEmpty()) {
+                            Text(
+                                "搜索干员名称 / 代号…",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 14.sp,
+                            )
+                        }
+                        inner()
+                    },
+                )
+                if (searchQuery.isNotEmpty()) {
+                    IconButton(onClick = { searchQuery = "" }, modifier = Modifier.size(24.dp)) {
+                        Icon(
+                            Icons.Filled.Close,
+                            contentDescription = "清空",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(14.dp),
+                        )
+                    }
+                }
+            }
+
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
                 modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp),
@@ -106,7 +168,17 @@ fun CharactersScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 contentPadding = PaddingValues(bottom = 24.dp),
             ) {
-                items(characters) { char ->
+                if (filteredCharacters.isEmpty()) {
+                    item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text("未找到「${searchQuery.trim()}」相关的干员", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+                        }
+                    }
+                }
+                items(filteredCharacters) { char ->
                     CharacterCard(
                         character = char,
                         isActive = char.id == activeCharacter,

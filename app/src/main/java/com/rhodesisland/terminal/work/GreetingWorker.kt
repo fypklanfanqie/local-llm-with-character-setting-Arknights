@@ -10,6 +10,7 @@ import androidx.work.WorkerParameters
 import com.rhodesisland.terminal.AppContainer
 import com.rhodesisland.terminal.RhodesApp
 import com.rhodesisland.terminal.config.AppConfig
+import com.rhodesisland.terminal.config.isFreeProxyBaseUrl
 import com.rhodesisland.terminal.data.model.ChatMessage
 import com.rhodesisland.terminal.data.model.ChatProviderType
 import com.rhodesisland.terminal.data.remote.ChatMessageDto
@@ -234,7 +235,8 @@ class GreetingWorker(
             .takeLast(AppConfig.Greeting.CONTEXT_MESSAGES)
 
         val apiConfig = settings.getApiConfigNow()
-        if (apiConfig.apiKey.isBlank()) return false
+        // 内置免费服务商（Cloudflare 代理）无需客户端 key；其余服务商必须配置
+        if (apiConfig.apiKey.isBlank() && !isFreeProxyBaseUrl(apiConfig.baseUrl)) return false
 
         // 前台化 + WakeLock：保护最长 60s 的云端生成不被国产 ROM 冻结/杀进程。
         // setForeground 失败（如通知权限被拒）则降级为仅持锁 + 周期保活，不阻断投递。
