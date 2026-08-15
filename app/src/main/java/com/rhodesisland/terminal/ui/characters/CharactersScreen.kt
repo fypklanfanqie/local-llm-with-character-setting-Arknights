@@ -46,6 +46,7 @@ import com.rhodesisland.terminal.ui.glass.GlassSheet
 import com.rhodesisland.terminal.ui.glass.frostedGlass
 import com.rhodesisland.terminal.ui.glass.monogramGradient
 import com.rhodesisland.terminal.ui.theme.GlassShapes
+import com.rhodesisland.terminal.ui.theme.LocalDarkTheme
 import com.rhodesisland.terminal.util.CharacterImageStore
 import com.rhodesisland.terminal.util.PrtsImageLoader
 import kotlinx.coroutines.Dispatchers
@@ -670,14 +671,16 @@ private fun GlassField(
     singleLine: Boolean = false,
 ) {
     val scheme = MaterialTheme.colorScheme
+    val isDark = LocalDarkTheme.current
+    val textColor = if (isDark) androidx.compose.ui.graphics.Color(0xFFE8E4E0) else androidx.compose.ui.graphics.Color(0xFF161616)
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
-            .background(androidx.compose.ui.graphics.Color(0xFF15151F))
+            .background(scheme.surface.copy(alpha = 0.6f))
             .padding(10.dp),
-        textStyle = TextStyle(color = androidx.compose.ui.graphics.Color(0xFFE8E4E0), fontSize = 13.sp),
+        textStyle = TextStyle(color = textColor, fontSize = 13.sp),
         singleLine = singleLine,
         cursorBrush = androidx.compose.ui.graphics.SolidColor(scheme.primary),
     )

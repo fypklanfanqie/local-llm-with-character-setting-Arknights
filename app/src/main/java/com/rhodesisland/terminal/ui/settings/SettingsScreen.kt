@@ -44,6 +44,7 @@ import com.rhodesisland.terminal.ui.glass.GlassListRow
 import com.rhodesisland.terminal.ui.glass.GlassListSection
 import com.rhodesisland.terminal.ui.glass.frostedGlass
 import com.rhodesisland.terminal.ui.theme.GlassShapes
+import com.rhodesisland.terminal.ui.theme.LocalDarkTheme
 import com.rhodesisland.terminal.config.Characters
 import com.rhodesisland.terminal.config.ModelProvider
 import com.rhodesisland.terminal.config.PresetModel
@@ -498,21 +499,26 @@ private fun GlassInputField(
     singleLine: Boolean = true,
 ) {
     val scheme = MaterialTheme.colorScheme
+    // 文字/占位符颜色按主题自适应（深色→浅字，浅色→深字），不依赖 scheme.onSurface 的解析，避免与背景同色不可见
+    val isDark = LocalDarkTheme.current
+    val textColor = if (isDark) androidx.compose.ui.graphics.Color(0xFFE8E4E0) else androidx.compose.ui.graphics.Color(0xFF161616)
+    val placeholderColor = if (isDark) androidx.compose.ui.graphics.Color(0xFF9A9690) else androidx.compose.ui.graphics.Color(0xFF6E6A64)
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            // 固定深色底（玻璃卡片下可能被渲染偏亮，用纯深色保证对比）
-            .background(androidx.compose.ui.graphics.Color(0xFF15151F))
+            // 保留原有半透明背景外观（不改 UI）
+            .background(scheme.surface.copy(alpha = 0.6f))
             .padding(12.dp),
-        // 固定浅色字（不依赖 scheme.onSurface，避免玻璃背景下解析出错导致文字不可见）
-        textStyle = TextStyle(color = androidx.compose.ui.graphics.Color(0xFFE8E4E0), fontSize = 14.sp),
+        textStyle = TextStyle(color = textColor, fontSize = 14.sp),
         singleLine = singleLine,
         cursorBrush = androidx.compose.ui.graphics.SolidColor(scheme.primary),
         decorationBox = { inner ->
-            if (value.isEmpty()) Text(placeholder, color = androidx.compose.ui.graphics.Color(0xFF8A8680), fontSize = 14.sp)
+            if (value.isEmpty()) {
+                Text(placeholder, color = placeholderColor, fontSize = 14.sp)
+            }
             inner()
         },
     )
@@ -527,6 +533,8 @@ private fun PasswordField(
     onToggle: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
+    val isDark = LocalDarkTheme.current
+    val textColor = if (isDark) androidx.compose.ui.graphics.Color(0xFFE8E4E0) else androidx.compose.ui.graphics.Color(0xFF161616)
     Column {
         FieldLabel(label)
         Spacer(Modifier.height(6.dp))
@@ -540,9 +548,9 @@ private fun PasswordField(
                 modifier = Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(androidx.compose.ui.graphics.Color(0xFF15151F))
+                    .background(scheme.surface.copy(alpha = 0.6f))
                     .padding(12.dp),
-                textStyle = TextStyle(color = androidx.compose.ui.graphics.Color(0xFFE8E4E0), fontSize = 14.sp),
+                textStyle = TextStyle(color = textColor, fontSize = 14.sp),
                 singleLine = true,
                 visualTransformation = if (show) VisualTransformation.None else PasswordVisualTransformation(),
                 cursorBrush = androidx.compose.ui.graphics.SolidColor(scheme.primary),
