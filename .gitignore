@@ -36,4 +36,5 @@ backup/
 
 # Python cache
 __pycache__/
-*.pyc.wrangler/
+*.pyc
+.wrangler/
