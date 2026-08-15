@@ -1124,7 +1124,25 @@ private fun SeedanceSettingsSection(container: AppContainer, scope: CoroutineSco
             )
             PasswordField("API Key", apiKey, showApiKey, { apiKey = it }, { showApiKey = !showApiKey })
             FieldLabel("服务地址")
-            GlassInputField(value = baseUrl, onValueChange = { baseUrl = it }, placeholder = SeedanceConfig().baseUrl)
+            BasicTextField(
+                value = baseUrl,
+                onValueChange = { baseUrl = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(scheme.surface.copy(alpha = 0.6f))
+                    .border(1.dp, scheme.primary.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                    .padding(12.dp),
+                textStyle = TextStyle(color = scheme.onSurface, fontSize = 14.sp),
+                singleLine = true,
+                cursorBrush = androidx.compose.ui.graphics.SolidColor(scheme.primary),
+                decorationBox = { inner ->
+                    if (baseUrl.isEmpty()) {
+                        Text("https://ark.cn-beijing.volces.com/api/v3", color = scheme.onSurfaceVariant, fontSize = 14.sp)
+                    }
+                    inner()
+                },
+            )
             Text(
                 "官方方舟填 base（含 /api/v3）。中转站可填完整「创建任务」地址（如 https://api.lk888.ai/v1/media/generate）或只填主机（如 https://api.lk888.ai），将自动识别媒体协议并调用 /v1/media/generate 与 /v1/media/status。",
                 color = scheme.onSurfaceVariant, fontSize = 10.sp,
