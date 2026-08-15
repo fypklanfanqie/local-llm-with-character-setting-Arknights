@@ -101,11 +101,11 @@ android {
         }
     }
 
-    // androidResources：旧的 assets/music（wav/mp3）已随重构删除，音乐改走网易云外链 + 本地文件，
-    // 不再需要 noCompress 保留未压缩音频。覆盖默认值并清空，使 WebP 立绘能被 ZIP 压缩以减小 APK。
-    // 若日后重新向 assets 放入 wav 供 MediaPlayer openFd 零拷贝播放，再加回 noCompress += "wav"。
+    // androidResources：内置音乐（assets/music 的 BGM mp3 + 干员语音 wav）需保持未压缩，
+    // 供 MediaPlayer/ExoPlayer 的 AssetFileDescriptor 零拷贝播放（openFd 需要非压缩资源）。
     androidResources {
         noCompress.clear()
+        noCompress += listOf("wav", "mp3")
     }
 
     // 单元测试：对调用到 Android 桩（SystemClock/Context 等）的纯 Kotlin 代码返回默认值，

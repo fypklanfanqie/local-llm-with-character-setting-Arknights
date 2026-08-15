@@ -77,7 +77,14 @@ private fun formatTime(ms: Long): String {
 @Composable
 fun MusicScreen(container: AppContainer) {
     val scheme = MaterialTheme.colorScheme
-    val playlist by container.musicLibrary.playlist.collectAsState(initial = emptyList())
+    // 用户播放列表（持久化：本地导入 + 网易云搜索添加）
+    val userPlaylist by container.musicLibrary.playlist.collectAsState(initial = emptyList())
+    // 内置 BGM 目录（AssetPaths.BGM：assets/music 本地 mp3 + 网易云 EP 曲目），常驻列表最前、不可移除。
+    // 这就是本应用保留的内置音乐（方舟 OST），进程重启后依然在。
+    val builtIn = remember { container.assetRepository.getBgmList() }
+    val builtInKeys = remember(builtIn) { builtIn.mapTo(mutableSetOf()) { it.key } }
+    // 播放列表 = 内置目录 + 用户曲目（AudioManager 以下标索引播放，须用同一组合列表）
+    val playlist = remember(userPlaylist, builtIn) { builtIn + userPlaylist }
     val currentIndex by container.audioManager.currentIndexFlow.collectAsState(initial = 0)
     val isPlaying by container.audioManager.isPlayingFlow.collectAsState(initial = false)
     var searchQuery by remember { mutableStateOf("") }
@@ -474,8 +481,8 @@ fun MusicScreen(container: AppContainer) {
                                 onToggleFav = {
                                     scope.launch { container.settingsRepository.toggleMusicFavorite(track.key) }
                                 },
-                                onRemove = {
-                                    scope.launch { container.musicLibrary.removeTrack(track) }
+                                onRemove = if (track.key in builtInKeys) null else {
+                                    { scope.launch { container.musicLibrary.removeTrack(track) } }
                                 },
                             )
                         }
@@ -719,7 +726,7 @@ private fun PlaylistRow(
     isFav: Boolean,
     onClick: () -> Unit,
     onToggleFav: () -> Unit,
-    onRemove: () -> Unit,
+    onRemove: (() -> Unit)?,
 ) {
     val scheme = MaterialTheme.colorScheme
     Row(
@@ -760,13 +767,15 @@ private fun PlaylistRow(
                 modifier = Modifier.size(16.dp),
             )
         }
-        IconButton(onClick = onRemove, modifier = Modifier.size(30.dp)) {
-            Icon(
-                Icons.Filled.DeleteOutline,
-                contentDescription = "移除",
-                tint = scheme.onSurfaceVariant,
-                modifier = Modifier.size(16.dp),
-            )
+        if (onRemove != null) {
+            IconButton(onClick = onRemove, modifier = Modifier.size(30.dp)) {
+                Icon(
+                    Icons.Filled.DeleteOutline,
+                    contentDescription = "移除",
+                    tint = scheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
         }
     }
 }
