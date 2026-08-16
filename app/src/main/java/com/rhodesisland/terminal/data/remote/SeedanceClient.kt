@@ -22,6 +22,10 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import java.io.IOException
+import java.net.ConnectException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
+import javax.net.ssl.SSLException
 import kotlin.coroutines.coroutineContext
 
 /**
@@ -304,7 +308,7 @@ class SeedanceClient(
                 Log.w(TAG, "seedance media create network error")
                 throw SeedanceApiException(
                     classification = SeedanceError.AMBIGUOUS_TRANSPORT,
-                    message = "网络错误，无法确认任务状态：${e.message ?: "请求失败"}",
+                    message = "网络错误，无法确认任务状态：${describeNetworkError(e)}",
                     taskId = null,
                     cause = e,
                 )
@@ -346,7 +350,7 @@ class SeedanceClient(
                 Log.w(TAG, "seedance media status network error taskId=$taskId")
                 throw SeedanceApiException(
                     classification = SeedanceError.AMBIGUOUS_TRANSPORT,
-                    message = "网络错误，无法确认任务状态：${e.message ?: "请求失败"}",
+                    message = "网络错误，无法确认任务状态：${describeNetworkError(e)}",
                     taskId = taskId,
                     cause = e,
                 )
@@ -518,7 +522,7 @@ class SeedanceClient(
                 Log.w(TAG, "seedance network error taskId=$taskId")
                 throw SeedanceApiException(
                     classification = SeedanceError.AMBIGUOUS_TRANSPORT,
-                    message = "网络错误，无法确认任务状态：${e.message ?: "请求失败"}",
+                    message = "网络错误，无法确认任务状态：${describeNetworkError(e)}",
                     taskId = taskId,
                     cause = e,
                 )
@@ -622,6 +626,19 @@ class SeedanceClient(
         SeedanceResolution.P720 -> "720p"
         SeedanceResolution.P1080 -> "1080p"
         SeedanceResolution.P4K -> "4k"
+    }
+
+    /** 把底层 IOException 分类为具体中文原因，便于用户/开发直接定位网络层问题。 */
+    private fun describeNetworkError(e: IOException): String {
+        val type = when (e) {
+            is SocketTimeoutException -> "连接或读取超时"
+            is UnknownHostException -> "无法解析服务器地址（DNS 失败或域名被墙）"
+            is ConnectException -> "无法连接到服务器（连接被拒绝或端口不通）"
+            is SSLException -> "安全连接失败（TLS/证书问题）"
+            else -> "网络异常"
+        }
+        val detail = e.message?.take(120)?.let { "：$it" } ?: ""
+        return "$type$detail"
     }
 
     /** 面向用户的中文可读文案，绝不携带 API Key / base64 / 签名 URL / 服务端原始消息。 */
