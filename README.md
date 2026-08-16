@@ -1,4 +1,5 @@
 # Rhodes Island Terminal · 罗德岛通讯终端
+<img width="1080" height="2400" alt="Screenshot_2026-08-16-14-13-34-190_com rhodesisl" src="https://github.com/user-attachments/assets/9355878f-8497-48a3-9961-3dace4575a0e" />
 
 > 明日方舟同人 AI 角色扮演聊天应用：端侧 **MNN 本地大模型推理**（自适应三后端 + 基准认证 + 深度思考）+ 云端双引擎 + 内置方舟 BGM/语音/立绘 · A fan-made Arknights on-device LLM roleplay chat app (MNN local inference + cloud engine + built-in Arknights BGM/voice/art)
 
@@ -6,6 +7,8 @@
 [![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-Material3-4285F4?logo=jetpackcompose)](https://developer.android.com/compose)
 [![MNN](https://img.shields.io/badge/Local%20LLM-MNN-00C4A7?logo=alibabacloud)](https://github.com/alibaba/MNN)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+<img width="1080" height="2400" alt="Screenshot_2026-08-16-18-28-24-182_com rhodesisl" src="https://github.com/user-attachments/assets/6432b75e-ac2e-46d4-8117-77d6907db27c" />
+
 
 ---
 
@@ -22,9 +25,12 @@
 - **📦 模型下载可靠性** — 多镜像自动回退（ModelScope → hf-mirror → HuggingFace）+ 目录大小 / SHA-256 / 权重文件完整性校验，损坏模型不会被打上「已完成」。
 - **⏰ 后台保活增强** — 角色主动问候改为 15 分钟周期调度 + 精确闹钟兜底 + 前台服务/WakeLock 保护推理生成，国产 ROM 也能稳定触发。
 
----
+---<img width="1080" height="2400" alt="Screenshot_2026-08-16-14-13-41-828_com rhodesisl" src="https://github.com/user-attachments/assets/dee33b04-3ae3-4354-90e4-a9dd011da01f" />
+
 
 ## 🧠 本地 LLM 推理 · On-device Local LLM（重点）
+<img width="1080" height="2400" alt="Screenshot_2026-08-16-14-13-55-795_com rhodesisl" src="https://github.com/user-attachments/assets/42f530ae-514d-4112-be70-9c9212f22d88" />
+
 
 基于 [MNN](https://github.com/alibaba/MNN) 的**自适应端侧推理栈**：从设备能力探测、内存准入、后端调度、健康自愈，到基准认证、性能遥测的一整套工程化闭环。全部推理在设备本地完成，**对话数据不离开手机**。
 
@@ -83,6 +89,8 @@
 - **🎨 PRTS 深色终端 UI** — 深藏青底 + 罗德岛金强调的液态玻璃界面，衬线标题、科幻终端风。
 
 ## 384 位干员 · Operators
+
+<img width="1080" height="2400" alt="Screenshot_2026-08-16-14-13-44-537_com rhodesisl" src="https://github.com/user-attachments/assets/d212e93a-6417-485f-afc5-f72b3067b4f6" />
 
 > 下表为基础 20 位（内置语音与本地立绘）；其余 364 位干员由人格档案自动生成，含游戏技能 / 天赋与精二 / 皮肤立绘（网络加载）。全量干员在角色页 / 通讯 feed 中均可见。
 
