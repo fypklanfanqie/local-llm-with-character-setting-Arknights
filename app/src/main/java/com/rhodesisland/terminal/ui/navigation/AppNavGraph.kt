@@ -27,6 +27,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -38,10 +39,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import androidx.navigation.NavDestination.Companion.hierarchy
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.rhodesisland.terminal.AppContainer
 import com.rhodesisland.terminal.ui.characters.CharactersScreen
 import com.rhodesisland.terminal.ui.chat.ChatScreen
@@ -49,6 +52,9 @@ import com.rhodesisland.terminal.ui.feed.CharacterFeedScreen
 import com.rhodesisland.terminal.ui.feed.FeedRoute
 import com.rhodesisland.terminal.ui.glass.GlassNavBar
 import com.rhodesisland.terminal.ui.glass.GlassNavItem
+import com.rhodesisland.terminal.ui.groupchat.GroupChatScreen
+import com.rhodesisland.terminal.ui.groupchat.GroupListScreen
+import com.rhodesisland.terminal.ui.groupchat.GroupNavigationBus
 import com.rhodesisland.terminal.ui.models.ModelManagerScreen
 import com.rhodesisland.terminal.ui.music.MusicScreen
 import com.rhodesisland.terminal.ui.settings.BackendSettingsScreen
@@ -95,6 +101,23 @@ fun AppNavGraph(container: AppContainer, initialChatOpen: Boolean = false) {
             val controller = window?.let { WindowCompat.getInsetsController(it, view) }
             controller?.isAppearanceLightStatusBars = false
             controller?.isAppearanceLightNavigationBars = false
+        }
+    }
+
+    // 群聊通知点按（冷启动 + 运行中 onNewIntent 统一走 GroupNavigationBus）：切到通讯 Tab 并直达对应群聊。
+    // nonce 计数 + remember 已处理 nonce，消费一次即幂等，重组/切 Tab 不重复跳转。
+    val groupRequest by GroupNavigationBus.requests.collectAsState()
+    var lastHandledGroupNonce by remember { mutableStateOf(0L) }
+    LaunchedEffect(groupRequest) {
+        val req = groupRequest ?: return@LaunchedEffect
+        if (req.nonce > lastHandledGroupNonce) {
+            lastHandledGroupNonce = req.nonce
+            navController.navigate(BottomTab.Chat.route) {
+                popUpTo(BottomTab.Chat.route) { saveState = true }
+                launchSingleTop = true
+                restoreState = true
+            }
+            feedNavController.navigate(FeedRoute.groupChatRoute(req.groupId)) { launchSingleTop = true }
         }
     }
 
@@ -189,6 +212,9 @@ fun AppNavGraph(container: AppContainer, initialChatOpen: Boolean = false) {
                             onOpenEncounter = {
                                 feedNavController.navigate(FeedRoute.ENCOUNTER) { launchSingleTop = true }
                             },
+                            onOpenGroupChat = {
+                                feedNavController.navigate(FeedRoute.GROUP_LIST) { launchSingleTop = true }
+                            },
                         )
                     }
                     composable(FeedRoute.CHAT) {
@@ -207,6 +233,29 @@ fun AppNavGraph(container: AppContainer, initialChatOpen: Boolean = false) {
                             container = container,
                             // 底栏高度：浮层 dock 之上预留交互内容空间（背景层全屏铺满）。
                             bottomBarHeight = bottomBarHeight,
+                            onBack = { feedNavController.popBackStack() },
+                        )
+                    }
+                    composable(FeedRoute.GROUP_LIST) {
+                        GroupListScreen(
+                            container = container,
+                            bottomBarHeight = bottomBarHeight,
+                            onBack = { feedNavController.popBackStack() },
+                            onOpenGroup = { groupId ->
+                                feedNavController.navigate(FeedRoute.groupChatRoute(groupId)) { launchSingleTop = true }
+                            },
+                        )
+                    }
+                    composable(
+                        route = FeedRoute.GROUP_CHAT,
+                        arguments = listOf(navArgument("groupId") { type = NavType.LongType }),
+                    ) { entry ->
+                        val groupId = entry.arguments?.getLong("groupId") ?: 0L
+                        GroupChatScreen(
+                            container = container,
+                            // 底栏高度：输入栏抬起到底栏之上（背景层全屏铺满）。
+                            bottomBarHeight = bottomBarHeight,
+                            groupId = groupId,
                             onBack = { feedNavController.popBackStack() },
                         )
                     }

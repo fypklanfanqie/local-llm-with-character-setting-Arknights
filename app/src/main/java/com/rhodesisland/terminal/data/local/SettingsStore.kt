@@ -9,7 +9,9 @@ import com.rhodesisland.terminal.config.Characters
 import com.rhodesisland.terminal.data.model.ApiConfig
 import com.rhodesisland.terminal.data.model.Character
 import com.rhodesisland.terminal.data.model.ChatProviderType
+import com.rhodesisland.terminal.data.model.GroupChatConfig
 import com.rhodesisland.terminal.data.model.SeedanceConfig
+import com.rhodesisland.terminal.data.model.UserProfileConfig
 import com.rhodesisland.terminal.data.model.SeedanceModelVariant
 import com.rhodesisland.terminal.data.model.SeedanceRatio
 import com.rhodesisland.terminal.data.model.SeedanceResolution
@@ -128,6 +130,29 @@ class SettingsStore(
         val GREETING_LAST_CHAR_ID = stringPreferencesKey("greeting_last_char_id")
         // 下一次问候投递的绝对目标时间（epoch ms）；<=0 表示尚未初始化（首次启用后先算一个随机时刻）
         val GREETING_NEXT_FIRE_AT = longPreferencesKey("greeting_next_fire_at")
+
+        // ===== 群聊（多人角色同群聊天，仅云端可用）=====
+        val GROUP_CHAT_ENABLED = booleanPreferencesKey("group_chat_enabled")
+        val GROUP_MEMBER_IDS = stringSetPreferencesKey("group_member_ids")  // 可多选
+        val GROUP_AUTO_CHAT_ENABLED = booleanPreferencesKey("group_auto_chat_enabled")
+        // 每日自动聊天「轮次」上限（1~20，每轮 = 2 条互聊 或 1 条主动提问）
+        val GROUP_DAILY_ROUNDS = intPreferencesKey("group_daily_rounds")
+        // 每日配额：当天已执行的轮次数，按日期(yyyy-MM-dd)重置
+        val GROUP_QUOTA_DATE = stringPreferencesKey("group_quota_date")
+        val GROUP_QUOTA_COUNT = intPreferencesKey("group_quota_count")
+        // 上次发言的成员 id（跨天连续轮询）
+        val GROUP_LAST_SPEAKER_ID = stringPreferencesKey("group_last_speaker_id")
+        // 已执行轮次累计计数（决定 discuss 轮 / ask-user 轮轮换）
+        val GROUP_ROUND_COUNTER = longPreferencesKey("group_round_counter")
+        // 用户最近一次在群聊发消息的时间（epoch ms；0 = 从未）——自动聊天冷却闸依据
+        val GROUP_LAST_USER_AT = longPreferencesKey("group_last_user_message_at")
+        // 下一次自动聊天触发的绝对目标时间（epoch ms；<=0 = 尚未初始化）
+        val GROUP_NEXT_FIRE_AT = longPreferencesKey("group_next_fire_at")
+
+        // ===== 博士档案（我的形象）=====
+        val USER_AVATAR_PATH = stringPreferencesKey("user_avatar_path")
+        val USER_PERSONA = stringPreferencesKey("user_persona")
+        val USER_RELATIONSHIP = stringPreferencesKey("user_relationship")
 
         // ===== 配置变更检测（移植自 iFeng 的 hasConfigChanged/acknowledgeConfigChange）=====
         // 记录"上次成功加载模型时所用的"线程/上下文/后端/lookahead。当前值 != last_applied 即视为已变更，
@@ -316,6 +341,11 @@ class SettingsStore(
             else runCatching { voiceJson.decodeFromString<Map<String, Long>>(raw) }.getOrDefault(emptyMap())
             p[Keys.ACTIVE_CONVERSATIONS] = voiceJson.encodeToString(current - characterId)
         }
+    }
+
+    /** 清空全部活跃会话记录（存储管理「清空聊天记录」后调用，避免指向已删会话）。 */
+    suspend fun clearAllActiveConversations() {
+        dataStore.edit { it.remove(Keys.ACTIVE_CONVERSATIONS) }
     }
 
     // ===== 自定义角色 =====
@@ -634,6 +664,129 @@ class SettingsStore(
         dataStore.edit {
             if (epochMs <= 0L) it.remove(Keys.GREETING_NEXT_FIRE_AT)
             else it[Keys.GREETING_NEXT_FIRE_AT] = epochMs
+        }
+    }
+
+    // ===== 群聊（仅云端可用）=====
+    /**
+     * 群聊配置聚合快照：单个 data.map 读取开关/成员/自动聊天三键。
+     * 单独原子写回走 [setGroupChatConfig]；picker 点选（只改成员不覆盖开关）走 [updateGroupChatConfig]（同
+     * [updateCustomCharacters] 的 single-edit lost-update 教训）。
+     */
+    val groupChatConfig: Flow<GroupChatConfig> = dataStore.data.map { p ->
+        GroupChatConfig(
+            enabled = p[Keys.GROUP_CHAT_ENABLED] ?: false,
+            memberIds = p[Keys.GROUP_MEMBER_IDS] ?: emptySet(),
+            autoChat = p[Keys.GROUP_AUTO_CHAT_ENABLED] ?: true,
+        )
+    }
+
+    /** 一次原子写回群聊配置三键。 */
+    suspend fun setGroupChatConfig(config: GroupChatConfig) {
+        dataStore.edit { p ->
+            p[Keys.GROUP_CHAT_ENABLED] = config.enabled
+            p[Keys.GROUP_MEMBER_IDS] = config.memberIds
+            p[Keys.GROUP_AUTO_CHAT_ENABLED] = config.autoChat
+        }
+    }
+
+    /** 原子读-改-写群聊配置（成员 picker 点选用；不覆盖开关）。 */
+    suspend fun updateGroupChatConfig(transform: (GroupChatConfig) -> GroupChatConfig) {
+        dataStore.edit { p ->
+            val current = GroupChatConfig(
+                enabled = p[Keys.GROUP_CHAT_ENABLED] ?: false,
+                memberIds = p[Keys.GROUP_MEMBER_IDS] ?: emptySet(),
+                autoChat = p[Keys.GROUP_AUTO_CHAT_ENABLED] ?: true,
+            )
+            val next = transform(current)
+            p[Keys.GROUP_CHAT_ENABLED] = next.enabled
+            p[Keys.GROUP_MEMBER_IDS] = next.memberIds
+            p[Keys.GROUP_AUTO_CHAT_ENABLED] = next.autoChat
+        }
+    }
+
+    /** 每日自动聊天轮次上限（默认 [AppConfig.GroupChat.DEFAULT_DAILY_ROUNDS]）。 */
+    val groupDailyRounds: Flow<Int> = dataStore.data.map { p ->
+        p[Keys.GROUP_DAILY_ROUNDS] ?: AppConfig.GroupChat.DEFAULT_DAILY_ROUNDS
+    }
+
+    suspend fun setGroupDailyRounds(count: Int) {
+        dataStore.edit { it[Keys.GROUP_DAILY_ROUNDS] = count }
+    }
+
+    /** 当日轮次配额：(日期 yyyy-MM-dd, 已执行轮次)。 */
+    val groupQuota: Flow<Pair<String, Int>> = dataStore.data.map { p ->
+        (p[Keys.GROUP_QUOTA_DATE] ?: "") to (p[Keys.GROUP_QUOTA_COUNT] ?: 0)
+    }
+
+    suspend fun setGroupQuota(date: String, count: Int) {
+        dataStore.edit {
+            it[Keys.GROUP_QUOTA_DATE] = date
+            it[Keys.GROUP_QUOTA_COUNT] = count
+        }
+    }
+
+    /** 上次发言的成员 id（null = 从未）。 */
+    val groupLastSpeakerId: Flow<String?> = dataStore.data.map { p ->
+        p[Keys.GROUP_LAST_SPEAKER_ID]
+    }
+
+    suspend fun setGroupLastSpeakerId(id: String?) {
+        dataStore.edit {
+            if (id == null) it.remove(Keys.GROUP_LAST_SPEAKER_ID)
+            else it[Keys.GROUP_LAST_SPEAKER_ID] = id
+        }
+    }
+
+    /** 已执行轮次累计计数（决定 discuss / ask-user 轮换）。 */
+    val groupRoundCounter: Flow<Long> = dataStore.data.map { p ->
+        p[Keys.GROUP_ROUND_COUNTER] ?: 0L
+    }
+
+    suspend fun setGroupRoundCounter(counter: Long) {
+        dataStore.edit { it[Keys.GROUP_ROUND_COUNTER] = counter }
+    }
+
+    /** 用户最近一次在群聊发消息的时间（epoch ms；0 = 从未）。 */
+    val groupLastUserMessageAt: Flow<Long> = dataStore.data.map { p ->
+        p[Keys.GROUP_LAST_USER_AT] ?: 0L
+    }
+
+    suspend fun setGroupLastUserMessageAt(epochMs: Long) {
+        dataStore.edit {
+            if (epochMs <= 0L) it.remove(Keys.GROUP_LAST_USER_AT)
+            else it[Keys.GROUP_LAST_USER_AT] = epochMs
+        }
+    }
+
+    /** 下一次自动聊天触发目标时间（epoch ms；0 = 尚未初始化）。 */
+    val groupNextFireAt: Flow<Long> = dataStore.data.map { p ->
+        p[Keys.GROUP_NEXT_FIRE_AT] ?: 0L
+    }
+
+    suspend fun setGroupNextFireAt(epochMs: Long) {
+        dataStore.edit {
+            if (epochMs <= 0L) it.remove(Keys.GROUP_NEXT_FIRE_AT)
+            else it[Keys.GROUP_NEXT_FIRE_AT] = epochMs
+        }
+    }
+
+    // ===== 博士档案（我的形象）=====
+    /** 博士档案聚合（头像路径/人设/关系）：单 map 读取，单次原子写回。 */
+    val userProfile: Flow<UserProfileConfig> = dataStore.data.map { p ->
+        UserProfileConfig(
+            avatarPath = p[Keys.USER_AVATAR_PATH] ?: "",
+            persona = p[Keys.USER_PERSONA] ?: "",
+            relationship = p[Keys.USER_RELATIONSHIP] ?: "",
+        )
+    }
+
+    suspend fun setUserProfileConfig(config: UserProfileConfig) {
+        dataStore.edit { p ->
+            if (config.avatarPath.isBlank()) p.remove(Keys.USER_AVATAR_PATH)
+            else p[Keys.USER_AVATAR_PATH] = config.avatarPath
+            p[Keys.USER_PERSONA] = config.persona
+            p[Keys.USER_RELATIONSHIP] = config.relationship
         }
     }
 

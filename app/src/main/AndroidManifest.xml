@@ -95,6 +95,11 @@
             android:name=".work.GreetingAlarmReceiver"
             android:exported="false" />
 
+        <!-- 群聊精确闹钟兜底：闹钟到点触发一次群聊 Worker（空闲自动聊天） -->
+        <receiver
+            android:name=".work.GroupChatAlarmReceiver"
+            android:exported="false" />
+
         <!-- 开机重排问候闹钟（WorkManager 周期工作开机自动恢复，仅精确闹钟需手动重排） -->
         <receiver
             android:name=".work.BootReceiver"

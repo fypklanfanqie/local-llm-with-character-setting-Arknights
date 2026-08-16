@@ -17,6 +17,8 @@ data class ChatUiState(
     val characterRole: String = "",
     val characterImage: String = "",
     val watermarkName: String = "",
+    /** 博士头像（设置「我的形象」；空=monogram「我」）。 */
+    val userImage: String = "",
     val ttsEnabled: Boolean = false,
     val messages: List<DisplayMessage> = emptyList(),
     val inputText: String = "",

@@ -62,6 +62,8 @@ internal fun ChatHistoryEntity.toMessage(): ChatMessage = ChatMessage(
     // 回填 Room 自增主键：持久消息的稳定标识（Compose key + 完成消息协调）。
     databaseId = id,
     completionState = MessageCompletionState.fromStorageKey(completionState),
+    // 发言人角色 id（群聊按条渲染；1:1 下恒为该会话角色，UI 不读取）。
+    characterId = characterId,
 )
 
 /**

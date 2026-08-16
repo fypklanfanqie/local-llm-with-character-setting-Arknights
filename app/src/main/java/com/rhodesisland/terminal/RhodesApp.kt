@@ -10,9 +10,11 @@ import coil.ImageLoaderFactory
 import com.rhodesisland.terminal.data.local.AppDatabase
 import com.rhodesisland.terminal.notification.AppLifecycleObserver
 import com.rhodesisland.terminal.notification.GreetingNotificationManager
+import com.rhodesisland.terminal.notification.GroupChatNotificationManager
 import com.rhodesisland.terminal.service.InferenceForegroundService
 import com.rhodesisland.terminal.util.PrtsImageLoader
 import com.rhodesisland.terminal.work.GreetingScheduler
+import com.rhodesisland.terminal.work.GroupChatScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -81,6 +83,8 @@ class RhodesApp : Application(), ImageLoaderFactory {
 
         // 角色问候：通知 channel + 前后台观察 + 确保后台调度链存活
         GreetingNotificationManager.createChannel(this)
+        // 群聊：通知 channel + 确保后台调度链存活（空闲自动聊天）
+        GroupChatNotificationManager.createChannel(this)
         // 本地推理保活：前台服务通知渠道（生成期间常驻通知栏，防国产 ROM 杀进程）
         InferenceForegroundService.createChannel(this)
         AppLifecycleObserver.register(this)
@@ -90,6 +94,10 @@ class RhodesApp : Application(), ImageLoaderFactory {
         registerComponentCallbacks(memoryPressureCallbacks)
         appScope.launch {
             GreetingScheduler.ensureScheduled(this@RhodesApp, container.settingsRepository)
+        }
+        // 群聊空闲自动聊天：确保后台调度链存活（关闭/本地时由 ensureScheduled cancel）
+        appScope.launch {
+            GroupChatScheduler.ensureScheduled(this@RhodesApp, container.settingsRepository)
         }
         // Task 6：恢复 Seedance 视频流水线（复位进程中断残留的进行中状态 + 重入队可自动认领任务）。幂等，异步。
         appScope.launch {

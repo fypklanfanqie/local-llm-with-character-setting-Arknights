@@ -114,6 +114,7 @@ fun ChatMessageList(
                     state = state,
                     characterImage = state.characterImage,
                     characterName = state.characterName,
+                    userImage = state.userImage,
                     onTts = { onTts(msg) },
                     onDelete = { onDelete(msg) },
                     // 视频卡回调仅在对应助手消息附带视频时注入（Task 8 接播放/全屏/导出，Task 7 接取消/重试）。

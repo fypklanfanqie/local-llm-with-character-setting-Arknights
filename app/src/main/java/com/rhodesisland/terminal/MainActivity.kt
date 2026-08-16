@@ -25,9 +25,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
 import com.rhodesisland.terminal.notification.GreetingNotificationManager
+import com.rhodesisland.terminal.notification.GroupChatNotificationManager
 import com.rhodesisland.terminal.ui.LoadingScreen
 import com.rhodesisland.terminal.ui.glass.GlassBackdrop
 import com.rhodesisland.terminal.ui.glass.MeshBackground
+import com.rhodesisland.terminal.ui.groupchat.GroupNavigationBus
 import com.rhodesisland.terminal.ui.navigation.AppNavGraph
 import com.rhodesisland.terminal.ui.theme.ChatTheme
 import kotlinx.coroutines.launch
@@ -84,6 +86,8 @@ class MainActivity : ComponentActivity() {
         // 冷启动在 setContent 前写入，配合启动 Loading 画面让 DataStore 写入完成，避免先闪默认角色。
         // 返回是否来自问候通知：若是则卡片流首页直接落到该角色的聊天页，而不是停在卡片流。
         val initialChatOpen = handleGreetingIntent(intent, app)
+        // 群聊通知点按：经 GroupNavigationBus 请求跳转（冷启动 + 运行中统一消费，AppNavGraph 处理）。
+        handleGroupIntent(intent)
 
         // CPU 提频（非 root 路线，Task 8）：sustained mode 改为**生成级**——仅 MAXIMUM_SPEED 本地推理
         // 期间经 CpuBoostController 开启，finally/close 恢复；Balanced 永不开启。此处只注入 window setter。
@@ -159,6 +163,18 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleGreetingIntent(intent, application as RhodesApp)
+        handleGroupIntent(intent)
+    }
+
+    /**
+     * 群聊通知点按：识别 extra 并请求跳转到群聊（经 [GroupNavigationBus]，由 AppNavGraph 消费）。
+     * 消费后清除 extra 避免重复触发。
+     */
+    private fun handleGroupIntent(intent: Intent?) {
+        val convId = intent?.getLongExtra(GroupChatNotificationManager.EXTRA_GROUP_CONVERSATION_ID, -1L) ?: return
+        if (convId <= 0L) return
+        intent.removeExtra(GroupChatNotificationManager.EXTRA_GROUP_CONVERSATION_ID)
+        GroupNavigationBus.requestOpen(convId)
     }
 
     /**

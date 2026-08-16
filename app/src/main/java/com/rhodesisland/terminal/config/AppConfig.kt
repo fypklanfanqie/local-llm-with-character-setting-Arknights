@@ -69,4 +69,37 @@ object AppConfig {
         // 云 API 失败后重排的间隔（毫秒），避免 WorkManager retry 风暴
         const val RETRY_DELAY_MS = 45 * 60 * 1000L
     }
+
+    // ===== 群聊（多人角色同群聊天，仅云端可用）=====
+    // 勾选具体角色组群；用户可参与对话；空闲时角色自动互聊并主动提问（走通知）。
+    // 后台驱动复用「角色问候」的 PeriodicWork + next_fire_at + 精确闹钟 + 开机重挂套件。
+    object GroupChat {
+        // 群成员上限（二轮：4 -> 10；10 人 × 300 字人设 ≈ 3K 字符 system，云端可承受）
+        const val MAX_MEMBERS = 10
+        // 用户回合单轮最多答复的成员数（随机 1..此值；@ 指定的成员必定回复并占用名额）
+        const val MAX_REPLIES_PER_USER_MESSAGE = 4
+        // 每位成员人设写入 system prompt 时的截断长度（字符）
+        const val PERSONA_MAX_CHARS = 300
+        // 群聊生成时带回的最近历史条数
+        const val MAX_CONTEXT_MESSAGES = 40
+        // 自动聊天的触发时段（避免深夜打扰）：09:00–22:00
+        const val HOUR_START = 9
+        const val HOUR_END = 22
+        // 每日自动聊天「轮次」默认值（每一轮 = 2 条成员互聊，或 1 条主动提问）
+        const val DEFAULT_DAILY_ROUNDS = 8
+        const val MIN_DAILY_ROUNDS = 1
+        const val MAX_DAILY_ROUNDS = 20
+        // 每 N 轮中第 3 轮改为「向用户提问」轮（其余为成员互聊轮）
+        const val ASK_USER_EVERY_N_ROUNDS = 3
+        // 每个互聊轮由几名成员依次回应（= 该轮云端调用次数）
+        const val DISCUSS_REPLIES_PER_ROUND = 2
+        // 用户刚发过消息后的冷却时间（毫秒）：冷却期内不触发自动聊天，避免打断用户交互
+        const val AFTER_USER_COOLDOWN_MS = 60 * 60 * 1000L
+        // PeriodicWork 周期（分钟），与问候一致
+        const val HEARTBEAT_INTERVAL_MIN = 15L
+        // 单次生成超时（秒）
+        const val GENERATE_TIMEOUT_MS = 60_000L
+        // 云 API 失败后重排的间隔（毫秒）
+        const val RETRY_DELAY_MS = 45 * 60 * 1000L
+    }
 }

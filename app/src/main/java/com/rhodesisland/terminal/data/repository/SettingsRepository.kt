@@ -5,7 +5,9 @@ import com.rhodesisland.terminal.data.local.SettingsStore
 import com.rhodesisland.terminal.data.model.ApiConfig
 import com.rhodesisland.terminal.data.model.Character
 import com.rhodesisland.terminal.data.model.ChatProviderType
+import com.rhodesisland.terminal.data.model.GroupChatConfig
 import com.rhodesisland.terminal.data.model.SeedanceConfig
+import com.rhodesisland.terminal.data.model.UserProfileConfig
 import com.rhodesisland.terminal.data.model.SystemVoiceTemplate
 import com.rhodesisland.terminal.data.model.ThemeMode
 import com.rhodesisland.terminal.data.model.TtsConfig
@@ -86,6 +88,26 @@ class SettingsRepository(private val store: SettingsStore) {
     /** 下一次问候投递目标时间（epoch ms；0 = 尚未初始化）。 */
     val greetingNextFireAt: Flow<Long> = store.greetingNextFireAt
 
+    // ===== 群聊（仅云端可用）=====
+    /** 群聊配置聚合快照（开关/成员/自动聊天）。 */
+    val groupChatConfig: Flow<GroupChatConfig> = store.groupChatConfig
+    /** 每日自动聊天轮次上限。 */
+    val groupDailyRounds: Flow<Int> = store.groupDailyRounds
+    /** 当日轮次配额（日期 -> 已执行轮次）。 */
+    val groupQuota: Flow<Pair<String, Int>> = store.groupQuota
+    /** 上次发言的成员 id（跨天连续轮询）。 */
+    val groupLastSpeakerId: Flow<String?> = store.groupLastSpeakerId
+    /** 已执行轮次累计计数。 */
+    val groupRoundCounter: Flow<Long> = store.groupRoundCounter
+    /** 用户最近一次群聊发言时间（epoch ms）。 */
+    val groupLastUserMessageAt: Flow<Long> = store.groupLastUserMessageAt
+    /** 下一次自动聊天触发目标时间（epoch ms；0 = 尚未初始化）。 */
+    val groupNextFireAt: Flow<Long> = store.groupNextFireAt
+
+    // ===== 博士档案（我的形象）=====
+    /** 博士档案聚合（头像路径/人设/关系）。 */
+    val userProfile: Flow<UserProfileConfig> = store.userProfile
+
     suspend fun setThemeMode(mode: ThemeMode) = store.setThemeMode(mode)
 
     suspend fun setApiConfig(config: ApiConfig) = store.setApiConfig(config)
@@ -101,6 +123,7 @@ class SettingsRepository(private val store: SettingsStore) {
     suspend fun setActiveConversation(characterId: String, conversationId: Long) =
         store.setActiveConversation(characterId, conversationId)
     suspend fun clearActiveConversation(characterId: String) = store.clearActiveConversation(characterId)
+    suspend fun clearAllActiveConversations() = store.clearAllActiveConversations()
     suspend fun getActiveConversationNow(characterId: String): Long? =
         withTimeoutOrNull(DATASTORE_TIMEOUT_MS) { activeConversations.first() }?.get(characterId)
     suspend fun setCustomCharacters(list: List<Character>) = store.setCustomCharacters(list)
@@ -144,6 +167,18 @@ class SettingsRepository(private val store: SettingsStore) {
     suspend fun setGreetingQuota(date: String, count: Int) = store.setGreetingQuota(date, count)
     suspend fun setGreetingLastCharId(id: String?) = store.setGreetingLastCharId(id)
     suspend fun setGreetingNextFireAt(epochMs: Long) = store.setGreetingNextFireAt(epochMs)
+
+    suspend fun setGroupChatConfig(config: GroupChatConfig) = store.setGroupChatConfig(config)
+    suspend fun updateGroupChatConfig(transform: (GroupChatConfig) -> GroupChatConfig) =
+        store.updateGroupChatConfig(transform)
+    suspend fun setGroupDailyRounds(count: Int) = store.setGroupDailyRounds(count)
+    suspend fun setGroupQuota(date: String, count: Int) = store.setGroupQuota(date, count)
+    suspend fun setGroupLastSpeakerId(id: String?) = store.setGroupLastSpeakerId(id)
+    suspend fun setGroupRoundCounter(counter: Long) = store.setGroupRoundCounter(counter)
+    suspend fun setGroupLastUserMessageAt(epochMs: Long) = store.setGroupLastUserMessageAt(epochMs)
+    suspend fun setGroupNextFireAt(epochMs: Long) = store.setGroupNextFireAt(epochMs)
+
+    suspend fun setUserProfileConfig(config: UserProfileConfig) = store.setUserProfileConfig(config)
 
     /** 一次成功推理后写回本次生效的用户配置，使 [llmConfigChanged] 归 false */
     suspend fun acknowledgeLlmConfig(
@@ -241,6 +276,43 @@ class SettingsRepository(private val store: SettingsStore) {
     suspend fun getGreetingNextFireAtNow(): Long = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
         greetingNextFireAt.first()
     } ?: 0L
+
+    // ===== 群聊同步读取（供 GroupChatWorker / GroupChatScheduler 用）=====
+    /** 群聊配置?（超时返回 null 而非默认值，Worker 据此区分「关闭」与「暂时读不到」）。 */
+    suspend fun getGroupChatConfigOrNull(): GroupChatConfig? = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
+        groupChatConfig.first()
+    }
+
+    suspend fun getGroupChatConfigNow(): GroupChatConfig = getGroupChatConfigOrNull() ?: GroupChatConfig()
+
+    suspend fun getGroupDailyRoundsNow(): Int = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
+        groupDailyRounds.first()
+    } ?: AppConfig.GroupChat.DEFAULT_DAILY_ROUNDS
+
+    suspend fun getGroupQuotaNow(): Pair<String, Int> = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
+        groupQuota.first()
+    } ?: "" to 0
+
+    suspend fun getGroupLastSpeakerIdNow(): String? = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
+        groupLastSpeakerId.first()
+    }
+
+    suspend fun getGroupRoundCounterNow(): Long = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
+        groupRoundCounter.first()
+    } ?: 0L
+
+    suspend fun getGroupLastUserMessageAtNow(): Long = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
+        groupLastUserMessageAt.first()
+    } ?: 0L
+
+    suspend fun getGroupNextFireAtNow(): Long = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
+        groupNextFireAt.first()
+    } ?: 0L
+
+    /** 博士档案（超时回退默认空档案）。 */
+    suspend fun getUserProfileNow(): UserProfileConfig = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
+        userProfile.first()
+    } ?: UserProfileConfig()
 
     companion object {
         /** DataStore .first() 超时阈值（ms）。国产 ROM 文件 I/O 被拦截时避免永久挂起。 */

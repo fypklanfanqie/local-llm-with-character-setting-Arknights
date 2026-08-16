@@ -21,6 +21,7 @@ import com.rhodesisland.terminal.data.repository.ChatBackgroundRepository
 import com.rhodesisland.terminal.data.repository.ChatRepository
 import com.rhodesisland.terminal.data.repository.ConversationRepository
 import com.rhodesisland.terminal.data.repository.DocumentRepository
+import com.rhodesisland.terminal.data.repository.GroupChatRepository
 import com.rhodesisland.terminal.data.repository.MusicLibraryRepository
 import com.rhodesisland.terminal.data.repository.SeedanceVideoRepository
 import com.rhodesisland.terminal.data.repository.SettingsRepository
@@ -82,6 +83,11 @@ class AppContainer(private val context: Context) {
     val assetRepository: AssetRepository by lazy { AssetRepository(context) }
     val documentRepository: DocumentRepository by lazy { DocumentRepository(directLlmClient) }
     val characterRepository: CharacterRepository by lazy { CharacterRepository(settingsRepository) }
+
+    // 群聊：复用 conversation + chat_history（哨兵 characterId），仅云端可用。
+    val groupChatRepository: GroupChatRepository by lazy {
+        GroupChatRepository(conversationRepository, chatRepository)
+    }
 
     // 通讯界面背景：内置 PRTS 轮播 + 用户自定义图片（最多 20 张，复制到内部存储）。
     val chatBackgroundRepository: ChatBackgroundRepository by lazy {

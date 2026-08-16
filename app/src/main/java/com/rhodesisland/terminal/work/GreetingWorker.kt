@@ -251,7 +251,9 @@ class GreetingWorker(
         }
         val message: String? = try {
             withTimeout(AppConfig.Greeting.GENERATE_TIMEOUT_MS) {
-                generateGreeting(container.directLlmClient, apiConfig, char, history)
+                // 博士档案（人设/关系）一并注入主动问候的 system
+                val userDirective = settings.getUserProfileNow().toDirectiveText()
+                generateGreeting(container.directLlmClient, apiConfig, char, history, userDirective)
             }
         } catch (e: Exception) {
             null
@@ -297,6 +299,7 @@ class GreetingWorker(
         apiConfig: com.rhodesisland.terminal.data.model.ApiConfig,
         char: com.rhodesisland.terminal.data.model.Character,
         history: List<ChatMessage>,
+        userDirective: String,
     ): String {
         val cal = Calendar.getInstance()
         val hour = cal.get(Calendar.HOUR_OF_DAY)
@@ -321,7 +324,7 @@ class GreetingWorker(
         }
 
         val messages = buildList {
-            add(ChatMessageDto(role = "system", content = JsonPrimitive(char.systemPrompt + instruction)))
+            add(ChatMessageDto(role = "system", content = JsonPrimitive(char.systemPrompt + userDirective + instruction)))
             history.forEach { m ->
                 if (m.content.isBlank()) return@forEach
                 // 剥离 <think> 段（深度思考模式下云端回复会带），避免把推理过程当历史喂回

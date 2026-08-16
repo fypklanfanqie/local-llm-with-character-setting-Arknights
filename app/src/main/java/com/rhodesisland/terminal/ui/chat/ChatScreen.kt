@@ -13,9 +13,11 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -471,9 +473,9 @@ fun ChatScreen(
     }
 }
 
-/** 聊天头像：有立绘用图，否则 monogram 渐变首字。 */
+/** 聊天头像：有立绘用图，否则 monogram 渐变首字。群聊逐条复用（internal）。 */
 @Composable
-private fun ChatAvatar(
+internal fun ChatAvatar(
     imageUrl: String,
     name: String,
     modifier: Modifier = Modifier,
@@ -689,49 +691,61 @@ private fun ChatTopBar(
             }
         }
 
-        GlassSegmented(
-            options = ChatProviderType.values().map {
-                it to "${it.icon} ${if (it == ChatProviderType.CLOUD) "云端" else "本地"}"
-            },
-            selected = activeProvider,
-            onSelect = onSwitchProvider,
-        )
+        // 右侧按钮组（分段切换 + 图标 + 中/日语言）：窄屏或大字号放不下时整组可横向滑动，
+        // 避免按钮被挤压变形或最右侧（语言按钮）被裁掉。
+        Box(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            contentAlignment = Alignment.CenterEnd,
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                GlassSegmented(
+                    options = ChatProviderType.values().map {
+                        it to "${it.icon} ${if (it == ChatProviderType.CLOUD) "云端" else "本地"}"
+                    },
+                    selected = activeProvider,
+                    onSelect = onSwitchProvider,
+                )
 
-        IconBubble(
-            icon = Icons.Outlined.Psychology,
-            contentDescription = "深度思考",
-            highlighted = deepThinkingEnabled,
-            onClick = onToggleDeepThinking,
-        )
-        // Seedance 自动视频开关（Task 7）：LOCAL Provider 下禁用并提示「仅云端可用」，
-        // 不清空已存储的会话开关值；开启准入（Key/立绘）由 ViewModel 校验。
-        IconBubble(
-            icon = Icons.Outlined.Videocam,
-            contentDescription = if (videoToggleDisabled) "自动视频：仅云端可用" else "自动视频",
-            highlighted = videoAutoEnabled && !videoToggleDisabled,
-            onClick = {
-                if (videoToggleDisabled) {
-                    Toast.makeText(context, "自动视频仅云端可用", Toast.LENGTH_SHORT).show()
-                } else {
-                    onToggleVideoAuto()
-                }
-            },
-        )
-        IconBubble(
-            icon = Icons.AutoMirrored.Outlined.Chat,
-            contentDescription = "会话记录",
-            badge = conversationCount.takeIf { it > 0 },
-            onClick = onOpenConversations,
-        )
-        LangBubble(
-            lang = ttsLanguage,
-            contentDescription = "语音语言：${ttsLanguage.label}",
-            onClick = {
-                val next = if (ttsLanguage == TtsLanguage.ZH) TtsLanguage.JA else TtsLanguage.ZH
-                onToggleLang()
-                Toast.makeText(context, "语音语言已切换至${next.label}", Toast.LENGTH_SHORT).show()
-            },
-        )
+                IconBubble(
+                    icon = Icons.Outlined.Psychology,
+                    contentDescription = "深度思考",
+                    highlighted = deepThinkingEnabled,
+                    onClick = onToggleDeepThinking,
+                )
+                // Seedance 自动视频开关（Task 7）：LOCAL Provider 下禁用并提示「仅云端可用」，
+                // 不清空已存储的会话开关值；开启准入（Key/立绘）由 ViewModel 校验。
+                IconBubble(
+                    icon = Icons.Outlined.Videocam,
+                    contentDescription = if (videoToggleDisabled) "自动视频：仅云端可用" else "自动视频",
+                    highlighted = videoAutoEnabled && !videoToggleDisabled,
+                    onClick = {
+                        if (videoToggleDisabled) {
+                            Toast.makeText(context, "自动视频仅云端可用", Toast.LENGTH_SHORT).show()
+                        } else {
+                            onToggleVideoAuto()
+                        }
+                    },
+                )
+                IconBubble(
+                    icon = Icons.AutoMirrored.Outlined.Chat,
+                    contentDescription = "会话记录",
+                    badge = conversationCount.takeIf { it > 0 },
+                    onClick = onOpenConversations,
+                )
+                LangBubble(
+                    lang = ttsLanguage,
+                    contentDescription = "语音语言：${ttsLanguage.label}",
+                    onClick = {
+                        val next = if (ttsLanguage == TtsLanguage.ZH) TtsLanguage.JA else TtsLanguage.ZH
+                        onToggleLang()
+                        Toast.makeText(context, "语音语言已切换至${next.label}", Toast.LENGTH_SHORT).show()
+                    },
+                )
+            }
+        }
     }
 }
 
@@ -816,6 +830,8 @@ internal fun MessageBubble(
     state: ChatUiState,
     characterImage: String,
     characterName: String,
+    /** 博士头像（设置「我的形象」）；空串回落 monogram「我」。 */
+    userImage: String = "",
     onTts: () -> Unit,
     onDelete: () -> Unit = {},
     onPlayVideo: (() -> Unit)? = null,
@@ -1010,7 +1026,8 @@ internal fun MessageBubble(
 
             if (isUser) {
                 Spacer(Modifier.width(8.dp))
-                MonogramAvatar(text = "我", size = UserAvatarSize)
+                // 博士头像（设置「我的形象」）；未设置时 ChatAvatar 自动回落 monogram「我」
+                ChatAvatar(imageUrl = userImage, name = "我", size = UserAvatarSize)
             }
         }
     }

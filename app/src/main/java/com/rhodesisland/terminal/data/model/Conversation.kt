@@ -16,4 +16,13 @@ data class Conversation(
      * 仅 CLOUD Provider 且助手正常完整结束时触发；本地聊天与停止后的部分回复不触发。
      */
     val autoVideoEnabled: Boolean = false,
+    /**
+     * 是否为群聊会话（默认 false）。群聊 = 一行 `characterId = "group_chat"` 的 conversation，
+     * 消息复用 chat_history（每行 characterId 记发言人）；[memberIds] 为群成员角色 id 列表。
+     */
+    val isGroup: Boolean = false,
+    /** 群成员角色 id 列表（仅 isGroup=true 有意义；1:1 恒为空）。 */
+    val memberIds: List<String> = emptyList(),
+    /** 群封面图 file:// 路径（仅群聊有意义；null=未设置）。 */
+    val coverImagePath: String? = null,
 )

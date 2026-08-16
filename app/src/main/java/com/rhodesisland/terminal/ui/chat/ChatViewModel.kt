@@ -206,6 +206,12 @@ class ChatViewModel(
                 Log.e(TAG, "deepThinking flow 异常", e)
             }
         }
+        // 博士档案（我的形象）-> 头像（用户气泡显示）
+        viewModelScope.launch {
+            container.settingsRepository.userProfile.collect { profile ->
+                _uiState.update { it.copy(userImage = profile.avatarPath) }
+            }
+        }
     }
 
     /** 从会话列表 + 当前活跃 id 同步 uiState 的 activeConversationId / activeConversationTitle /
@@ -672,8 +678,10 @@ class ChatViewModel(
                     }
                 }
                 val isCloudProvider = container.settingsRepository.getActiveProviderNow() == ChatProviderType.CLOUD
+                // 博士档案（人设/关系）注入 system：云端与本地共用同一消息列表，一处注入两端生效
+                val userDirective = container.settingsRepository.getUserProfileNow().toDirectiveText()
                 val apiMessages = buildList {
-                    add(ChatMessage(role = "system", content = char.systemPrompt))
+                    add(ChatMessage(role = "system", content = char.systemPrompt + userDirective))
                     addAll(resolvedHistory.map {
                         if (isCloudProvider) {
                             // 云端历史含 <think>（注入的推理），回传前剥离（reasoning 不应回传给对话商）。

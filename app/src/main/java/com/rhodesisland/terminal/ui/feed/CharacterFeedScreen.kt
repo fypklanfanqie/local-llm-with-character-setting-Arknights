@@ -2,6 +2,8 @@ package com.rhodesisland.terminal.ui.feed
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -58,6 +60,12 @@ object FeedRoute {
     const val FEED = "feed"
     const val CHAT = "chat_detail"
     const val ENCOUNTER = "encounter"
+    /** 群聊列表（微信式：新建/进入已有群）。 */
+    const val GROUP_LIST = "group_list"
+    /** 群聊会话页路由模板（后接群 id）。 */
+    const val GROUP_CHAT = "group_chat/{groupId}"
+
+    fun groupChatRoute(groupId: Long): String = "group_chat/$groupId"
 }
 
 /**
@@ -73,6 +81,8 @@ fun CharacterFeedScreen(
     onNavigateToCharacters: () -> Unit,
     /** 进入「邂逅」沉浸式视频历史流（顶栏玻璃按钮）。 */
     onOpenEncounter: () -> Unit = {},
+    /** 进入「群聊」多人同群聊天（顶栏玻璃按钮，仅云端可用）。 */
+    onOpenGroupChat: () -> Unit = {},
     /** 当前落定立绘的主题色上报（供 dock 栏等全局着色）；页面销毁时应回传 null 复位。 */
     onAccent: (Color?) -> Unit = {},
 ) {
@@ -197,6 +207,11 @@ fun CharacterFeedScreen(
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
             )
+            // 常态右对齐；窄屏/大字号放不下时整行可横向滑动，避免按钮被裁切
+            Box(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                contentAlignment = Alignment.CenterEnd,
+            ) {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -228,6 +243,19 @@ fun CharacterFeedScreen(
                     )
                 }
                 GlassButton(
+                    onClick = onOpenGroupChat,
+                    style = GlassButtonStyle.Glass,
+                    horizontalPadding = 12.dp,
+                    verticalPadding = 8.dp,
+                ) {
+                    Text(
+                        "群聊",
+                        color = Color.White.copy(alpha = 0.92f),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
+                GlassButton(
                     onClick = { showCreate = true },
                     style = GlassButtonStyle.Glass,
                     horizontalPadding = 12.dp,
@@ -247,6 +275,7 @@ fun CharacterFeedScreen(
                         fontWeight = FontWeight.Medium,
                     )
                 }
+            }
             }
         }
     }
