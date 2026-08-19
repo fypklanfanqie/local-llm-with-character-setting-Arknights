@@ -147,11 +147,15 @@ class AffinityRepository(private val database: AppDatabase) {
         val reward = applyRewardInTransaction(characterId, gift.affinityGain, "gift:$historyId", "gift", now)
         when (reward) {
             is AffinityRewardResult.Applied -> {
-                val history = GiftHistory(historyId, characterId, gift.id, gift.name, gift.description, gift.imagePath, gift.price, gift.affinityGain, now, conversationId)
+                val history = requireNotNull(dao.getGiftHistory(historyId)).toDomain()
                 GiftSendResult.Sent(history, reward.affinity, reward.unlockedThresholds)
             }
             AffinityRewardResult.AlreadyApplied -> error("礼物奖励键冲突")
         }
+    }
+
+    suspend fun saveGiftThankYouText(historyId: Long, text: String) {
+        dao.updateGiftThankYouText(historyId, text.take(1_000))
     }
 
     private suspend fun addReward(

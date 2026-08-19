@@ -313,6 +313,7 @@ private fun GiftHistoryCard(history: GiftHistory) {
                 Text(history.giftName, fontWeight = FontWeight.SemiBold)
                 if (history.giftDescription.isNotBlank()) Text(history.giftDescription, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text("+${formatAffinity(history.affinityGain)} 好感", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                if (history.thankYouText.isNotBlank()) Text("${history.thankYouText}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

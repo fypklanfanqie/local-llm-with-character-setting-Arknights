@@ -1095,6 +1095,7 @@ class ChatViewModel(
                 add(ChatMessage(role = "user", content = prompt))
             }
             runCatching { provider.chat(messages) {} }.onSuccess { response ->
+                container.affinityRepository.saveGiftThankYouText(gift.id, response)
                 val rowId = container.chatRepository.addMessage(char.id, convId, ChatMessage(role = "assistant", content = response))
                 container.conversationRepository.touch(convId)
                 _uiState.update { state ->

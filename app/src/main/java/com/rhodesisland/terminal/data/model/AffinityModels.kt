@@ -45,6 +45,7 @@ data class GiftHistory(
     val affinityGain: Float,
     val sentAt: Long,
     val conversationId: Long,
+    val thankYouText: String = "",
 )
 
 @Serializable

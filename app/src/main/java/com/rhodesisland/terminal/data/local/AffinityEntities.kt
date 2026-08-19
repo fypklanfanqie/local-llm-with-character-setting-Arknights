@@ -74,6 +74,7 @@ data class GiftHistoryEntity(
     val affinityGain: Float,
     val sentAt: Long,
     val conversationId: Long,
+    val thankYouText: String = "",
 )
 
 @Entity(
@@ -208,6 +209,12 @@ interface AffinityDao {
     @Insert
     suspend fun insertGiftHistory(entity: GiftHistoryEntity): Long
 
+    @Query("SELECT * FROM gift_history WHERE id = :historyId")
+    suspend fun getGiftHistory(historyId: Long): GiftHistoryEntity?
+
+    @Query("UPDATE gift_history SET thankYouText = :text WHERE id = :historyId")
+    suspend fun updateGiftThankYouText(historyId: Long, text: String)
+
     @Query("SELECT * FROM gift_history WHERE characterId = :characterId ORDER BY sentAt DESC")
     fun observeGiftHistory(characterId: String): Flow<List<GiftHistoryEntity>>
 
@@ -224,5 +231,5 @@ internal fun CharacterAffinityEntity.toDomain() = CharacterAffinity(characterId,
 internal fun LungmenWalletEntity.toDomain() = LungmenWallet(balance, updatedAt)
 internal fun GiftDefinitionEntity.toDomain() = GiftDefinition(id, name, description, imagePath, price, affinityGain, createdAt)
 internal fun GiftInventoryEntity.toDomain() = GiftInventory(giftId, quantity, updatedAt)
-internal fun GiftHistoryEntity.toDomain() = GiftHistory(id, characterId, giftId, giftName, giftDescription, giftImagePath, price, affinityGain, sentAt, conversationId)
+internal fun GiftHistoryEntity.toDomain() = GiftHistory(id, characterId, giftId, giftName, giftDescription, giftImagePath, price, affinityGain, sentAt, conversationId, thankYouText)
 internal fun SpecialEventEntity.toDomain() = SpecialEvent(id, characterId, threshold, title, sceneKey, unlockedAt, startedAt, conversationId, isRead, openingMessageId)
