@@ -674,7 +674,6 @@ class ChatViewModel(
                     fileNames = files.map { it.name },
                 )
                 userMsgId = container.chatRepository.addMessage(charId, convId, userMessage)
-                container.affinityRepository.addChatAffinity(charId, userMsgId)
                 autoVideoSnapshot = AutoVideoTriggerSnapshot(
                     provider = autoProvider,
                     enabled = autoEnabled,
@@ -798,6 +797,8 @@ class ChatViewModel(
                 } else {
                     MessageCompletionState.COMPLETE
                 }
+                // 用户消息已落库且后续生成成功时才授予 +0.5；失败路径会删除该消息，不能奖励。
+                container.affinityRepository.addChatAffinity(charId, userMsgId)
                 // 统一完成/停止落库：插入 assistant（+自动视频 outbox 同事务）、touch、乐观显示、清理流式状态。
                 finalizeAssistant(
                     charId = charId,
@@ -820,6 +821,8 @@ class ChatViewModel(
                 if (stoppedByUser) {
                     // 云端显式停止：HTTP 调用被取消表现为 IOException。此时不是错误——保留部分输出，
                     // 不删除已落库的用户消息，不展示错误横幅。
+                    // 用户主动停止仍保留并完成本轮对话，给予该条已落库用户消息的好感。
+                    if (userMsgId != 0L) container.affinityRepository.addChatAffinity(charId, userMsgId)
                     termReason = "已停止（保留部分输出）"
                     val partial = latestAccumulated
                     finalizeAssistant(
