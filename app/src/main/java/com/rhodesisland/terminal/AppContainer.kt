@@ -195,6 +195,12 @@ class AppContainer(private val context: Context) {
             },
             apiConfigProvider = { settingsRepository.getApiConfigNow() },
             seedanceConfigProvider = { settingsRepository.getSeedanceConfigNow() },
+            onReady = { video ->
+                val conversation = conversationRepository.getById(video.sourceConversationId)
+                if (conversation != null && !conversation.isGroup) {
+                    affinityRepository.addVideoAffinity(conversation.characterId, video.id)
+                }
+            },
         )
     }
 
