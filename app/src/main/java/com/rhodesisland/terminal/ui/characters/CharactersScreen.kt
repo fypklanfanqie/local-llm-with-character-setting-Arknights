@@ -69,6 +69,7 @@ fun CharactersScreen(
         initial = Characters.getOrderedList(),
     )
     val activeCharacter by container.settingsRepository.activeCharacter.collectAsState(initial = Characters.DEFAULT_CHARACTER_ID)
+    val unreadAffinityEvents by container.affinityRepository.observeUnreadUnlockCount(activeCharacter).collectAsState(initial = 0)
     val volume by container.settingsRepository.volume.collectAsState(initial = 60)
     val scope = rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
@@ -219,6 +220,7 @@ fun CharactersScreen(
                         } else null,
                         onViewPersona = { showPersona = char },
                         onViewAffinity = { showAffinity = char },
+                        hasUnreadAffinityEvent = char.id == activeCharacter && unreadAffinityEvents > 0,
                     )
                 }
             }
@@ -299,6 +301,7 @@ private fun CharacterCard(
     onDelete: (() -> Unit)?,
     onViewPersona: () -> Unit,
     onViewAffinity: () -> Unit,
+    hasUnreadAffinityEvent: Boolean,
 ) {
     val scheme = MaterialTheme.colorScheme
     Box(
@@ -361,16 +364,27 @@ private fun CharacterCard(
                     Spacer(Modifier.width(4.dp))
                     Text("查看人设", color = scheme.onSurfaceVariant, fontSize = 11.5.sp)
                 }
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(50))
-                        .clickable(onClick = onViewAffinity)
-                        .padding(horizontal = 8.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.Filled.Favorite, contentDescription = null, tint = scheme.primary, modifier = Modifier.size(12.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("好感度", color = scheme.primary, fontSize = 11.5.sp)
+                Box {
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .clickable(onClick = onViewAffinity)
+                            .padding(horizontal = 8.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Filled.Favorite, contentDescription = null, tint = scheme.primary, modifier = Modifier.size(12.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("好感度", color = scheme.primary, fontSize = 11.5.sp)
+                    }
+                    if (hasUnreadAffinityEvent) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(scheme.error),
+                        )
+                    }
                 }
             }
         }
