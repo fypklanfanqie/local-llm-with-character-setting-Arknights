@@ -26,7 +26,7 @@ import java.io.File
  *
  * - [TtsEngine.SYSTEM]（默认）：手机自带 TextToSpeech（离线、免凭据），声音模板见
  *   [SystemVoiceTemplate]；系统引擎不支持暂停，pause 退化为停止；
- * - [TtsEngine.CLOUD]：保持原小程序逻辑——CloudRun /tts 合成 base64 mp3 落临时文件后 MediaPlayer 播放，
+ * - [TtsEngine.CLOUD]：直连火山引擎 HTTP V3 合成 MP3 落临时文件后 MediaPlayer 播放，
  *   声音复刻音色按角色音色映射选择，支持中日双语。
  */
 class TtsManager(
