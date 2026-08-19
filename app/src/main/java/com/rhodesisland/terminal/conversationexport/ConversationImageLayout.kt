@@ -40,13 +40,22 @@ object ConversationImageLayout {
             message.attachments.size * ATTACHMENT_LINE_HEIGHT + 18
     }
 
-    internal fun textLineCount(text: String, width: Int, textSize: Float): Int {
-        val averageCharWidth = (textSize * 0.92f).coerceAtLeast(1f)
-        val charactersPerLine = (width / averageCharWidth).toInt().coerceAtLeast(1)
-        return text.split('\n').sumOf { paragraph ->
-            if (paragraph.isEmpty()) 1 else (paragraph.length + charactersPerLine - 1) / charactersPerLine
+    internal fun wrap(text: String, width: Int, textSize: Float): List<String> {
+        // 以 1.2em 估算每个字符：略保守于 CJK 宽字，保证 Canvas 实绘不会比布局更宽而裁切。
+        val charactersPerLine = (width / (textSize * 1.2f)).toInt().coerceAtLeast(1)
+        return buildList {
+            text.split('\n').forEach { paragraph ->
+                if (paragraph.isEmpty()) {
+                    add("")
+                } else {
+                    paragraph.chunked(charactersPerLine).forEach(::add)
+                }
+            }
         }
     }
+
+    internal fun textLineCount(text: String, width: Int, textSize: Float): Int =
+        wrap(text, width, textSize).size
 
     private fun estimatePageCount(document: ConversationExportDocument): Int {
         var pages = 1
