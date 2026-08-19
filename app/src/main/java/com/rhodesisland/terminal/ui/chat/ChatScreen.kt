@@ -411,6 +411,7 @@ fun ChatScreen(
                 role = state.characterRole,
                 imageUrl = state.characterImage,
                 activeProvider = state.activeProvider,
+                specialEventActive = state.activeSpecialEventId != null,
                 ttsLanguage = state.ttsLanguage,
                 conversationCount = state.conversations.size,
                 deepThinkingEnabled = state.deepThinkingEnabled,
@@ -762,6 +763,7 @@ private fun ChatTopBar(
     role: String,
     imageUrl: String,
     activeProvider: ChatProviderType,
+    specialEventActive: Boolean,
     ttsLanguage: com.rhodesisland.terminal.data.model.TtsLanguage,
     conversationCount: Int,
     deepThinkingEnabled: Boolean,
@@ -846,8 +848,12 @@ private fun ChatTopBar(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 GlassSegmented(
-                    options = ChatProviderType.values().map {
-                        it to "${it.icon} ${if (it == ChatProviderType.CLOUD) "云端" else "本地"}"
+                    options = if (specialEventActive) {
+                        listOf(ChatProviderType.CLOUD to "☁ 云端")
+                    } else {
+                        ChatProviderType.values().map {
+                            it to "${it.icon} ${if (it == ChatProviderType.CLOUD) "云端" else "本地"}"
+                        }
                     },
                     selected = activeProvider,
                     onSelect = onSwitchProvider,
@@ -859,17 +865,20 @@ private fun ChatTopBar(
                     highlighted = deepThinkingEnabled,
                     onClick = onToggleDeepThinking,
                 )
-                // Seedance 自动视频开关（Task 7）：LOCAL Provider 下禁用并提示「仅云端可用」，
-                // 不清空已存储的会话开关值；开启准入（Key/立绘）由 ViewModel 校验。
+                // Seedance 自动视频开关（Task 7）：特殊邂逅与本地 Provider 下禁用；群聊入口本身不创建视频任务。
                 IconBubble(
                     icon = Icons.Outlined.Videocam,
-                    contentDescription = if (videoToggleDisabled) "自动视频：仅云端可用" else "自动视频",
-                    highlighted = videoAutoEnabled && !videoToggleDisabled,
+                    contentDescription = when {
+                        specialEventActive -> "特殊邂逅中不可生成视频"
+                        videoToggleDisabled -> "自动视频：仅云端可用"
+                        else -> "自动视频"
+                    },
+                    highlighted = videoAutoEnabled && !videoToggleDisabled && !specialEventActive,
                     onClick = {
-                        if (videoToggleDisabled) {
-                            Toast.makeText(context, "自动视频仅云端可用", Toast.LENGTH_SHORT).show()
-                        } else {
-                            onToggleVideoAuto()
+                        when {
+                            specialEventActive -> Toast.makeText(context, "特殊邂逅中不可生成视频", Toast.LENGTH_SHORT).show()
+                            videoToggleDisabled -> Toast.makeText(context, "自动视频仅云端可用", Toast.LENGTH_SHORT).show()
+                            else -> onToggleVideoAuto()
                         }
                     },
                 )

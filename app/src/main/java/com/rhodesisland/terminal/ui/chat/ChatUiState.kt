@@ -54,4 +54,6 @@ data class ChatUiState(
     val activeConversationAutoVideoEnabled: Boolean = false,
     /** 是否展开对话管理抽屉 */
     val showConversationSheet: Boolean = false,
+    /** 当前会话是否为一次性特殊邂逅；特殊事件中强制云端且隐藏本地切换。 */
+    val activeSpecialEventId: Long? = null,
 )

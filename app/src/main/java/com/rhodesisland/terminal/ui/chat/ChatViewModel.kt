@@ -228,6 +228,15 @@ class ChatViewModel(
                 activeConversationAutoVideoEnabled = active?.autoVideoEnabled ?: false,
             )
         }
+        if (id != null) {
+            viewModelScope.launch {
+                val event = container.database.affinityDao().getSpecialEventByConversation(id)
+                _uiState.update { state -> state.copy(activeSpecialEventId = event?.id) }
+                if (event != null && container.settingsRepository.getActiveProviderNow() != ChatProviderType.CLOUD) {
+                    container.chatProviderManager.switchProvider(ChatProviderType.CLOUD)
+                }
+            }
+        }
     }
 
     private suspend fun loadCharacter(characterId: String) {
@@ -403,6 +412,10 @@ class ChatViewModel(
      * （显示「仅云端可用」，不清空已存储的开关值），此处不拦截。
      */
     fun setAutoVideoEnabled(conversationId: Long, enabled: Boolean) {
+        if (_uiState.value.activeSpecialEventId != null) {
+            _uiState.update { it.copy(errorMessage = "特殊邂逅中不可生成视频") }
+            return
+        }
         if (!enabled) {
             viewModelScope.launch { container.conversationRepository.setAutoVideoEnabled(conversationId, false) }
             return
@@ -534,6 +547,10 @@ class ChatViewModel(
     }
 
     fun switchProvider(type: ChatProviderType) {
+        if (_uiState.value.activeSpecialEventId != null && type != ChatProviderType.CLOUD) {
+            _uiState.update { it.copy(errorMessage = "特殊邂逅中仅支持云端对话") }
+            return
+        }
         viewModelScope.launch {
             // 与 switchConversation/newConversation 一致：切换前取消当前推理，避免旧 provider
             // 的 onToken 回调继续更新 UI 造成状态混乱。
