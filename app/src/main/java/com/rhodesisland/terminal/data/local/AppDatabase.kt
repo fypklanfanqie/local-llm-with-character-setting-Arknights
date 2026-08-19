@@ -88,6 +88,9 @@ interface ChatDao {
     @Query("SELECT * FROM chat_history WHERE conversationId = :conversationId ORDER BY timestamp DESC LIMIT ${AppConfig.MAX_HISTORY_PER_CONVERSATION}")
     suspend fun getHistoryList(conversationId: Long): List<ChatHistoryEntity>
 
+    @Query("SELECT * FROM chat_history WHERE conversationId = :conversationId ORDER BY timestamp ASC")
+    suspend fun getAllHistoryList(conversationId: Long): List<ChatHistoryEntity>
+
     @Insert
     suspend fun insert(entity: ChatHistoryEntity): Long
 

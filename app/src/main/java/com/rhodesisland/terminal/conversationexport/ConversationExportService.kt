@@ -18,7 +18,7 @@ class ConversationExportService(
     suspend fun prepare(conversationId: Long): ConversationExportDocument {
         val conversation = conversations.getById(conversationId)
             ?: throw ConversationExportException("该会话已不存在")
-        val messages = chats.getHistory(conversation.id)
+        val messages = chats.getAllHistoryForExport(conversation.id)
         if (messages.isEmpty()) throw ConversationExportException("没有可导出的已保存消息")
 
         val ownerName = displayName(conversation.characterId, "群聊")
