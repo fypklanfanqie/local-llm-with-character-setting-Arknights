@@ -18,10 +18,16 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.rhodesisland.terminal.AppContainer
+import com.rhodesisland.terminal.ui.affinity.AffinityEventsScreen
+import com.rhodesisland.terminal.ui.affinity.AffinityGiftsScreen
 import com.rhodesisland.terminal.ui.affinity.AffinityScreen
 
 private const val FEED_AFFINITY_ROUTE = "feed_affinity/{characterId}"
+private const val FEED_AFFINITY_GIFTS_ROUTE = "feed_affinity_gifts/{characterId}"
+private const val FEED_AFFINITY_EVENTS_ROUTE = "feed_affinity_events/{characterId}"
 private fun feedAffinityRoute(characterId: String): String = "feed_affinity/${Uri.encode(characterId)}"
+private fun feedAffinityGiftsRoute(characterId: String): String = "feed_affinity_gifts/${Uri.encode(characterId)}"
+private fun feedAffinityEventsRoute(characterId: String): String = "feed_affinity_events/${Uri.encode(characterId)}"
 
 /**
  * 通讯页自身的导航容器：好感页作为独立 destination 替换卡片流，
@@ -65,9 +71,35 @@ fun CharacterFeedHost(
                         character = character,
                         imageUrl = if (character.isCustom && character.image.isNotBlank()) character.image else container.assetRepository.getSelectionPicture(character.id),
                         onBack = { navController.popBackStack() },
-                        onOpenEventConversation = { onOpenChat(character.id) },
+                        onOpenGifts = { navController.navigate(feedAffinityGiftsRoute(character.id)) },
+                        onOpenEvents = { navController.navigate(feedAffinityEventsRoute(character.id)) },
                     )
                 }
+            }
+        }
+        composable(
+            route = FEED_AFFINITY_GIFTS_ROUTE,
+            arguments = listOf(navArgument("characterId") { type = NavType.StringType }),
+        ) { entry ->
+            val characterId = entry.arguments?.getString("characterId").orEmpty()
+            val characters by container.characterRepository.characters.collectAsState(initial = emptyList())
+            characters.firstOrNull { it.id == characterId }?.let { character ->
+                AffinityGiftsScreen(container, character, onBack = { navController.popBackStack() })
+            }
+        }
+        composable(
+            route = FEED_AFFINITY_EVENTS_ROUTE,
+            arguments = listOf(navArgument("characterId") { type = NavType.StringType }),
+        ) { entry ->
+            val characterId = entry.arguments?.getString("characterId").orEmpty()
+            val characters by container.characterRepository.characters.collectAsState(initial = emptyList())
+            characters.firstOrNull { it.id == characterId }?.let { character ->
+                AffinityEventsScreen(
+                    container,
+                    character,
+                    onBack = { navController.popBackStack() },
+                    onOpenEventConversation = { onOpenChat(character.id) },
+                )
             }
         }
     }

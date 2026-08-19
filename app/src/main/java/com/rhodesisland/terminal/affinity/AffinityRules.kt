@@ -15,6 +15,12 @@ fun affinityGainForGiftPrice(price: Long): Float? = when (price) {
     else -> null
 }
 
+fun nextAffinityHint(value: Float): String = AFFINITY_EVENT_THRESHOLDS.firstOrNull { it > value }
+    ?.let { "距离下一阶段 $it 好感还差 ${formatAffinity(it - value)}" }
+    ?: "已达到最高好感度。"
+
+fun formatAffinity(value: Float): String = if (value % 1f == 0f) value.toInt().toString() else "%.1f".format(value)
+
 fun crossedAffinityThresholds(
     previous: Float,
     current: Float,

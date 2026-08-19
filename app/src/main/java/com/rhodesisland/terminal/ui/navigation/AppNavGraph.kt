@@ -66,6 +66,8 @@ import com.rhodesisland.terminal.ui.affinity.DailyCheckinBus
 import com.rhodesisland.terminal.ui.affinity.DailyCheckinDialog
 import com.rhodesisland.terminal.ui.affinity.CheckinShopScreen
 import com.rhodesisland.terminal.ui.affinity.AffinityScreen
+import com.rhodesisland.terminal.ui.affinity.AffinityGiftsScreen
+import com.rhodesisland.terminal.ui.affinity.AffinityEventsScreen
 import androidx.compose.ui.graphics.Color
 
 /**
@@ -85,7 +87,11 @@ sealed class BottomTab(val route: String, val label: String, val icon: ImageVect
 
 private const val CHECKIN_SHOP_ROUTE = "checkin_shop"
 private const val AFFINITY_ROUTE = "affinity/{characterId}"
+private const val AFFINITY_GIFTS_ROUTE = "affinity_gifts/{characterId}"
+private const val AFFINITY_EVENTS_ROUTE = "affinity_events/{characterId}"
 private fun affinityRoute(characterId: String): String = "affinity/${android.net.Uri.encode(characterId)}"
+private fun affinityGiftsRoute(characterId: String): String = "affinity_gifts/${android.net.Uri.encode(characterId)}"
+private fun affinityEventsRoute(characterId: String): String = "affinity_events/${android.net.Uri.encode(characterId)}"
 
 @Composable
 fun AppNavGraph(container: AppContainer, initialChatOpen: Boolean = false) {
@@ -153,7 +159,7 @@ fun AppNavGraph(container: AppContainer, initialChatOpen: Boolean = false) {
         // 置 0 交由各页自处理；底部 NavigationBar 自带 navigationBars inset，行为不变。
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
-            val isAffinityDestination = currentDestination?.route == CHECKIN_SHOP_ROUTE || currentDestination?.route == AFFINITY_ROUTE
+            val isAffinityDestination = currentDestination?.route in setOf(CHECKIN_SHOP_ROUTE, AFFINITY_ROUTE, AFFINITY_GIFTS_ROUTE, AFFINITY_EVENTS_ROUTE)
             if (!isAffinityDestination) {
             val currentTabRoute = tabs.firstOrNull { tab ->
                 currentDestination?.hierarchy?.any { it.route == tab.route } == true
@@ -326,6 +332,32 @@ fun AppNavGraph(container: AppContainer, initialChatOpen: Boolean = false) {
                         container = container,
                         character = selected,
                         imageUrl = if (selected.isCustom && selected.image.isNotBlank()) selected.image else container.assetRepository.getSelectionPicture(selected.id),
+                        onBack = { navController.popBackStack() },
+                        onOpenGifts = { navController.navigate(affinityGiftsRoute(selected.id)) },
+                        onOpenEvents = { navController.navigate(affinityEventsRoute(selected.id)) },
+                    )
+                }
+            }
+            composable(
+                route = AFFINITY_GIFTS_ROUTE,
+                arguments = listOf(navArgument("characterId") { type = NavType.StringType }),
+            ) { entry ->
+                val characterId = entry.arguments?.getString("characterId").orEmpty()
+                val character by container.characterRepository.characters.collectAsState(initial = emptyList())
+                character.firstOrNull { it.id == characterId }?.let { selected ->
+                    AffinityGiftsScreen(container, selected, onBack = { navController.popBackStack() })
+                }
+            }
+            composable(
+                route = AFFINITY_EVENTS_ROUTE,
+                arguments = listOf(navArgument("characterId") { type = NavType.StringType }),
+            ) { entry ->
+                val characterId = entry.arguments?.getString("characterId").orEmpty()
+                val character by container.characterRepository.characters.collectAsState(initial = emptyList())
+                character.firstOrNull { it.id == characterId }?.let { selected ->
+                    AffinityEventsScreen(
+                        container,
+                        selected,
                         onBack = { navController.popBackStack() },
                         onOpenEventConversation = {
                             navController.navigate(BottomTab.Chat.route) {

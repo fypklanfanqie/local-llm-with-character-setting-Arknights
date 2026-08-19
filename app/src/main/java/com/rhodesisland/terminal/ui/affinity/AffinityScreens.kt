@@ -1,14 +1,12 @@
 package com.rhodesisland.terminal.ui.affinity
 
-import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,147 +15,45 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CardGiftcard
-import androidx.compose.material.icons.filled.CurrencyYen
 import androidx.compose.material.icons.filled.Event
-import androidx.compose.material.icons.filled.Redeem
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.ui.unit.sp
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.rhodesisland.terminal.AppContainer
 import com.rhodesisland.terminal.affinity.AFFINITY_EVENT_THRESHOLDS
-import com.rhodesisland.terminal.affinity.AffinityRepository
-import com.rhodesisland.terminal.affinity.CheckinResult
-import com.rhodesisland.terminal.affinity.GiftImageStore
-import com.rhodesisland.terminal.affinity.GiftPurchaseResult
-import com.rhodesisland.terminal.affinity.OwnedGift
 import com.rhodesisland.terminal.affinity.SpecialEventLaunchResult
-import com.rhodesisland.terminal.affinity.affinityGainForGiftPrice
-import com.rhodesisland.terminal.config.Characters
 import com.rhodesisland.terminal.data.model.Character
 import com.rhodesisland.terminal.data.model.GiftHistory
 import com.rhodesisland.terminal.data.model.SpecialEvent
 import com.rhodesisland.terminal.ui.characters.CharacterPortrait
-import com.rhodesisland.terminal.ui.glass.GlassLargeTitle
+import com.rhodesisland.terminal.ui.affinity.AffinityGiftImage
 import com.rhodesisland.terminal.ui.glass.GlassSheet
-import com.rhodesisland.terminal.ui.glass.frostedGlass
-import kotlinx.coroutines.Dispatchers
+import com.rhodesisland.terminal.affinity.formatAffinity
+import com.rhodesisland.terminal.affinity.nextAffinityHint
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-
-@Composable
-fun CheckinShopScreen(
-    container: AppContainer,
-    onBack: () -> Unit,
-) {
-    val wallet by container.affinityRepository.observeWallet().collectAsState(initial = com.rhodesisland.terminal.data.model.LungmenWallet(0L, 0L))
-    val checkedIn by container.affinityRepository.observeCheckinClaimed().collectAsState(initial = false)
-    val gifts by container.affinityRepository.observeOwnedGifts().collectAsState(initial = emptyList())
-    val scope = rememberCoroutineScope()
-    var message by remember { mutableStateOf<String?>(null) }
-    var showCreate by remember { mutableStateOf(false) }
-
-    Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        GlassLargeTitle("每日签到与商店") {
-            TextButton(onClick = onBack) { Text("返回") }
-        }
-        Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    LungmenCoinIcon()
-                    Spacer(Modifier.width(8.dp))
-                    Text("龙门币 ${wallet.balance}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                }
-                Text(if (checkedIn) "今日已签到，明天再来吧。" else "每日签到可领取 10,000 龙门币。", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Button(
-                    onClick = {
-                        scope.launch {
-                            when (val result = container.affinityRepository.claimDailyCheckin()) {
-                                is CheckinResult.Claimed -> message = "签到成功，获得 10,000 龙门币"
-                                is CheckinResult.AlreadyClaimed -> message = "今天已经签到过了"
-                            }
-                        }
-                    },
-                    enabled = !checkedIn,
-                ) { Text(if (checkedIn) "今日已签到" else "每日签到") }
-            }
-        }
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("礼物商店", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-            TextButton(onClick = { showCreate = true }) {
-                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                Text("新建礼物")
-            }
-        }
-        if (gifts.isEmpty()) {
-            Text("还没有自定义礼物。创建礼物后可以购买并赠送给干员。", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(gifts, key = { it.definition.id }) { gift ->
-                    GiftShopCard(gift) {
-                        scope.launch {
-                            when (container.affinityRepository.buyGift(gift.definition.id)) {
-                                is GiftPurchaseResult.Purchased -> message = "购买成功，已放入礼物库存"
-                                GiftPurchaseResult.InsufficientFunds -> message = "龙门币不足"
-                                GiftPurchaseResult.GiftMissing -> message = "礼物已不存在"
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
-    }
-    if (showCreate) {
-        CreateGiftDialog(
-            onDismiss = { showCreate = false },
-            onCreate = { name, description, path, price ->
-                scope.launch {
-                    runCatching { container.affinityRepository.createGift(name, description, path, price) }
-                        .onSuccess { message = "礼物已创建"; showCreate = false }
-                        .onFailure { message = it.message ?: "礼物创建失败" }
-                }
-            },
-        )
-    }
-}
 
 @Composable
 fun AffinityScreen(
@@ -165,24 +61,98 @@ fun AffinityScreen(
     character: Character,
     imageUrl: String,
     onBack: () -> Unit,
-    onOpenEventConversation: () -> Unit,
+    onOpenGifts: () -> Unit,
+    onOpenEvents: () -> Unit,
 ) {
     val affinity by container.affinityRepository.observeAffinity(character.id).collectAsState(initial = com.rhodesisland.terminal.data.model.CharacterAffinity(character.id, 0f, 0L))
     val events by container.affinityRepository.observeSpecialEvents(character.id).collectAsState(initial = emptyList())
     val giftHistory by container.affinityRepository.observeGiftHistory(character.id).collectAsState(initial = emptyList())
-    val scope = rememberCoroutineScope()
-    var message by remember { mutableStateOf<String?>(null) }
+    val unread = events.count { !it.isRead }
 
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        GlassLargeTitle("${character.name} · 好感度") { TextButton(onClick = onBack) { Text("返回") } }
-        CharacterPortrait(imageUrl = imageUrl, name = character.name, modifier = Modifier.fillMaxWidth().height(220.dp).clip(RoundedCornerShape(20.dp)))
-        Text("好感度 ${formatAffinity(affinity.value)} / 200", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
-        LinearProgressIndicator(progress = { affinity.value / 200f }, modifier = Modifier.fillMaxWidth())
-        Text(nextAffinityHint(affinity.value), color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text("特殊邂逅", style = MaterialTheme.typography.titleLarge)
-        AFFINITY_EVENT_THRESHOLDS.forEach { threshold ->
+    AffinityArchivePage(
+        title = "${character.name} · 关系档案",
+        code = "RELATION FILE / ${character.code.ifBlank { character.id.uppercase() }}",
+        onBack = onBack,
+        scrollTag = AFFINITY_SCROLL_TAG,
+    ) {
+        item {
+            AffinityHero(character, imageUrl)
+        }
+        item {
+            AffinityMeterCard(affinity.value)
+        }
+        item {
+            ArchiveSectionLabel("ARCHIVE INDEX", "关系记录")
+        }
+        item {
+            ArchiveRouteCard(
+                icon = Icons.Filled.CardGiftcard,
+                code = "GIFT LOG",
+                title = "礼物墙",
+                subtitle = if (giftHistory.isEmpty()) "尚无收礼记录" else "已收 ${giftHistory.size} 件礼物 · 查看完整记录",
+                onClick = onOpenGifts,
+            )
+        }
+        item {
+            ArchiveRouteCard(
+                icon = Icons.Filled.Event,
+                code = "EVENT ARCHIVE",
+                title = "特殊邂逅",
+                subtitle = if (unread > 0) "$unread 个新事件等待回忆" else "${events.size} / ${AFFINITY_EVENT_THRESHOLDS.size} 个阶段已解锁",
+                hasBadge = unread > 0,
+                onClick = onOpenEvents,
+            )
+        }
+        if (giftHistory.isNotEmpty()) {
+            item { ArchiveSectionLabel("LATEST ENTRY", "最近动态") }
+            item { GiftHistoryCard(giftHistory.first()) }
+        }
+    }
+}
+
+@Composable
+fun AffinityGiftsScreen(
+    container: AppContainer,
+    character: Character,
+    onBack: () -> Unit,
+) {
+    val history by container.affinityRepository.observeGiftHistory(character.id).collectAsState(initial = emptyList())
+    AffinityArchivePage(
+        title = "${character.name} · 礼物墙",
+        code = "GIFT LOG / ${character.code.ifBlank { character.id.uppercase() }}",
+        onBack = onBack,
+        scrollTag = "affinity_gifts_scroll",
+    ) {
+        item { ArchiveSectionLabel("PRESENT HISTORY", "收到的礼物") }
+        if (history.isEmpty()) {
+            item { EmptyArchiveCard("礼物墙为空", "在每日供应与商店采购礼物，再回到聊天中赠送给这名干员。") }
+        } else {
+            items(history.size, key = { history[it].id }) { index -> GiftHistoryCard(history[index]) }
+        }
+    }
+}
+
+@Composable
+fun AffinityEventsScreen(
+    container: AppContainer,
+    character: Character,
+    onBack: () -> Unit,
+    onOpenEventConversation: () -> Unit,
+) {
+    val affinity by container.affinityRepository.observeAffinity(character.id).collectAsState(initial = com.rhodesisland.terminal.data.model.CharacterAffinity(character.id, 0f, 0L))
+    val events by container.affinityRepository.observeSpecialEvents(character.id).collectAsState(initial = emptyList())
+    val scope = rememberCoroutineScope()
+    AffinityArchivePage(
+        title = "${character.name} · 特殊邂逅",
+        code = "EVENT ARCHIVE / ${character.code.ifBlank { character.id.uppercase() }}",
+        onBack = onBack,
+        scrollTag = "affinity_events_scroll",
+    ) {
+        item { ArchiveSectionLabel("RELATION MILESTONES", "阶段记录") }
+        items(AFFINITY_EVENT_THRESHOLDS.size) { index ->
+            val threshold = AFFINITY_EVENT_THRESHOLDS[index]
             val event = events.firstOrNull { it.threshold == threshold }
-            EventCard(
+            EventArchiveNode(
                 threshold = threshold,
                 event = event,
                 enabled = affinity.value >= threshold,
@@ -191,194 +161,101 @@ fun AffinityScreen(
                         event?.let { container.specialEventConversationCoordinator.markRead(it.id) }
                         when (container.specialEventConversationCoordinator.launch(character.id, threshold)) {
                             is SpecialEventLaunchResult.Ready, is SpecialEventLaunchResult.Existing -> onOpenEventConversation()
-                            SpecialEventLaunchResult.Missing -> message = "该阶段尚未解锁"
+                            SpecialEventLaunchResult.Missing -> Unit
                         }
                     }
                 },
             )
         }
-        Text("礼物墙", style = MaterialTheme.typography.titleLarge)
-        if (giftHistory.isEmpty()) Text("还没有收到礼物。", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        giftHistory.forEach { history -> GiftHistoryCard(history) }
-        message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     }
 }
 
 @Composable
-fun DailyCheckinDialog(
-    container: AppContainer,
-    onDismiss: () -> Unit,
-) {
-    val checkedIn by container.affinityRepository.observeCheckinClaimed().collectAsState(initial = true)
-    val scope = rememberCoroutineScope()
-    if (!checkedIn) {
-        AlertDialog(
-            onDismissRequest = onDismiss,
-            title = { Text("每日签到") },
-            text = { Text("今日可领取 10,000 龙门币。现在领取，或稍后从角色页进入每日签到。") },
-            confirmButton = {
-                TextButton(onClick = {
-                    scope.launch { container.affinityRepository.claimDailyCheckin() }
-                    onDismiss()
-                }) { Text("领取") }
-            },
-            dismissButton = { TextButton(onClick = onDismiss) { Text("稍后再说") } },
-        )
-    }
-}
-
-@Composable
-fun GiftInventorySheet(
-    gifts: List<OwnedGift>,
-    onSend: (OwnedGift) -> Unit,
-    onPickAttachment: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    GlassSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("赠送礼物", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-                TextButton(onClick = onPickAttachment) { Text("添加附件") }
-            }
-            if (gifts.none { it.inventory.quantity > 0 }) {
-                Text("没有可赠送的礼物，请先到每日签到与商店购买。", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            } else {
-                gifts.filter { it.inventory.quantity > 0 }.forEach { gift ->
-                    Surface(
-                        shape = RoundedCornerShape(14.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        modifier = Modifier.fillMaxWidth().clickable { onSend(gift) },
-                    ) {
-                        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            GiftImage(gift.definition.imagePath)
-                            Spacer(Modifier.width(10.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(gift.definition.name, fontWeight = FontWeight.Bold)
-                                Text("库存 ${gift.inventory.quantity} · +${formatAffinity(gift.definition.affinityGain)} 好感", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-                            }
-                            Icon(Icons.Filled.Redeem, contentDescription = "赠送")
-                        }
-                    }
-                }
-            }
+private fun AffinityHero(character: Character, imageUrl: String) {
+    Box(Modifier.fillMaxWidth().height(230.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(18.dp))) {
+        CharacterPortrait(imageUrl = imageUrl, name = character.name, modifier = Modifier.fillMaxSize())
+        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xFF07111F)))))
+        Column(Modifier.align(Alignment.BottomStart).padding(16.dp)) {
+            Text("RELATION FILE", color = archivePrimaryColor(), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+            Text(character.name, color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Bold)
+            Text(character.role.ifBlank { "罗德岛干员" }, color = Color(0xFFD2D8E0), fontSize = 12.sp)
         }
     }
 }
 
 @Composable
-private fun GiftShopCard(gift: OwnedGift, onBuy: () -> Unit) {
-    Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
-        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            GiftImage(gift.definition.imagePath)
-            Spacer(Modifier.width(10.dp))
+private fun AffinityMeterCard(value: Float) {
+    ArchiveCard {
+        Row(verticalAlignment = Alignment.Bottom) {
             Column(Modifier.weight(1f)) {
-                Text(gift.definition.name, fontWeight = FontWeight.Bold)
-                if (gift.definition.description.isNotBlank()) Text(gift.definition.description, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-                Text("${gift.definition.price} 龙门币 · +${formatAffinity(gift.definition.affinityGain)} 好感 · 库存 ${gift.inventory.quantity}", color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
+                Text("RELATION LEVEL", color = archiveSecondaryColor(), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                Text("好感度 ${formatAffinity(value)}", color = Color(0xFFF2F0EA), fontSize = 24.sp, fontWeight = FontWeight.Bold)
             }
-            TextButton(onClick = onBuy) { Text("购买") }
+            Text("/ 200", color = Color(0xFFAAB4C1), fontSize = 13.sp)
+        }
+        androidx.compose.material3.LinearProgressIndicator(progress = { (value / 200f).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth(), color = archivePrimaryColor(), trackColor = Color(0xFF2B3543))
+        Text(nextAffinityHint(value), color = Color(0xFFAAB4C1), fontSize = 12.sp)
+    }
+}
+
+@Composable
+private fun ArchiveRouteCard(icon: androidx.compose.ui.graphics.vector.ImageVector, code: String, title: String, subtitle: String, hasBadge: Boolean = false, onClick: () -> Unit) {
+    Surface(color = archiveSurfaceColor(), shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(48.dp).background(archivePrimaryColor().copy(alpha = 0.14f), androidx.compose.foundation.shape.RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) { Icon(icon, contentDescription = null, tint = archivePrimaryColor()) }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(code, color = archiveSecondaryColor(), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                Text(title, color = Color(0xFFF2F0EA), fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                Text(subtitle, color = Color(0xFFAAB4C1), fontSize = 12.sp)
+            }
+            if (hasBadge) Box(Modifier.size(9.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Color(0xFFE36B5D)))
+            Text("›", color = archivePrimaryColor(), fontSize = 28.sp)
         }
     }
 }
 
 @Composable
-private fun EventCard(threshold: Int, event: SpecialEvent?, enabled: Boolean, onOpen: () -> Unit) {
-    Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
-        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Filled.Event, contentDescription = null, tint = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.width(8.dp))
-            Column(Modifier.weight(1f)) {
-                Text(event?.title ?: "$threshold 好感邂逅")
-                Text(
-                    when {
-                        !enabled -> "达到 $threshold 好感后解锁"
-                        event?.conversationId != null -> "已开启，可回忆"
-                        else -> "已解锁，开始邂逅"
-                    },
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 12.sp,
-                )
+private fun EventArchiveNode(threshold: Int, event: SpecialEvent?, enabled: Boolean, onOpen: () -> Unit) {
+    Surface(color = archiveSurfaceColor(), shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(48.dp)) {
+                Text("$threshold", color = if (enabled) archivePrimaryColor() else Color(0xFF77808C), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text("AFF", color = Color(0xFF77808C), fontSize = 8.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
             }
-            if (enabled) TextButton(onClick = onOpen) { Text(if (event?.conversationId != null) "回忆" else "开始邂逅") }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(event?.title ?: "$threshold 好感阶段", color = Color(0xFFF2F0EA), fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text(if (!enabled) "尚未达到解锁条件" else if (event?.conversationId != null) "已开始 · 可继续回忆" else "已解锁 · 等待开始", color = Color(0xFFAAB4C1), fontSize = 12.sp)
+            }
+            if (enabled) TextButton(onClick = onOpen) { Text(if (event?.conversationId != null) "回忆" else "开始", color = archivePrimaryColor()) }
         }
     }
 }
 
 @Composable
 private fun GiftHistoryCard(history: GiftHistory) {
-    Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
-        Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            GiftImage(history.giftImagePath)
-            Spacer(Modifier.width(8.dp))
-            Column {
-                Text(history.giftName, fontWeight = FontWeight.SemiBold)
-                if (history.giftDescription.isNotBlank()) Text(history.giftDescription, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("+${formatAffinity(history.affinityGain)} 好感", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
-                if (history.thankYouText.isNotBlank()) Text("${history.thankYouText}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    ArchiveCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            AffinityGiftImage(history.giftImagePath, 56.dp)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(history.giftName, color = Color(0xFFF2F0EA), fontWeight = FontWeight.Bold)
+                Text("+${formatAffinity(history.affinityGain)} 好感  ·  ${formatGiftTime(history.sentAt)}", color = archivePrimaryColor(), fontSize = 11.sp)
             }
         }
+        if (history.giftDescription.isNotBlank()) Text(history.giftDescription, color = Color(0xFFAAB4C1), fontSize = 12.sp)
+        if (history.thankYouText.isNotBlank()) Text("“${history.thankYouText}”", color = Color(0xFFD2D8E0), fontSize = 12.sp)
     }
 }
 
 @Composable
-private fun GiftImage(path: String) {
-    if (path.isBlank()) {
-        Box(Modifier.size(48.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
-            Icon(Icons.Filled.CardGiftcard, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-        }
-    } else {
-        AsyncImage(model = path, contentDescription = null, modifier = Modifier.size(48.dp).clip(RoundedCornerShape(10.dp)), contentScale = ContentScale.Crop)
+private fun EmptyArchiveCard(label: String, description: String) {
+    ArchiveCard {
+        Text("ARCHIVE EMPTY", color = archiveSecondaryColor(), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+        Text(label, color = Color(0xFFF2F0EA), fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Text(description, color = Color(0xFFAAB4C1), fontSize = 12.sp)
     }
 }
 
-@Composable
-private fun LungmenCoinIcon() {
-    Box(Modifier.size(32.dp).clip(CircleShape).background(Color(0xFFF0B93F)), contentAlignment = Alignment.Center) {
-        Icon(Icons.Filled.CurrencyYen, contentDescription = "龙门币", tint = Color(0xFF412F00), modifier = Modifier.size(20.dp))
-    }
-}
-
-@Composable
-private fun CreateGiftDialog(
-    onDismiss: () -> Unit,
-    onCreate: (String, String, String, Long) -> Unit,
-) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var name by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
-    var priceText by remember { mutableStateOf("5000") }
-    var imagePath by remember { mutableStateOf("") }
-    var savingImage by remember { mutableStateOf(false) }
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri != null) {
-            savingImage = true
-            scope.launch(Dispatchers.IO) {
-                val saved = GiftImageStore.save(context, uri)
-                withContext(Dispatchers.Main) { imagePath = saved.orEmpty(); savingImage = false }
-            }
-        }
-    }
-    val price = priceText.toLongOrNull()
-    val gain = price?.let(::affinityGainForGiftPrice)
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("新建礼物") },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                androidx.compose.foundation.text.BasicTextField(name, { name = it }, textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface), modifier = Modifier.fillMaxWidth().frostedGlass(RoundedCornerShape(10.dp)).padding(10.dp), decorationBox = { inner -> if (name.isBlank()) Text("礼物名称 *"); inner() })
-                androidx.compose.foundation.text.BasicTextField(description, { description = it }, textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface), modifier = Modifier.fillMaxWidth().frostedGlass(RoundedCornerShape(10.dp)).padding(10.dp), decorationBox = { inner -> if (description.isBlank()) Text("礼物描述（可选）"); inner() })
-                androidx.compose.foundation.text.BasicTextField(priceText, { priceText = it.filter(Char::isDigit) }, textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface), modifier = Modifier.fillMaxWidth().frostedGlass(RoundedCornerShape(10.dp)).padding(10.dp), decorationBox = { inner -> if (priceText.isBlank()) Text("价格：5000–20000"); inner() })
-                Text("${gain?.let { "将增加 ${formatAffinity(it)} 好感" } ?: "价格须为 5000–9999、10000–14999 或 15000–20000"}", color = if (gain == null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary, fontSize = 12.sp)
-                OutlinedButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, enabled = !savingImage) { Text(if (savingImage) "保存图片中…" else if (imagePath.isBlank()) "选择礼物图片 *" else "更换礼物图片") }
-            }
-        },
-        confirmButton = { TextButton(enabled = name.isNotBlank() && imagePath.isNotBlank() && price != null && gain != null && !savingImage, onClick = { onCreate(name, description, imagePath, price!!) }) { Text("创建") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
-    )
-}
-
-private fun formatAffinity(value: Float): String = if (value % 1f == 0f) value.toInt().toString() else "%.1f".format(value)
-private fun nextAffinityHint(value: Float): String = AFFINITY_EVENT_THRESHOLDS.firstOrNull { it > value }
-    ?.let { "距离下一阶段 $it 好感还差 ${formatAffinity(it - value)}" }
-    ?: "已达到最高好感度。"
+private fun formatGiftTime(timestamp: Long): String = java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.CHINA).format(java.util.Date(timestamp))
