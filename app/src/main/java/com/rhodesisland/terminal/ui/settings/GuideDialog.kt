@@ -135,11 +135,11 @@ fun GuideDialog(onDismiss: () -> Unit) {
                     }
 
                     GuideSection("🔊 TTS 语音配置") {
-                        BodyText("TTS 采用火山引擎豆包语音合成，通过内置 CloudRun 代理转发请求，无需配置域名白名单。")
-                        StepText("1. 注册火山引擎账号 -> 开通「语音合成」服务，获取 API Key。")
-                        StepText("2. 在设置 TTS 区域填入 API Key 并保存。")
-                        StepText("3. 去火山引擎「声音复刻」克隆角色声音，获得 S_xxx 格式音色 ID。")
-                        StepText("4. 在「角色音色映射」区域为每个角色分别填入中 / 日音色 ID，留空则用默认音色。")
+                        BodyText("TTS 直连火山引擎豆包语音合成 HTTP V3 接口；你填写的凭据仅保存在本机，不会经由应用代理。")
+                        StepText("1. 注册火山引擎账号并开通对应语音合成或声音复刻资源，获取 API Key（推荐）。")
+                        StepText("2. 在设置 TTS 区域填入 API Key；旧版账号也可同时填写 App ID 与 Access Key。API Key 优先。")
+                        StepText("3. 在火山引擎控制台获取音色 ID，并查看该音色所属的 Resource ID。")
+                        StepText("4. 在「角色音色映射」中为中 / 日语分别填写音色 ID 和对应 Resource ID；两者必须成对填写，不能猜测 Resource ID。")
                         StepText("5. 聊天页点角色消息旁 ▶ 朗读，再点一次停止；顶部语言按钮可切换中 / 日合成。")
                     }
 
