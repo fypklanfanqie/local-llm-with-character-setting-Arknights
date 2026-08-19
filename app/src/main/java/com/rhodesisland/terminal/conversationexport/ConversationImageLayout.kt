@@ -1,5 +1,7 @@
 package com.rhodesisland.terminal.conversationexport
 
+const val EXPORT_MESSAGE_GAP_PX = 14
+
 class LongImageTooTallException(val height: Int) : IllegalStateException(
     "当前对话过长，无法安全生成单张长图；请改用“自动分页多张图”或 TXT（预计高度 ${height}px）",
 )
@@ -20,7 +22,7 @@ object ConversationImageLayout {
     private const val ATTACHMENT_LINE_HEIGHT = 38
 
     fun plan(document: ConversationExportDocument, mode: ConversationImageMode): ImageRenderPlan {
-        val totalHeight = HEADER_HEIGHT + document.messages.sumOf(::messageHeight) + 48
+        val totalHeight = HEADER_HEIGHT + document.messages.sumOf { message -> messageHeight(message) + EXPORT_MESSAGE_GAP_PX } + 48
         if (mode == ConversationImageMode.LONG_IMAGE && totalHeight > EXPORT_LONG_IMAGE_MAX_HEIGHT_PX) {
             throw LongImageTooTallException(totalHeight)
         }
@@ -55,7 +57,7 @@ object ConversationImageLayout {
                 pages++
                 used = HEADER_HEIGHT
             }
-            used += height
+            used += height + EXPORT_MESSAGE_GAP_PX
         }
         return pages
     }

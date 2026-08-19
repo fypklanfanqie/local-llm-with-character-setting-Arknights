@@ -48,7 +48,7 @@ object ConversationImageRenderer {
                         used = HEADER_HEIGHT
                     }
                     page += part
-                    used += ConversationImageLayout.messageHeight(part)
+                    used += ConversationImageLayout.messageHeight(part) + EXPORT_MESSAGE_GAP_PX
                 }
             } else {
                 if (page.isNotEmpty() && used + height > EXPORT_PAGE_HEIGHT_PX) {
@@ -57,7 +57,7 @@ object ConversationImageRenderer {
                     used = HEADER_HEIGHT
                 }
                 page += message
-                used += height
+                used += height + EXPORT_MESSAGE_GAP_PX
             }
         }
         if (page.isNotEmpty()) pages += page.toList()
