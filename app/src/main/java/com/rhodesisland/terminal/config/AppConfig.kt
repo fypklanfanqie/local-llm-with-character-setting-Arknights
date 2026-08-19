@@ -7,6 +7,8 @@ object AppConfig {
     // ===== TTS =====
     /** 火山引擎语音合成 HTTP V3 Chunked 官方直连地址。 */
     const val TTS_DIRECT_URL = "https://openspeech.bytedance.com/api/v3/tts/unidirectional"
+    /** 声音复刻 2.0 固定资源，用户只需填写训练成功的 speaker_id。 */
+    const val TTS_VOICE_CLONE_RESOURCE_ID = "seed-icl-2.0"
 
     // ===== 云端 AI 默认配置 =====
     const val DEFAULT_API_BASE = "https://api.deepseek.com/v1"

@@ -22,6 +22,9 @@ data class ApiConfig(
 @Serializable
 data class TtsConfig(
     val apiKey: String = "",
+    /** 声音复刻训练成功后控制台给出的 speaker_id，例如 S_xxx。 */
+    val defaultVoiceId: String = "",
+    /** 旧版隐藏兼容字段；新版云端朗读不再使用。 */
     val appId: String = "",
     val accessKey: String = "",
 )
@@ -87,21 +90,19 @@ enum class SystemVoiceTemplate(
  * 角色音色映射（火山引擎声音复刻 ID，S_xxx 格式）
  * zh / ja 分别对应中、日语音色；留空则由服务端按 characterId 默认选择。
  */
-enum class TtsAuthMode { API_KEY, LEGACY, NONE }
+enum class TtsAuthMode { API_KEY, NONE }
 
 @Serializable
 data class VoiceConfig(
     val voiceId: String = "",
     val resourceId: String = "",
 ) {
-    val isEmpty: Boolean get() = voiceId.isBlank() && resourceId.isBlank()
-    val isComplete: Boolean get() = voiceId.isNotBlank() && resourceId.isNotBlank()
+    val isEmpty: Boolean get() = voiceId.isBlank()
+    val isComplete: Boolean get() = voiceId.isNotBlank()
 
-    fun validationError(label: String): String? = when {
-        isEmpty || isComplete -> null
-        voiceId.isNotBlank() -> "${label}音色已填写，但缺少对应 Resource ID"
-        else -> "${label} Resource ID 已填写，但缺少对应音色 ID"
-    }
+    /** resourceId 是旧配置兼容字段，新版声音复刻 2.0 资源由客户端固定。 */
+    fun validationError(label: String): String? =
+        if (voiceId.isBlank() && resourceId.isNotBlank()) "$label Resource ID 已保存，但缺少音色 ID" else null
 }
 
 @Serializable
@@ -110,15 +111,24 @@ data class VoicePair(
     val ja: VoiceConfig = VoiceConfig(),
 )
 
-fun TtsConfig.authMode(): TtsAuthMode = when {
-    apiKey.isNotBlank() -> TtsAuthMode.API_KEY
-    appId.isNotBlank() && accessKey.isNotBlank() -> TtsAuthMode.LEGACY
-    else -> TtsAuthMode.NONE
+fun TtsConfig.authMode(): TtsAuthMode =
+    if (apiKey.isNotBlank()) TtsAuthMode.API_KEY else TtsAuthMode.NONE
+
+fun TtsConfig.validationError(): String? = when {
+    apiKey.isBlank() -> "请填写火山引擎 API Key"
+    defaultVoiceId.isBlank() -> "请填写默认自定义音色 ID（speaker_id）"
+    else -> null
 }
 
-fun TtsConfig.validationError(): String? = when (authMode()) {
-    TtsAuthMode.API_KEY, TtsAuthMode.LEGACY -> null
-    TtsAuthMode.NONE -> "请填写 API Key，或同时填写 App ID 与 Access Key"
+fun effectiveVoiceId(
+    characterId: String,
+    language: TtsLanguage,
+    voiceMap: Map<String, VoicePair>,
+    defaultVoiceId: String,
+): String? {
+    val pair = voiceMap[characterId]
+    val override = if (language == TtsLanguage.JA) pair?.ja?.voiceId else pair?.zh?.voiceId
+    return override?.takeIf { it.isNotBlank() } ?: defaultVoiceId.takeIf { it.isNotBlank() }
 }
 
 /**

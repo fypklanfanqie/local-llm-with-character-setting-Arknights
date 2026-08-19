@@ -8,8 +8,7 @@ import com.rhodesisland.terminal.data.model.SystemVoiceTemplate
 import com.rhodesisland.terminal.data.model.TtsConfig
 import com.rhodesisland.terminal.data.model.TtsEngine
 import com.rhodesisland.terminal.data.model.TtsLanguage
-import com.rhodesisland.terminal.data.model.VoiceConfig
-import com.rhodesisland.terminal.data.model.VoicePair
+import com.rhodesisland.terminal.data.model.effectiveVoiceId
 import com.rhodesisland.terminal.data.repository.SettingsRepository
 import com.rhodesisland.terminal.tts.SystemTtsEngine
 import com.rhodesisland.terminal.tts.VolcTtsClient
@@ -97,22 +96,21 @@ class TtsManager(
             ?: AppConfig.TTS_DEFAULT_VOLUME
 
         if (!client.hasCredentials(ttsConfig)) {
-            throw Exception("请先在设置页配置火山引擎 TTS 凭据（或改用手机系统语音）")
+            throw Exception("请先填写 API Key 和默认自定义音色 ID（speaker_id）")
         }
 
-        // 当前语言的音色与 Resource ID 必须成对配置，避免服务端返回资源不匹配错误。
-        val voice = selectVoiceConfig(settings.getTtsVoiceMapNow()[characterId], language)
-        if (!voice.isComplete) {
-            throw Exception(
-                voice.validationError(if (language == TtsLanguage.ZH) "中文" else "日文")
-                    ?: "请先在设置页为该角色配置${language.label}音色与 Resource ID",
-            )
-        }
+        // 默认 speaker_id 适用于所有角色；高级角色覆盖为空时自然回退，用户无需配置资源 ID。
+        val speakerId = effectiveVoiceId(
+            characterId = characterId,
+            language = language,
+            voiceMap = settings.getTtsVoiceMapNow(),
+            defaultVoiceId = ttsConfig.defaultVoiceId,
+        ) ?: throw Exception("请先在设置页填写默认自定义音色 ID（speaker_id）")
 
         // 清理括号内容
         val cleanText = cleanTtsText(text)
 
-        val audioBytes = client.synthesize(cleanText, characterId, ttsConfig, voice)
+        val audioBytes = client.synthesize(cleanText, characterId, ttsConfig, speakerId)
 
         // 写入临时文件（磁盘 IO，切到 IO 调度器）
         val tempFile = File(context.cacheDir, "tts_${System.currentTimeMillis()}.mp3")
@@ -202,9 +200,4 @@ class TtsManager(
             .replace(Regex("\\s+"), " ")
             .trim()
     }
-}
-
-internal fun selectVoiceConfig(pair: VoicePair?, language: TtsLanguage): VoiceConfig = when (language) {
-    TtsLanguage.ZH -> pair?.zh ?: VoiceConfig()
-    TtsLanguage.JA -> pair?.ja ?: VoiceConfig()
 }

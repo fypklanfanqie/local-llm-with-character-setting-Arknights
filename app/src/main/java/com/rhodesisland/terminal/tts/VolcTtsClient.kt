@@ -1,8 +1,8 @@
 package com.rhodesisland.terminal.tts
 
+import com.rhodesisland.terminal.config.AppConfig
 import com.rhodesisland.terminal.data.model.TtsAuthMode
 import com.rhodesisland.terminal.data.model.TtsConfig
-import com.rhodesisland.terminal.data.model.VoiceConfig
 import com.rhodesisland.terminal.data.model.authMode
 import com.rhodesisland.terminal.data.model.validationError
 import kotlinx.coroutines.Dispatchers
@@ -78,12 +78,10 @@ class VolcTtsClient(
         text: String,
         characterId: String,
         ttsConfig: TtsConfig,
-        voice: VoiceConfig,
+        speakerId: String,
     ): ByteArray = withContext(Dispatchers.IO) {
         require(text.isNotBlank()) { "没有可朗读的文本" }
-        require(voice.isComplete) {
-            voice.validationError("当前语言") ?: "请配置音色与 Resource ID"
-        }
+        require(speakerId.isNotBlank()) { "请先填写默认自定义音色 ID（speaker_id）" }
 
         val requestBody = json.encodeToString(
             V3Request.serializer(),
@@ -92,7 +90,7 @@ class VolcTtsClient(
                 namespace = "BidirectionalTTS",
                 req_params = V3ReqParams(
                     text = text.trim(),
-                    speaker = voice.voiceId,
+                    speaker = speakerId,
                     audio_params = V3AudioParams(),
                     additions = """{"disable_markdown_filter":true}""",
                 ),
@@ -102,15 +100,11 @@ class VolcTtsClient(
         val request = Request.Builder()
             .url(endpoint)
             .post(requestBody)
-            .header("X-Api-Resource-Id", voice.resourceId)
+            .header("X-Api-Resource-Id", AppConfig.TTS_VOICE_CLONE_RESOURCE_ID)
             .header("X-Api-Request-Id", UUID.randomUUID().toString())
             .apply {
                 when (ttsConfig.authMode()) {
                     TtsAuthMode.API_KEY -> header("X-Api-Key", ttsConfig.apiKey)
-                    TtsAuthMode.LEGACY -> {
-                        header("X-Api-App-Id", ttsConfig.appId)
-                        header("X-Api-Access-Key", ttsConfig.accessKey)
-                    }
                     TtsAuthMode.NONE -> throw IllegalArgumentException(ttsConfig.validationError()!!)
                 }
             }
@@ -131,7 +125,8 @@ class VolcTtsClient(
     }
 
     /** 检查新版或完整旧版凭据是否可用。 */
-    fun hasCredentials(config: TtsConfig): Boolean = config.authMode() != TtsAuthMode.NONE
+    fun hasCredentials(config: TtsConfig): Boolean =
+        config.apiKey.isNotBlank() && config.defaultVoiceId.isNotBlank()
 
     private fun parseChunkedResponse(body: ResponseBody, logId: String?): ByteArray {
         val output = ByteArrayOutputStream()

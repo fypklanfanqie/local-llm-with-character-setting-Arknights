@@ -1,7 +1,6 @@
 package com.rhodesisland.terminal.tts
 
 import com.rhodesisland.terminal.data.model.TtsConfig
-import com.rhodesisland.terminal.data.model.VoiceConfig
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
@@ -14,120 +13,55 @@ import org.junit.Before
 import org.junit.Test
 
 class VolcTtsClientTest {
-
     private lateinit var server: MockWebServer
     private lateinit var client: VolcTtsClient
 
-    @Before
-    fun setUp() {
-        server = MockWebServer()
-        server.start()
+    @Before fun setUp() {
+        server = MockWebServer().also { it.start() }
         client = VolcTtsClient(server.url("/").toString().removeSuffix("/"), OkHttpClient())
     }
 
-    @After
-    fun tearDown() {
-        server.shutdown()
-    }
+    @After fun tearDown() { server.shutdown() }
 
     @Test
-    fun apiKeyRequestUsesOfficialHeadersAndVoiceResource() = runBlocking {
+    fun simpleApiKeyRequestUsesFixedCloneResourceAndDefaultSpeaker() = runBlocking {
         server.enqueue(successResponse())
-
         val bytes = client.synthesize(
             text = "你好",
             characterId = "amiya",
-            ttsConfig = TtsConfig(apiKey = "test-api-key"),
-            voice = VoiceConfig("S_cn", "seed-icl-2.0"),
+            ttsConfig = TtsConfig(apiKey = "test-api-key", defaultVoiceId = "S_default"),
+            speakerId = "S_default",
         )
-
         val request = server.takeRequest()
-        assertEquals("POST", request.method)
-        assertEquals("/", request.path)
         assertEquals("test-api-key", request.getHeader("X-Api-Key"))
         assertEquals("seed-icl-2.0", request.getHeader("X-Api-Resource-Id"))
         assertNull(request.getHeader("X-Api-App-Id"))
         assertNull(request.getHeader("X-Api-Access-Key"))
         assertTrue(request.getHeader("X-Api-Request-Id")!!.isNotBlank())
-        assertTrue(request.body.readUtf8().contains("\"speaker\":\"S_cn\""))
+        assertTrue(request.body.readUtf8().contains("\"speaker\":\"S_default\""))
         assertEquals("abc", bytes.decodeToString())
     }
 
     @Test
-    fun legacyRequestUsesOfficialLegacyHeaders() = runBlocking {
-        server.enqueue(successResponse())
-
-        client.synthesize(
-            text = "你好",
-            characterId = "amiya",
-            ttsConfig = TtsConfig(appId = "legacy-app", accessKey = "legacy-access"),
-            voice = VoiceConfig("S_cn", "seed-icl-2.0"),
-        )
-
-        val request = server.takeRequest()
-        assertEquals("legacy-app", request.getHeader("X-Api-App-Id"))
-        assertEquals("legacy-access", request.getHeader("X-Api-Access-Key"))
-        assertEquals("seed-icl-2.0", request.getHeader("X-Api-Resource-Id"))
-        assertNull(request.getHeader("X-Api-Key"))
-    }
-
-    @Test
-    fun missingCredentialsDoesNotOpenNetworkCall() = runBlocking {
-        val error = try {
-            client.synthesize(
-                text = "你好",
-                characterId = "amiya",
-                ttsConfig = TtsConfig(),
-                voice = VoiceConfig("S_cn", "seed-icl-2.0"),
-            )
-            null
-        } catch (exception: IllegalArgumentException) {
-            exception
-        }
-
-        assertTrue(error?.message?.contains("请填写 API Key") == true)
-        assertEquals(0, server.requestCount)
-    }
-
-    @Test
-    fun incompleteVoiceBindingDoesNotOpenNetworkCall() = runBlocking {
-        val error = try {
-            client.synthesize(
-                text = "你好",
-                characterId = "amiya",
-                ttsConfig = TtsConfig(apiKey = "test-api-key"),
-                voice = VoiceConfig("S_cn"),
-            )
-            null
-        } catch (exception: IllegalArgumentException) {
-            exception
-        }
-
-        assertTrue(error?.message?.contains("Resource ID") == true)
+    fun missingApiKeyOrSpeakerDoesNotOpenNetworkCall() = runBlocking {
+        val missingKey = runCatching {
+            client.synthesize("你好", "amiya", TtsConfig(defaultVoiceId = "S_default"), "S_default")
+        }.exceptionOrNull()
+        val missingSpeaker = runCatching {
+            client.synthesize("你好", "amiya", TtsConfig(apiKey = "key"), "")
+        }.exceptionOrNull()
+        assertTrue(missingKey?.message?.contains("API Key") == true)
+        assertTrue(missingSpeaker?.message?.contains("speaker_id") == true)
         assertEquals(0, server.requestCount)
     }
 
     @Test
     fun parserRejectsServiceError() = runBlocking {
-        server.enqueue(
-            MockResponse().setBody(
-                "{\"code\":55000000,\"message\":\"resource ID is mismatched with speaker related resource\",\"data\":null}\n",
-            ),
-        )
-
-        try {
-            client.synthesize(
-                text = "你好",
-                characterId = "amiya",
-                ttsConfig = TtsConfig(apiKey = "test-api-key"),
-                voice = VoiceConfig("S_cn", "seed-icl-2.0"),
-            )
-        } catch (error: Exception) {
-            assertTrue(error.message!!.contains("55000000"))
-            return@runBlocking
-        }
-
-        throw AssertionError("Expected server error")
+        server.enqueue(MockResponse().setBody("{\"code\":55000000,\"message\":\"resource mismatch\",\"data\":null}\n"))
+        val error = runCatching {
+            client.synthesize("你好", "amiya", TtsConfig(apiKey = "key", defaultVoiceId = "S"), "S")
+        }.exceptionOrNull()
+        assertTrue(error?.message?.contains("55000000") == true)
     }
 
     private fun successResponse() = MockResponse().setBody(

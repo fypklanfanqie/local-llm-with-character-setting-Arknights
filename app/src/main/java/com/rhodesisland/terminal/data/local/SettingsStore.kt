@@ -56,6 +56,7 @@ class SettingsStore(
 
         // TTS
         val TTS_API_KEY = stringPreferencesKey("tts_api_key")
+        val TTS_DEFAULT_VOICE_ID = stringPreferencesKey("tts_default_voice_id")
         val TTS_APP_ID = stringPreferencesKey("tts_app_id")
         val TTS_ACCESS_KEY = stringPreferencesKey("tts_access_key")
         val TTS_LANGUAGE = stringPreferencesKey("tts_language")
@@ -244,6 +245,7 @@ class SettingsStore(
     val ttsConfig: Flow<TtsConfig> = dataStore.data.map { p ->
         TtsConfig(
             apiKey = p[Keys.TTS_API_KEY] ?: "",
+            defaultVoiceId = p[Keys.TTS_DEFAULT_VOICE_ID] ?: "",
             appId = p[Keys.TTS_APP_ID] ?: "",
             accessKey = p[Keys.TTS_ACCESS_KEY] ?: "",
         )
@@ -252,8 +254,8 @@ class SettingsStore(
     suspend fun setTtsConfig(config: TtsConfig) {
         dataStore.edit { p ->
             p[Keys.TTS_API_KEY] = config.apiKey
-            p[Keys.TTS_APP_ID] = config.appId
-            p[Keys.TTS_ACCESS_KEY] = config.accessKey
+            p[Keys.TTS_DEFAULT_VOICE_ID] = config.defaultVoiceId
+            // 保留旧字段在磁盘上供旧版本回退；新版设置界面与请求路径不再使用它们。
         }
     }
 
