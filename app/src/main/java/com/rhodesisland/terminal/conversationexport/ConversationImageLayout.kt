@@ -2,7 +2,6 @@ package com.rhodesisland.terminal.conversationexport
 
 import android.graphics.Paint
 import android.text.TextPaint
-import kotlin.math.ceil
 
 class LongImageTooTallException(val height: Int) : IllegalStateException(
     "当前对话过长，无法安全生成单张长图；请改用“自动分页多张图”或 TXT（预计高度 ${height}px）",

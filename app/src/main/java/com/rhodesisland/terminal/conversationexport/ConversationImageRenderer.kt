@@ -40,13 +40,25 @@ object ConversationImageRenderer {
         var used = HEADER_HEIGHT
         document.messages.forEach { message ->
             val height = ConversationImageLayout.messageHeight(message)
-            if (page.isNotEmpty() && used + height > EXPORT_PAGE_HEIGHT_PX) {
-                pages += page.toList()
-                page.clear()
-                used = HEADER_HEIGHT
+            if (height > EXPORT_PAGE_HEIGHT_PX - HEADER_HEIGHT) {
+                message.splitForPage(EXPORT_PAGE_HEIGHT_PX - HEADER_HEIGHT).forEach { part ->
+                    if (used + ConversationImageLayout.messageHeight(part) > EXPORT_PAGE_HEIGHT_PX && page.isNotEmpty()) {
+                        pages += page.toList()
+                        page.clear()
+                        used = HEADER_HEIGHT
+                    }
+                    page += part
+                    used += ConversationImageLayout.messageHeight(part)
+                }
+            } else {
+                if (page.isNotEmpty() && used + height > EXPORT_PAGE_HEIGHT_PX) {
+                    pages += page.toList()
+                    page.clear()
+                    used = HEADER_HEIGHT
+                }
+                page += message
+                used += height
             }
-            page += message
-            used += height
         }
         if (page.isNotEmpty()) pages += page.toList()
         return pages.mapIndexed { index, messages ->
@@ -112,6 +124,17 @@ object ConversationImageRenderer {
             y += ATTACHMENT_LINE_HEIGHT
         }
         return top + height + 14
+    }
+
+    private fun ConversationExportMessage.splitForPage(maxHeight: Int): List<ConversationExportMessage> {
+        val maxLines = ((maxHeight - MESSAGE_PADDING * 2 - META_LINE_HEIGHT - 18) / BODY_LINE_HEIGHT).coerceAtLeast(1)
+        val lines = ConversationImageLayout.wrap(content.ifBlank { "（无文本内容）" }, EXPORT_IMAGE_WIDTH_PX - INSET * 2 - MESSAGE_PADDING * 2, BODY_TEXT_SIZE)
+        return lines.chunked(maxLines).mapIndexed { index, part ->
+            copy(
+                content = part.joinToString("\n"),
+                attachments = if (index == 0) attachments else emptyList(),
+            )
+        }
     }
 
     private fun formatTime(timestamp: Long): String =
