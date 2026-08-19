@@ -1,8 +1,5 @@
 package com.rhodesisland.terminal.conversationexport
 
-import android.graphics.Paint
-import android.text.TextPaint
-
 class LongImageTooTallException(val height: Int) : IllegalStateException(
     "当前对话过长，无法安全生成单张长图；请改用“自动分页多张图”或 TXT（预计高度 ${height}px）",
 )
@@ -36,26 +33,16 @@ object ConversationImageLayout {
     }
 
     internal fun messageHeight(message: ConversationExportMessage): Int {
-        val bodyLines = wrap(message.content.ifBlank { "（无文本内容）" }, CONTENT_WIDTH, 30f).size.coerceAtLeast(1)
+        val bodyLines = textLineCount(message.content.ifBlank { "（无文本内容）" }, CONTENT_WIDTH, 30f).coerceAtLeast(1)
         return MESSAGE_PADDING * 2 + META_LINE_HEIGHT + bodyLines * BODY_LINE_HEIGHT +
             message.attachments.size * ATTACHMENT_LINE_HEIGHT + 18
     }
 
-    internal fun wrap(text: String, width: Int, textSize: Float): List<String> {
-        val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { this.textSize = textSize }
-        return buildList {
-            text.split('\n').forEach { paragraph ->
-                if (paragraph.isEmpty()) {
-                    add("")
-                } else {
-                    var remaining = paragraph
-                    while (remaining.isNotEmpty()) {
-                        val count = paint.breakText(remaining, true, width.toFloat(), null)
-                        add(remaining.take(count.coerceAtLeast(1)))
-                        remaining = remaining.drop(count.coerceAtLeast(1))
-                    }
-                }
-            }
+    internal fun textLineCount(text: String, width: Int, textSize: Float): Int {
+        val averageCharWidth = (textSize * 0.92f).coerceAtLeast(1f)
+        val charactersPerLine = (width / averageCharWidth).toInt().coerceAtLeast(1)
+        return text.split('\n').sumOf { paragraph ->
+            if (paragraph.isEmpty()) 1 else (paragraph.length + charactersPerLine - 1) / charactersPerLine
         }
     }
 

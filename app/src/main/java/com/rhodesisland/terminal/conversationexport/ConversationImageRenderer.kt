@@ -101,7 +101,7 @@ object ConversationImageRenderer {
     }
 
     private fun drawMessage(canvas: Canvas, message: ConversationExportMessage, top: Int): Int {
-        val lines = ConversationImageLayout.wrap(message.content.ifBlank { "（无文本内容）" }, EXPORT_IMAGE_WIDTH_PX - INSET * 2 - MESSAGE_PADDING * 2, BODY_TEXT_SIZE)
+        val lines = wrap(message.content.ifBlank { "（无文本内容）" }, EXPORT_IMAGE_WIDTH_PX - INSET * 2 - MESSAGE_PADDING * 2, BODY_TEXT_SIZE)
         val height = MESSAGE_PADDING * 2 + META_LINE_HEIGHT + lines.size * BODY_LINE_HEIGHT + message.attachments.size * ATTACHMENT_LINE_HEIGHT + 18
         val isUser = message.senderName == "博士" || message.senderName == "用户"
         val left = if (isUser) EXPORT_IMAGE_WIDTH_PX / 4 else INSET
@@ -126,9 +126,27 @@ object ConversationImageRenderer {
         return top + height + 14
     }
 
+    private fun wrap(text: String, width: Int, textSize: Float): List<String> {
+        val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { this.textSize = textSize }
+        return buildList {
+            text.split('\n').forEach { paragraph ->
+                if (paragraph.isEmpty()) {
+                    add("")
+                } else {
+                    var remaining = paragraph
+                    while (remaining.isNotEmpty()) {
+                        val count = paint.breakText(remaining, true, width.toFloat(), null).coerceAtLeast(1)
+                        add(remaining.take(count))
+                        remaining = remaining.drop(count)
+                    }
+                }
+            }
+        }
+    }
+
     private fun ConversationExportMessage.splitForPage(maxHeight: Int): List<ConversationExportMessage> {
         val maxLines = ((maxHeight - MESSAGE_PADDING * 2 - META_LINE_HEIGHT - 18) / BODY_LINE_HEIGHT).coerceAtLeast(1)
-        val lines = ConversationImageLayout.wrap(content.ifBlank { "（无文本内容）" }, EXPORT_IMAGE_WIDTH_PX - INSET * 2 - MESSAGE_PADDING * 2, BODY_TEXT_SIZE)
+        val lines = wrap(content.ifBlank { "（无文本内容）" }, EXPORT_IMAGE_WIDTH_PX - INSET * 2 - MESSAGE_PADDING * 2, BODY_TEXT_SIZE)
         return lines.chunked(maxLines).mapIndexed { index, part ->
             copy(
                 content = part.joinToString("\n"),
