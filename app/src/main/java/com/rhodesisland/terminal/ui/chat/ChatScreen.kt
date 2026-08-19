@@ -28,6 +28,7 @@ import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.automirrored.outlined.VolumeUp
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AttachFile
+import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
@@ -86,6 +87,9 @@ import com.rhodesisland.terminal.conversationexport.ConversationImageMode
 import com.rhodesisland.terminal.conversationexport.ConversationImageRenderer
 import com.rhodesisland.terminal.conversationexport.ConversationTextExporter
 import com.rhodesisland.terminal.conversationexport.suggestedExportBaseName
+import com.rhodesisland.terminal.ui.affinity.GiftInventorySheet
+import com.rhodesisland.terminal.affinity.GiftSendResult
+import com.rhodesisland.terminal.affinity.OwnedGift
 import com.rhodesisland.terminal.data.model.MessageSegment
 import com.rhodesisland.terminal.data.model.SeedanceVideo
 import com.rhodesisland.terminal.data.repository.ChatBackgroundConfig
@@ -213,6 +217,27 @@ fun ChatScreen(
     var showExportConversationPicker by remember { mutableStateOf(false) }
     var showExportFormatPicker by remember { mutableStateOf(false) }
     var showExportImageModePicker by remember { mutableStateOf(false) }
+    var showGiftSheet by remember { mutableStateOf(false) }
+    var giftSendBusy by remember { mutableStateOf(false) }
+    val ownedGifts by container.affinityRepository.observeOwnedGifts().collectAsState(initial = emptyList())
+
+    fun sendGift(gift: OwnedGift) {
+        val conversationId = state.activeConversationId ?: return
+        if (giftSendBusy || state.isStreaming) return
+        giftSendBusy = true
+        exportScope.launch {
+            when (val result = container.affinityRepository.sendGift(state.characterId, gift.definition.id, conversationId)) {
+                is GiftSendResult.Sent -> {
+                    viewModel.sendGiftThanks(result.history)
+                    Toast.makeText(context, "已赠送 ${gift.definition.name}，好感度 +${result.history.affinityGain}", Toast.LENGTH_SHORT).show()
+                    showGiftSheet = false
+                }
+                GiftSendResult.InventoryEmpty -> Toast.makeText(context, "该礼物库存不足", Toast.LENGTH_SHORT).show()
+                GiftSendResult.GiftMissing -> Toast.makeText(context, "礼物已不存在", Toast.LENGTH_SHORT).show()
+            }
+            giftSendBusy = false
+        }
+    }
 
     fun exportTextTo(uri: Uri) {
         val document = pendingConversationExport ?: return
@@ -509,6 +534,7 @@ fun ChatScreen(
                 onStop = { viewModel.stopGeneration() },
                 onPickImage = { imagePicker.launch(arrayOf("image/*")) },
                 onPickFile = { filePicker.launch(arrayOf("*/*")) },
+                onOpenGifts = { showGiftSheet = true },
                 onRemoveImage = { viewModel.removeImage(it) },
                 onRemoveFile = { viewModel.removeFile(it) },
             )
@@ -519,6 +545,15 @@ fun ChatScreen(
             PerformanceGlassOverlay(
                 container = container,
                 liquidGlassEnabled = liquidGlassEnabled,
+            )
+        }
+
+        if (showGiftSheet) {
+            GiftInventorySheet(
+                gifts = ownedGifts,
+                onSend = ::sendGift,
+                onPickAttachment = { imagePicker.launch(arrayOf("image/*")) },
+                onDismiss = { if (!giftSendBusy) showGiftSheet = false },
             )
         }
 
@@ -1464,6 +1499,7 @@ internal fun ChatInputBar(
     onStop: () -> Unit,
     onPickImage: () -> Unit,
     onPickFile: () -> Unit,
+    onOpenGifts: () -> Unit,
     onRemoveImage: (Int) -> Unit,
     onRemoveFile: (Int) -> Unit,
 ) {
@@ -1544,6 +1580,12 @@ internal fun ChatInputBar(
                 .padding(horizontal = 4.dp, vertical = 4.dp),
             verticalAlignment = Alignment.Bottom,
         ) {
+            Box(
+                modifier = Modifier.size(40.dp).clickable(onClick = onOpenGifts),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Filled.CardGiftcard, contentDescription = "赠送礼物", tint = scheme.primary, modifier = Modifier.size(20.dp))
+            }
             Box(
                 modifier = Modifier.size(40.dp).clickable(onClick = onPickImage),
                 contentAlignment = Alignment.Center,

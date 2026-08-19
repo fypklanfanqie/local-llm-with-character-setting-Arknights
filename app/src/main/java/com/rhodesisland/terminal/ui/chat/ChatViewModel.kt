@@ -15,6 +15,7 @@ import com.rhodesisland.terminal.data.repository.AutoVideoOutboxDraft
 import com.rhodesisland.terminal.data.repository.ChatCompletionRepository
 import com.rhodesisland.terminal.data.repository.ConversationRepository
 import com.rhodesisland.terminal.conversationexport.ConversationExportDocument
+import com.rhodesisland.terminal.data.model.GiftHistory
 import com.rhodesisland.terminal.provider.local.LocalChatProvider
 import com.rhodesisland.terminal.util.MarkdownParser
 import kotlinx.coroutines.CancellationException
@@ -1077,6 +1078,42 @@ class ChatViewModel(
         } catch (e: Exception) {
             msg.copy(multimodalImages = emptyList())
         }
+
+    fun sendGiftThanks(gift: GiftHistory) {
+        val convId = _activeConversationId.value ?: return
+        if (_uiState.value.isStreaming || convId != gift.conversationId) return
+        viewModelScope.launch {
+            val char = container.characterRepository.getNow(_uiState.value.characterId) ?: return@launch
+            val history = container.chatRepository.getHistory(convId)
+            val provider = container.chatProviderManager.getActiveProvider()
+            val userDirective = container.settingsRepository.getUserProfileNow().toDirectiveText()
+            val prompt = """博士刚刚赠送了你一件礼物：${gift.giftName}${gift.giftDescription.takeIf { it.isNotBlank() }?.let { "（$it）" } ?: ""}。
+请以角色身份自然、真诚地感谢博士，保持简短，不提及好感度、价格、龙门币、系统或游戏机制。"""
+            val messages = buildList {
+                add(ChatMessage(role = "system", content = char.systemPrompt + userDirective))
+                addAll(history.takeLast(AppConfig.MAX_CONTEXT_MESSAGES).map { ChatMessage(role = it.role, content = it.content) })
+                add(ChatMessage(role = "user", content = prompt))
+            }
+            runCatching { provider.chat(messages) {} }.onSuccess { response ->
+                val rowId = container.chatRepository.addMessage(char.id, convId, ChatMessage(role = "assistant", content = response))
+                container.conversationRepository.touch(convId)
+                _uiState.update { state ->
+                    state.copy(
+                        messages = state.messages + DisplayMessage(
+                            id = "msg-$rowId",
+                            role = "assistant",
+                            content = response,
+                            segments = MarkdownParser.parseWithThink(MarkdownParser.stripThink(response), isStreaming = false),
+                            sender = char.name,
+                            databaseId = rowId,
+                        ),
+                    )
+                }
+            }.onFailure { error ->
+                _uiState.update { it.copy(errorMessage = "礼物已送出，感谢回复生成失败：${error.message ?: "请稍后重试"}") }
+            }
+        }
+    }
 
     fun clearError() {
         _uiState.update { it.copy(errorMessage = null) }
