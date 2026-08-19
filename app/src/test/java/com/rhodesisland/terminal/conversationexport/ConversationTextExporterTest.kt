@@ -34,7 +34,7 @@ class ConversationTextExporterTest {
     @Test
     fun suggestedNameSanitizesProviderUnsafeCharacters() {
         assertEquals(
-            "罗德岛通讯记录_阿米娅_行动_报告_20260819_203000",
+            "罗德岛通讯记录_阿米娅_行动_报告_20240819_193640",
             suggestedExportBaseName("阿米娅", "行动:报告?", 1_724_096_200_000L),
         )
     }
