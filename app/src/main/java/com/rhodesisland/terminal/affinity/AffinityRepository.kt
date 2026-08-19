@@ -5,6 +5,7 @@ import com.rhodesisland.terminal.data.local.AffinityDao
 import com.rhodesisland.terminal.data.local.AffinityRewardEntity
 import com.rhodesisland.terminal.data.local.CharacterAffinityEntity
 import com.rhodesisland.terminal.data.local.DailyCheckinEntity
+import com.rhodesisland.terminal.data.local.DailyCheckinPromptEntity
 import com.rhodesisland.terminal.data.local.GiftDefinitionEntity
 import com.rhodesisland.terminal.data.local.GiftHistoryEntity
 import com.rhodesisland.terminal.data.local.GiftInventoryEntity
@@ -89,6 +90,11 @@ class AffinityRepository(private val database: AppDatabase) {
 
     suspend fun addVideoAffinity(characterId: String, videoId: Long): AffinityRewardResult =
         addReward(characterId, VIDEO_AFFINITY_GAIN, "video:$videoId", "video")
+
+    suspend fun shouldShowDailyCheckinPrompt(dayKey: String = todayKey()): Boolean = database.withTransaction {
+        if (dao.isCheckinClaimed(dayKey) || dao.hasShownCheckinPrompt(dayKey)) return@withTransaction false
+        dao.insertCheckinPrompt(DailyCheckinPromptEntity(dayKey, System.currentTimeMillis())) != -1L
+    }
 
     suspend fun claimDailyCheckin(dayKey: String = todayKey()): CheckinResult = database.withTransaction {
         val now = System.currentTimeMillis()

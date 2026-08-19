@@ -19,7 +19,6 @@ import com.rhodesisland.terminal.ui.affinity.DailyCheckinBus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import com.chatbyyourside.llm.backend.OpenClProbeService
 import java.io.File
@@ -102,7 +101,7 @@ class RhodesApp : Application(), ImageLoaderFactory {
             GroupChatScheduler.ensureScheduled(this@RhodesApp, container.settingsRepository)
         }
         appScope.launch {
-            if (!container.affinityRepository.observeCheckinClaimed().first()) {
+            if (container.affinityRepository.shouldShowDailyCheckinPrompt()) {
                 DailyCheckinBus.request()
             }
         }

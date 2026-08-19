@@ -41,6 +41,13 @@ data class DailyCheckinEntity(
     val claimedAt: Long,
 )
 
+/** 每天首次进入 App 的签到提示状态；提示关闭并不代表已经领取。 */
+@Entity(tableName = "daily_checkin_prompt")
+data class DailyCheckinPromptEntity(
+    @PrimaryKey val dayKey: String,
+    val shownAt: Long,
+)
+
 @Entity(tableName = "gift_definition")
 data class GiftDefinitionEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -141,6 +148,12 @@ interface AffinityDao {
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertCheckin(entity: DailyCheckinEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertCheckinPrompt(entity: DailyCheckinPromptEntity): Long
+
+    @Query("SELECT EXISTS(SELECT 1 FROM daily_checkin_prompt WHERE dayKey = :dayKey)")
+    suspend fun hasShownCheckinPrompt(dayKey: String): Boolean
 
     @Query("SELECT EXISTS(SELECT 1 FROM daily_checkin WHERE dayKey = :dayKey)")
     fun observeCheckinClaimed(dayKey: String): Flow<Boolean>
