@@ -61,6 +61,8 @@ import com.rhodesisland.terminal.ui.settings.BackendSettingsScreen
 import com.rhodesisland.terminal.ui.settings.SettingsScreen
 import com.rhodesisland.terminal.ui.theme.LocalDynamicAccent
 import com.rhodesisland.terminal.ui.video.EncounterScreen
+import com.rhodesisland.terminal.ui.affinity.DailyCheckinBus
+import com.rhodesisland.terminal.ui.affinity.DailyCheckinDialog
 import androidx.compose.ui.graphics.Color
 
 /**
@@ -86,6 +88,15 @@ fun AppNavGraph(container: AppContainer, initialChatOpen: Boolean = false) {
     val feedNavController = rememberNavController()
     // 冷启动来自问候通知时只消费一次，避免每次从其他 Tab 切回通讯都重复跳转到聊天页。
     var hasHandledInitialChat by rememberSaveable { mutableStateOf(false) }
+    val dailyCheckinNonce by DailyCheckinBus.requests.collectAsState()
+    var handledDailyCheckinNonce by remember { mutableStateOf(0L) }
+    var showDailyCheckin by remember { mutableStateOf(false) }
+    LaunchedEffect(dailyCheckinNonce) {
+        if (dailyCheckinNonce > handledDailyCheckinNonce) {
+            handledDailyCheckinNonce = dailyCheckinNonce
+            showDailyCheckin = true
+        }
+    }
     val tabs = listOf(BottomTab.Chat, BottomTab.Characters, BottomTab.Music, BottomTab.Models, BottomTab.Settings)
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -311,8 +322,11 @@ fun AppNavGraph(container: AppContainer, initialChatOpen: Boolean = false) {
                     )
                 }
             }
+        }
+        if (showDailyCheckin) {
+            DailyCheckinDialog(container = container, onDismiss = { showDailyCheckin = false })
+        }
     }
-}
 }
 }
 

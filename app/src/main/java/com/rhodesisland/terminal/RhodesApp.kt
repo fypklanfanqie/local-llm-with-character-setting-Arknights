@@ -15,9 +15,11 @@ import com.rhodesisland.terminal.service.InferenceForegroundService
 import com.rhodesisland.terminal.util.PrtsImageLoader
 import com.rhodesisland.terminal.work.GreetingScheduler
 import com.rhodesisland.terminal.work.GroupChatScheduler
+import com.rhodesisland.terminal.ui.affinity.DailyCheckinBus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import com.chatbyyourside.llm.backend.OpenClProbeService
 import java.io.File
@@ -98,6 +100,11 @@ class RhodesApp : Application(), ImageLoaderFactory {
         // 群聊空闲自动聊天：确保后台调度链存活（关闭/本地时由 ensureScheduled cancel）
         appScope.launch {
             GroupChatScheduler.ensureScheduled(this@RhodesApp, container.settingsRepository)
+        }
+        appScope.launch {
+            if (!container.affinityRepository.observeCheckinClaimed().first()) {
+                DailyCheckinBus.request()
+            }
         }
         // Task 6：恢复 Seedance 视频流水线（复位进程中断残留的进行中状态 + 重入队可自动认领任务）。幂等，异步。
         appScope.launch {
