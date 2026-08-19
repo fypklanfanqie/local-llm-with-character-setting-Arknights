@@ -49,6 +49,7 @@ import com.rhodesisland.terminal.config.Characters
 import com.rhodesisland.terminal.data.model.Character
 import com.rhodesisland.terminal.ui.characters.CustomCharacterDialog
 import com.rhodesisland.terminal.ui.characters.PersonaSheet
+import com.rhodesisland.terminal.ui.affinity.AffinityScreen
 import com.rhodesisland.terminal.ui.applySystemBarIcons
 import com.rhodesisland.terminal.util.CharacterImageStore
 import com.rhodesisland.terminal.util.loadThemeColor
@@ -113,6 +114,7 @@ fun CharacterFeedScreen(
     val pagerState = rememberPagerState(initialPage = 0, pageCount = { characters.size })
 
     var showPersona by remember { mutableStateOf<Character?>(null) }
+    var showAffinity by remember { mutableStateOf<Character?>(null) }
     var showCreate by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<Character?>(null) }
 
@@ -185,6 +187,7 @@ fun CharacterFeedScreen(
                     }
                 },
                 onPersona = { showPersona = char },
+                onAffinity = { showAffinity = char },
                 onVoice = container.assetRepository.getVoice(char.id).takeIf { it.isNotBlank() }?.let { url ->
                     { scope.launch { container.audioManager.playVoice(url, volume) } }
                 },
@@ -278,6 +281,20 @@ fun CharacterFeedScreen(
             }
             }
         }
+    }
+
+    showAffinity?.let { char ->
+        AffinityScreen(
+            container = container,
+            character = char,
+            imageUrl = if (char.isCustom && char.image.isNotBlank()) char.image else container.assetRepository.getSelectionPicture(char.id),
+            onBack = { showAffinity = null },
+            onOpenEventConversation = {
+                showAffinity = null
+                onOpenChat(char.id)
+            },
+        )
+        return
     }
 
     showPersona?.let { char ->
