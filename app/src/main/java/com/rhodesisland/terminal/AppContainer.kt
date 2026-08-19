@@ -25,6 +25,7 @@ import com.rhodesisland.terminal.data.repository.GroupChatRepository
 import com.rhodesisland.terminal.data.repository.MusicLibraryRepository
 import com.rhodesisland.terminal.data.repository.SeedanceVideoRepository
 import com.rhodesisland.terminal.data.repository.SettingsRepository
+import com.rhodesisland.terminal.conversationexport.ConversationExportService
 import com.rhodesisland.terminal.download.DownloadManager
 import com.rhodesisland.terminal.video.DirectLlmSeedancePromptLlm
 import com.rhodesisland.terminal.video.SeedanceConversationContextProvider
@@ -83,6 +84,9 @@ class AppContainer(private val context: Context) {
     val assetRepository: AssetRepository by lazy { AssetRepository(context) }
     val documentRepository: DocumentRepository by lazy { DocumentRepository(directLlmClient) }
     val characterRepository: CharacterRepository by lazy { CharacterRepository(settingsRepository) }
+    val conversationExportService: ConversationExportService by lazy {
+        ConversationExportService(conversationRepository, chatRepository, characterRepository)
+    }
 
     // 群聊：复用 conversation + chat_history（哨兵 characterId），仅云端可用。
     val groupChatRepository: GroupChatRepository by lazy {

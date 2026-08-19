@@ -150,6 +150,7 @@ dependencies {
 
     // DataStore
     implementation(libs.androidx.datastore.preferences)
+    implementation(libs.androidx.documentfile)
 
     // Coil
     implementation(libs.coil.compose)

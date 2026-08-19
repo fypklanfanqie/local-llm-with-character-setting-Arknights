@@ -14,6 +14,7 @@ import com.rhodesisland.terminal.data.remote.ChatMessageDto
 import com.rhodesisland.terminal.data.repository.AutoVideoOutboxDraft
 import com.rhodesisland.terminal.data.repository.ChatCompletionRepository
 import com.rhodesisland.terminal.data.repository.ConversationRepository
+import com.rhodesisland.terminal.conversationexport.ConversationExportDocument
 import com.rhodesisland.terminal.provider.local.LocalChatProvider
 import com.rhodesisland.terminal.util.MarkdownParser
 import kotlinx.coroutines.CancellationException
@@ -380,6 +381,18 @@ class ChatViewModel(
 
     fun toggleConversationSheet(open: Boolean) {
         _uiState.update { it.copy(showConversationSheet = open) }
+    }
+
+    fun prepareConversationExport(
+        conversationId: Long,
+        onReady: (ConversationExportDocument) -> Unit,
+        onError: (String) -> Unit,
+    ) {
+        viewModelScope.launch {
+            runCatching { container.conversationExportService.prepare(conversationId) }
+                .onSuccess(onReady)
+                .onFailure { onError(it.message ?: "无法准备对话导出") }
+        }
     }
 
     /**

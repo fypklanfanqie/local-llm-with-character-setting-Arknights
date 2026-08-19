@@ -56,6 +56,7 @@ androidx-room-compiler = { group = "androidx.room", name = "room-compiler", vers
 
 # DataStore
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
+androidx-documentfile = { group = "androidx.documentfile", name = "documentfile", version = "1.0.1" }
 
 # Coil (图片加载)
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
