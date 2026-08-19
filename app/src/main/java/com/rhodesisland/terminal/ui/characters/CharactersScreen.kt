@@ -22,6 +22,8 @@ import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Redeem
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -49,6 +51,8 @@ import com.rhodesisland.terminal.ui.theme.GlassShapes
 import com.rhodesisland.terminal.ui.theme.LocalDarkTheme
 import com.rhodesisland.terminal.util.CharacterImageStore
 import com.rhodesisland.terminal.util.PrtsImageLoader
+import com.rhodesisland.terminal.ui.affinity.AffinityScreen
+import com.rhodesisland.terminal.ui.affinity.CheckinShopScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -73,6 +77,8 @@ fun CharactersScreen(
     var showCreate by remember { mutableStateOf(false) }
     var showImport by remember { mutableStateOf(false) }
     var showPersona by remember { mutableStateOf<Character?>(null) }
+    var showAffinity by remember { mutableStateOf<Character?>(null) }
+    var showCheckinShop by remember { mutableStateOf(false) }
     var toast by remember { mutableStateOf<String?>(null) }
 
     // 干员搜索：按名称 / 代号过滤（全量 384 位干员）
@@ -96,6 +102,11 @@ fun CharactersScreen(
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             GlassLargeTitle(title = "角色") {
+                TextButton(onClick = { showCheckinShop = true }) {
+                    Icon(Icons.Filled.Redeem, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("每日签到", color = MaterialTheme.colorScheme.primary)
+                }
                 TextButton(onClick = { showCreate = true }) {
                     Icon(Icons.Filled.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
@@ -207,6 +218,7 @@ fun CharactersScreen(
                             }
                         } else null,
                         onViewPersona = { showPersona = char },
+                        onViewAffinity = { showAffinity = char },
                     )
                 }
             }
@@ -218,6 +230,24 @@ fun CharactersScreen(
                 action = { TextButton(onClick = { toast = null }) { Text("知道了") } },
             ) { Text(msg) }
         }
+    }
+
+    if (showCheckinShop) {
+        CheckinShopScreen(container = container, onBack = { showCheckinShop = false })
+        return
+    }
+    showAffinity?.let { char ->
+        AffinityScreen(
+            container = container,
+            character = char,
+            imageUrl = if (char.isCustom && char.image.isNotBlank()) char.image else container.assetRepository.getSelectionPicture(char.id),
+            onBack = { showAffinity = null },
+            onOpenEventConversation = {
+                showAffinity = null
+                onNavigateToChat()
+            },
+        )
+        return
     }
 
     if (showCreate) {
@@ -268,6 +298,7 @@ private fun CharacterCard(
     onVoiceClick: () -> Unit,
     onDelete: (() -> Unit)?,
     onViewPersona: () -> Unit,
+    onViewAffinity: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
     Box(
@@ -316,20 +347,31 @@ private fun CharacterCard(
             }
             Spacer(Modifier.height(4.dp))
             Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(50))
-                    .clickable(onClick = onViewPersona)
-                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(
-                    Icons.Filled.Info,
-                    contentDescription = null,
-                    tint = scheme.onSurfaceVariant,
-                    modifier = Modifier.size(12.dp),
-                )
-                Spacer(Modifier.width(4.dp))
-                Text("查看人设", color = scheme.onSurfaceVariant, fontSize = 11.5.sp)
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .clickable(onClick = onViewPersona)
+                        .padding(horizontal = 8.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Filled.Info, contentDescription = null, tint = scheme.onSurfaceVariant, modifier = Modifier.size(12.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("查看人设", color = scheme.onSurfaceVariant, fontSize = 11.5.sp)
+                }
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .clickable(onClick = onViewAffinity)
+                        .padding(horizontal = 8.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Filled.Favorite, contentDescription = null, tint = scheme.primary, modifier = Modifier.size(12.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("好感度", color = scheme.primary, fontSize = 11.5.sp)
+                }
             }
         }
         if (isActive) {
