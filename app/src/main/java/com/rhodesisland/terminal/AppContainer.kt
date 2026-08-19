@@ -87,8 +87,8 @@ class AppContainer(private val context: Context) {
     val assetRepository: AssetRepository by lazy { AssetRepository(context) }
     val documentRepository: DocumentRepository by lazy { DocumentRepository(directLlmClient) }
     val characterRepository: CharacterRepository by lazy { CharacterRepository(settingsRepository) }
-    val affinityRepository: AffinityRepository by lazy { AffinityRepository(database) }
     val specialEventCatalog: SpecialEventCatalog by lazy { SpecialEventCatalog(context) }
+    val affinityRepository: AffinityRepository by lazy { AffinityRepository(database, specialEventCatalog) }
     val specialEventConversationCoordinator: SpecialEventConversationCoordinator by lazy {
         SpecialEventConversationCoordinator(
             database = database,

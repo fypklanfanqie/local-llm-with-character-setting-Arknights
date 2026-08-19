@@ -167,6 +167,9 @@ interface AffinityDao {
     @Query("SELECT threshold FROM special_event WHERE characterId = :characterId")
     suspend fun unlockedThresholds(characterId: String): List<Int>
 
+    @Query("SELECT * FROM special_event WHERE characterId = :characterId AND threshold = :threshold")
+    suspend fun existingSpecialEvent(characterId: String, threshold: Int): SpecialEventEntity?
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertSpecialEvent(entity: SpecialEventEntity): Long
 

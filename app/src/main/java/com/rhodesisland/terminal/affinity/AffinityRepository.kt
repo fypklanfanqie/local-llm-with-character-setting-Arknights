@@ -52,7 +52,10 @@ sealed interface GiftSendResult {
     data object GiftMissing : GiftSendResult
 }
 
-class AffinityRepository(private val database: AppDatabase) {
+class AffinityRepository(
+    private val database: AppDatabase,
+    private val specialEventCatalog: SpecialEventCatalog,
+) {
     private val dao: AffinityDao get() = database.affinityDao()
 
     fun observeAffinity(characterId: String): Flow<CharacterAffinity> =
@@ -189,12 +192,13 @@ class AffinityRepository(private val database: AppDatabase) {
         val thresholds = crossedAffinityThresholds(previous.value, currentValue, unlocked)
         dao.upsertAffinity(previous.copy(value = currentValue, updatedAt = now))
         thresholds.forEach { threshold ->
+            val script = specialEventCatalog.eventFor(characterId, threshold)
             dao.insertSpecialEvent(
                 SpecialEventEntity(
                     characterId = characterId,
                     threshold = threshold,
-                    title = "好感度事件 $threshold",
-                    sceneKey = "$characterId-$threshold",
+                    title = script.title,
+                    sceneKey = SpecialEventCatalog.keyOf(characterId, threshold),
                     unlockedAt = now,
                 ),
             )
