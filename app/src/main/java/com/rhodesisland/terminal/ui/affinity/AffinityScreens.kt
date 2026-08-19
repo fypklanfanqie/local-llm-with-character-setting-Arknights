@@ -188,6 +188,7 @@ fun AffinityScreen(
                 enabled = affinity.value >= threshold,
                 onOpen = {
                     scope.launch {
+                        event?.let { container.specialEventConversationCoordinator.markRead(it.id) }
                         when (container.specialEventConversationCoordinator.launch(character.id, threshold)) {
                             is SpecialEventLaunchResult.Ready, is SpecialEventLaunchResult.Existing -> onOpenEventConversation()
                             SpecialEventLaunchResult.Missing -> message = "该阶段尚未解锁"

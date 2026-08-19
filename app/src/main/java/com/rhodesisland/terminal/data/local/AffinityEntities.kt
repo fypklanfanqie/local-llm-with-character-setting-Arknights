@@ -169,7 +169,7 @@ interface AffinityDao {
     @Query("SELECT * FROM special_event WHERE conversationId = :conversationId LIMIT 1")
     suspend fun getSpecialEventByConversation(conversationId: Long): SpecialEventEntity?
 
-    @Query("SELECT COUNT(*) FROM special_event WHERE characterId = :characterId AND isRead = 0 AND startedAt IS NULL")
+    @Query("SELECT COUNT(*) FROM special_event WHERE characterId = :characterId AND isRead = 0")
     fun observeUnreadUnlockCount(characterId: String): Flow<Int>
 
     @Update
