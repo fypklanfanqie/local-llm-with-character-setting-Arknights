@@ -229,13 +229,11 @@ class ChatViewModel(
                 activeConversationAutoVideoEnabled = active?.autoVideoEnabled ?: false,
             )
         }
-        if (id != null) {
-            viewModelScope.launch {
-                val event = container.database.affinityDao().getSpecialEventByConversation(id)
-                _uiState.update { state -> state.copy(activeSpecialEventId = event?.id) }
-                if (event != null && container.settingsRepository.getActiveProviderNow() != ChatProviderType.CLOUD) {
-                    container.chatProviderManager.switchProvider(ChatProviderType.CLOUD)
-                }
+        viewModelScope.launch {
+            val event = id?.let { container.database.affinityDao().getSpecialEventByConversation(it) }
+            _uiState.update { state -> state.copy(activeSpecialEventId = event?.id) }
+            if (event != null && container.settingsRepository.getActiveProviderNow() != ChatProviderType.CLOUD) {
+                container.chatProviderManager.switchProvider(ChatProviderType.CLOUD)
             }
         }
     }
