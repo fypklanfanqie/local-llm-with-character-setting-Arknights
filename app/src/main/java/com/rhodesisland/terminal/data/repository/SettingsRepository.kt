@@ -199,7 +199,7 @@ class SettingsRepository(private val store: SettingsStore) {
 
     suspend fun getTtsConfigNow(): TtsConfig = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
         ttsConfig.first()
-    } ?: TtsConfig(apiKey = "", defaultVoiceId = "", appId = "", accessKey = "")
+    } ?: TtsConfig(apiKey = "", appId = "", accessKey = "")
 
     /** 同步获取当前 Seedance 配置（5s 超时回退默认配置，保证国产 ROM 文件 I/O 被拦截时 UI 不卡死）。 */
     suspend fun getSeedanceConfigNow(): SeedanceConfig = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {

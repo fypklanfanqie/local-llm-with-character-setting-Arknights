@@ -80,7 +80,7 @@ class VolcTtsClient(
         speakerId: String,
     ): ByteArray = withContext(Dispatchers.IO) {
         require(text.isNotBlank()) { "没有可朗读的文本" }
-        require(speakerId.isNotBlank()) { "请先填写默认自定义音色 ID（speaker_id）" }
+        require(speakerId.isNotBlank()) { "请先填写该角色当前语言的 speaker_id" }
 
         val requestBody = json.encodeToString(
             V3Request.serializer(),

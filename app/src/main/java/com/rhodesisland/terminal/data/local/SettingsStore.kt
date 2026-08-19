@@ -255,7 +255,7 @@ class SettingsStore(
         dataStore.edit { p ->
             p[Keys.TTS_API_KEY] = config.apiKey
             p[Keys.TTS_DEFAULT_VOICE_ID] = config.defaultVoiceId
-            // 保留旧字段在磁盘上供旧版本回退；新版设置界面与请求路径不再使用它们。
+            // 旧版默认音色仅为兼容读取保留；新版合成绝不使用此值回退。
         }
     }
 
