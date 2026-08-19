@@ -6,20 +6,20 @@ import org.junit.Test
 
 class TtsVoiceSelectionTest {
     @Test
-    fun characterOverrideWinsOverDefault() {
-        val map = mapOf("amiya" to VoicePair(VoiceConfig("S_character"), VoiceConfig()))
-        assertEquals("S_character", effectiveVoiceId("amiya", TtsLanguage.ZH, map, "S_default"))
+    fun ChineseAndJapaneseUseOnlyTheirOwnCharacterSpeaker() {
+        val map = mapOf("amiya" to VoicePair(VoiceConfig("S_cn"), VoiceConfig("S_ja")))
+        assertEquals("S_cn", speakerIdForLanguage("amiya", TtsLanguage.ZH, map))
+        assertEquals("S_ja", speakerIdForLanguage("amiya", TtsLanguage.JA, map))
     }
 
     @Test
-    fun missingCharacterOverrideFallsBackToDefaultForBothLanguages() {
-        val map = mapOf("amiya" to VoicePair(VoiceConfig(""), VoiceConfig()))
-        assertEquals("S_default", effectiveVoiceId("amiya", TtsLanguage.ZH, map, "S_default"))
-        assertEquals("S_default", effectiveVoiceId("amiya", TtsLanguage.JA, map, "S_default"))
+    fun JapaneseDoesNotFallBackToChineseSpeaker() {
+        val map = mapOf("amiya" to VoicePair(VoiceConfig("S_cn"), VoiceConfig()))
+        assertNull(speakerIdForLanguage("amiya", TtsLanguage.JA, map))
     }
 
     @Test
-    fun blankDefaultAndOverrideReturnsNull() {
-        assertNull(effectiveVoiceId("unknown", TtsLanguage.ZH, emptyMap(), ""))
+    fun missingCharacterSpeakerReturnsNull() {
+        assertNull(speakerIdForLanguage("unknown", TtsLanguage.ZH, emptyMap()))
     }
 }

@@ -8,7 +8,7 @@ import com.rhodesisland.terminal.data.model.SystemVoiceTemplate
 import com.rhodesisland.terminal.data.model.TtsConfig
 import com.rhodesisland.terminal.data.model.TtsEngine
 import com.rhodesisland.terminal.data.model.TtsLanguage
-import com.rhodesisland.terminal.data.model.effectiveVoiceId
+import com.rhodesisland.terminal.data.model.speakerIdForLanguage
 import com.rhodesisland.terminal.data.repository.SettingsRepository
 import com.rhodesisland.terminal.tts.SystemTtsEngine
 import com.rhodesisland.terminal.tts.VolcTtsClient
@@ -96,16 +96,14 @@ class TtsManager(
             ?: AppConfig.TTS_DEFAULT_VOLUME
 
         if (!client.hasCredentials(ttsConfig)) {
-            throw Exception("请先填写 API Key 和默认自定义音色 ID（speaker_id）")
+            throw Exception("请先填写火山引擎 API Key")
         }
 
-        // 默认 speaker_id 适用于所有角色；高级角色覆盖为空时自然回退，用户无需配置资源 ID。
-        val speakerId = effectiveVoiceId(
-            characterId = characterId,
-            language = language,
-            voiceMap = settings.getTtsVoiceMapNow(),
-            defaultVoiceId = ttsConfig.defaultVoiceId,
-        ) ?: throw Exception("请先在设置页填写默认自定义音色 ID（speaker_id）")
+        val voiceMap = settings.getTtsVoiceMapNow()
+        val speakerId = speakerIdForLanguage(characterId, language, voiceMap)
+            ?: throw Exception(
+                "请先在设置 → 角色双语音色中填写该角色的${language.label} speaker_id",
+            )
 
         // 清理括号内容
         val cleanText = cleanTtsText(text)

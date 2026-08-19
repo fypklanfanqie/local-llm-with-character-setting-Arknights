@@ -19,8 +19,8 @@ class VoiceConfigTest {
 
     @Test
     fun onlyApiKeyIsAcceptedForSimpleVoiceCloneConfiguration() {
-        assertEquals(TtsAuthMode.API_KEY, TtsConfig(apiKey = "key", defaultVoiceId = "S_default", appId = "id", accessKey = "token").authMode())
+        assertEquals(TtsAuthMode.API_KEY, TtsConfig(apiKey = "key", appId = "id", accessKey = "token").authMode())
         assertEquals(TtsAuthMode.NONE, TtsConfig(appId = "id", accessKey = "token").authMode())
-        assertEquals("请填写默认自定义音色 ID（speaker_id）", TtsConfig(apiKey = "key").validationError())
+        assertEquals("请填写火山引擎 API Key", TtsConfig().validationError())
     }
 }

@@ -135,11 +135,11 @@ fun GuideDialog(onDismiss: () -> Unit) {
                     }
 
                     GuideSection("🔊 TTS 语音配置") {
-                        BodyText("TTS 直连火山引擎豆包语音合成。声音复刻训练成功后只需复制 speaker_id，无需手动处理 Resource ID。")
+                        BodyText("TTS 直连火山引擎豆包语音合成。每名角色分别配置中文和日文 speaker_id，资源版本由应用自动处理。")
                         StepText("1. 在火山引擎新版控制台的「API Key 管理」创建并复制 API Key。")
-                        StepText("2. 在声音复刻音色页面确认音色训练成功/已激活，复制 speaker_id（例如 S_xxx）。")
-                        StepText("3. 在设置的云端语音区填写 API Key 与默认自定义音色 ID，保存后即可试听。")
-                        StepText("4. 所有角色默认使用该音色；需要少数角色不同声音时，再展开「角色专属音色」填写对应 speaker_id。")
+                        StepText("2. 在声音复刻音色页面确认中文/日文音色训练成功或已激活，分别复制 speaker_id。")
+                        StepText("3. 在设置的「角色双语音色」中为角色填写中文 speaker_id 和日文 speaker_id。")
+                        StepText("4. 日语朗读会先通过云端对话 API 翻译为日文，再使用该角色的日文 speaker_id；缺少任一项会显示配置提示，不会用中文硬读。")
                     }
 
                     GuideSection("📖 使用技巧") {

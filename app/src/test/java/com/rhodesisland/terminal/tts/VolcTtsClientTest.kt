@@ -29,7 +29,7 @@ class VolcTtsClientTest {
         val bytes = client.synthesize(
             text = "你好",
             characterId = "amiya",
-            ttsConfig = TtsConfig(apiKey = "test-api-key", defaultVoiceId = "S_default"),
+            ttsConfig = TtsConfig(apiKey = "test-api-key"),
             speakerId = "S_default",
         )
         val request = server.takeRequest()
@@ -45,7 +45,7 @@ class VolcTtsClientTest {
     @Test
     fun missingApiKeyOrSpeakerDoesNotOpenNetworkCall() = runBlocking {
         val missingKey = runCatching {
-            client.synthesize("你好", "amiya", TtsConfig(defaultVoiceId = "S_default"), "S_default")
+            client.synthesize("你好", "amiya", TtsConfig(), "S_default")
         }.exceptionOrNull()
         val missingSpeaker = runCatching {
             client.synthesize("你好", "amiya", TtsConfig(apiKey = "key"), "")

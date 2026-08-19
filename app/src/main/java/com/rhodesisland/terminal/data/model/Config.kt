@@ -114,21 +114,16 @@ data class VoicePair(
 fun TtsConfig.authMode(): TtsAuthMode =
     if (apiKey.isNotBlank()) TtsAuthMode.API_KEY else TtsAuthMode.NONE
 
-fun TtsConfig.validationError(): String? = when {
-    apiKey.isBlank() -> "请填写火山引擎 API Key"
-    defaultVoiceId.isBlank() -> "请填写默认自定义音色 ID（speaker_id）"
-    else -> null
-}
+fun TtsConfig.validationError(): String? =
+    if (apiKey.isBlank()) "请填写火山引擎 API Key" else null
 
-fun effectiveVoiceId(
+fun speakerIdForLanguage(
     characterId: String,
     language: TtsLanguage,
     voiceMap: Map<String, VoicePair>,
-    defaultVoiceId: String,
 ): String? {
-    val pair = voiceMap[characterId]
-    val override = if (language == TtsLanguage.JA) pair?.ja?.voiceId else pair?.zh?.voiceId
-    return override?.takeIf { it.isNotBlank() } ?: defaultVoiceId.takeIf { it.isNotBlank() }
+    val pair = voiceMap[characterId] ?: return null
+    return (if (language == TtsLanguage.JA) pair.ja else pair.zh).voiceId.takeIf { it.isNotBlank() }
 }
 
 /**

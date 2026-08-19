@@ -123,9 +123,8 @@ class VolcTtsClient(
         }
     }
 
-    /** 检查新版或完整旧版凭据是否可用。 */
-    fun hasCredentials(config: TtsConfig): Boolean =
-        config.apiKey.isNotBlank() && config.defaultVoiceId.isNotBlank()
+    /** 检查新版 API Key 是否已配置。speaker_id 在角色朗读时单独按语言校验。 */
+    fun hasCredentials(config: TtsConfig): Boolean = config.apiKey.isNotBlank()
 
     private fun parseChunkedResponse(body: ResponseBody, logId: String?): ByteArray {
         val output = ByteArrayOutputStream()
