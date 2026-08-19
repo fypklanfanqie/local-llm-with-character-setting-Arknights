@@ -29,8 +29,7 @@ import java.util.UUID
  * 火山引擎语音合成 HTTP V3 Chunked 客户端。
  *
  * 直接调用官方 `/api/v3/tts/unidirectional` endpoint：
- * - 新版控制台：X-Api-Key + X-Api-Resource-Id；
- * - 旧版控制台：X-Api-App-Id + X-Api-Access-Key + X-Api-Resource-Id；
+ * - 新版控制台：X-Api-Key + 固定声音复刻 2.0 资源；
  * - 响应逐行读取官方 Chunked JSON，不支持 SSE `data:` 封装。
  */
 class VolcTtsClient(
