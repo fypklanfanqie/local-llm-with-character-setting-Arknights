@@ -658,6 +658,7 @@ class ChatViewModel(
                     fileNames = files.map { it.name },
                 )
                 userMsgId = container.chatRepository.addMessage(charId, convId, userMessage)
+                container.affinityRepository.addChatAffinity(charId, userMsgId)
                 autoVideoSnapshot = AutoVideoTriggerSnapshot(
                     provider = autoProvider,
                     enabled = autoEnabled,
