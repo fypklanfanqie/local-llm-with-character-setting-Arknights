@@ -73,33 +73,37 @@ class VolcTtsClientTest {
 
     @Test
     fun missingCredentialsDoesNotOpenNetworkCall() = runBlocking {
-        try {
+        val error = try {
             client.synthesize(
                 text = "你好",
                 characterId = "amiya",
                 ttsConfig = TtsConfig(),
                 voice = VoiceConfig("S_cn", "seed-icl-2.0"),
             )
-        } catch (_: IllegalArgumentException) {
-            // Expected.
+            null
+        } catch (exception: IllegalArgumentException) {
+            exception
         }
 
+        assertTrue(error?.message?.contains("请填写 API Key") == true)
         assertEquals(0, server.requestCount)
     }
 
     @Test
     fun incompleteVoiceBindingDoesNotOpenNetworkCall() = runBlocking {
-        try {
+        val error = try {
             client.synthesize(
                 text = "你好",
                 characterId = "amiya",
                 ttsConfig = TtsConfig(apiKey = "test-api-key"),
                 voice = VoiceConfig("S_cn"),
             )
-        } catch (_: IllegalArgumentException) {
-            // Expected.
+            null
+        } catch (exception: IllegalArgumentException) {
+            exception
         }
 
+        assertTrue(error?.message?.contains("Resource ID") == true)
         assertEquals(0, server.requestCount)
     }
 
