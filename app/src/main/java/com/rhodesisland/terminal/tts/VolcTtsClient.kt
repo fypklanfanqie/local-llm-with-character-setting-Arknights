@@ -1,6 +1,5 @@
 package com.rhodesisland.terminal.tts
 
-import android.util.Base64
 import com.rhodesisland.terminal.data.model.TtsAuthMode
 import com.rhodesisland.terminal.data.model.TtsConfig
 import com.rhodesisland.terminal.data.model.VoiceConfig
@@ -23,6 +22,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.ResponseBody
 import java.io.ByteArrayOutputStream
+import java.util.Base64
 import java.util.UUID
 
 /**
@@ -160,7 +160,7 @@ class VolcTtsClient(
             val data = obj["data"]?.jsonPrimitive?.contentOrNull
             if (!data.isNullOrEmpty()) {
                 try {
-                    output.write(Base64.decode(data.replace(Regex("\\s"), ""), Base64.DEFAULT))
+                    output.write(Base64.getMimeDecoder().decode(data.replace(Regex("\\s"), "")))
                 } catch (_: IllegalArgumentException) {
                     throw Exception("火山引擎返回了非法 Base64 音频数据")
                 }
