@@ -203,14 +203,27 @@ interface ConversationDao {
 }
 
 @Database(
-    entities = [ChatHistoryEntity::class, ConversationEntity::class, SeedanceVideoEntity::class],
-    version = 7,
+    entities = [
+        ChatHistoryEntity::class,
+        ConversationEntity::class,
+        SeedanceVideoEntity::class,
+        CharacterAffinityEntity::class,
+        LungmenWalletEntity::class,
+        DailyCheckinEntity::class,
+        GiftDefinitionEntity::class,
+        GiftInventoryEntity::class,
+        GiftHistoryEntity::class,
+        SpecialEventEntity::class,
+        AffinityRewardEntity::class,
+    ],
+    version = 8,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun chatDao(): ChatDao
     abstract fun conversationDao(): ConversationDao
     abstract fun seedanceVideoDao(): SeedanceVideoDao
+    abstract fun affinityDao(): AffinityDao
 
     companion object {
         @Volatile
@@ -372,6 +385,44 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v7 -> v8：好感度、签到、龙门币、礼物、特殊事件及奖励去重表。
+         *
+         * 不变更既有聊天/会话/视频表；新增表全部空初始化，避免旧用户升级时丢失历史。
+         */
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `character_affinity` (`characterId` TEXT NOT NULL, `value` REAL NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`characterId`))"
+                )
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `lungmen_wallet` (`id` INTEGER NOT NULL, `balance` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))"
+                )
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `daily_checkin` (`dayKey` TEXT NOT NULL, `claimedAt` INTEGER NOT NULL, PRIMARY KEY(`dayKey`))"
+                )
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `gift_definition` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `description` TEXT NOT NULL, `imagePath` TEXT NOT NULL, `price` INTEGER NOT NULL, `affinityGain` REAL NOT NULL, `createdAt` INTEGER NOT NULL)"
+                )
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `gift_inventory` (`giftId` INTEGER NOT NULL, `quantity` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`giftId`))"
+                )
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `gift_history` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `characterId` TEXT NOT NULL, `giftId` INTEGER NOT NULL, `giftName` TEXT NOT NULL, `giftDescription` TEXT NOT NULL, `giftImagePath` TEXT NOT NULL, `price` INTEGER NOT NULL, `affinityGain` REAL NOT NULL, `sentAt` INTEGER NOT NULL, `conversationId` INTEGER NOT NULL)"
+                )
+                database.execSQL("CREATE INDEX IF NOT EXISTS `index_gift_history_characterId_sentAt` ON `gift_history` (`characterId`, `sentAt`)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS `index_gift_history_giftId` ON `gift_history` (`giftId`)")
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `special_event` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `characterId` TEXT NOT NULL, `threshold` INTEGER NOT NULL, `title` TEXT NOT NULL, `sceneKey` TEXT NOT NULL, `unlockedAt` INTEGER NOT NULL, `startedAt` INTEGER, `conversationId` INTEGER, `isRead` INTEGER NOT NULL)"
+                )
+                database.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_special_event_characterId_threshold` ON `special_event` (`characterId`, `threshold`)")
+                database.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_special_event_conversationId` ON `special_event` (`conversationId`)")
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `affinity_reward` (`sourceKey` TEXT NOT NULL, `characterId` TEXT NOT NULL, `amount` REAL NOT NULL, `source` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, PRIMARY KEY(`sourceKey`))"
+                )
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 // 双重检查锁定：避免两个并发首次调用各建一个 RoomDatabase 实例，
@@ -380,7 +431,7 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "rhodes_chat.db"
-                ).addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7).build().also { INSTANCE = it }
+                ).addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8).build().also { INSTANCE = it }
             }
         }
     }
