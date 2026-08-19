@@ -88,6 +88,9 @@ class AffinityRepository(
 
     fun observeUnreadUnlockCount(characterId: String): Flow<Int> = dao.observeUnreadUnlockCount(characterId)
 
+    fun observeUnreadEventCharacterIds(): Flow<Set<String>> =
+        dao.observeUnreadEventCharacterIds().map { it.toSet() }
+
     suspend fun addChatAffinity(characterId: String, messageId: Long): AffinityRewardResult =
         addReward(characterId, CHAT_AFFINITY_GAIN, "chat:$messageId", "chat")
 

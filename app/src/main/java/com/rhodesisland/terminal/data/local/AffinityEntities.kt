@@ -188,6 +188,9 @@ interface AffinityDao {
     @Query("SELECT COUNT(*) FROM special_event WHERE characterId = :characterId AND isRead = 0")
     fun observeUnreadUnlockCount(characterId: String): Flow<Int>
 
+    @Query("SELECT DISTINCT characterId FROM special_event WHERE isRead = 0")
+    fun observeUnreadEventCharacterIds(): Flow<List<String>>
+
     @Update
     suspend fun updateSpecialEvent(entity: SpecialEventEntity)
 

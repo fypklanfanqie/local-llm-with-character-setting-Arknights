@@ -69,7 +69,7 @@ fun CharactersScreen(
         initial = Characters.getOrderedList(),
     )
     val activeCharacter by container.settingsRepository.activeCharacter.collectAsState(initial = Characters.DEFAULT_CHARACTER_ID)
-    val unreadAffinityEvents by container.affinityRepository.observeUnreadUnlockCount(activeCharacter).collectAsState(initial = 0)
+    val unreadAffinityCharacterIds by container.affinityRepository.observeUnreadEventCharacterIds().collectAsState(initial = emptySet())
     val volume by container.settingsRepository.volume.collectAsState(initial = 60)
     val scope = rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
@@ -223,7 +223,7 @@ fun CharactersScreen(
                         } else null,
                         onViewPersona = { showPersona = char },
                         onViewAffinity = { showAffinity = char },
-                        hasUnreadAffinityEvent = char.id == activeCharacter && unreadAffinityEvents > 0,
+                        hasUnreadAffinityEvent = char.id in unreadAffinityCharacterIds,
                         affinityValue = currentAffinity.value.takeIf { char.id == activeCharacter },
                     )
                 }
