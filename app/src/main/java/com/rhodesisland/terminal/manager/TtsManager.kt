@@ -3,10 +3,13 @@ package com.rhodesisland.terminal.manager
 import android.content.Context
 import android.media.MediaPlayer
 import android.util.Log
+import com.rhodesisland.terminal.config.AppConfig
 import com.rhodesisland.terminal.data.model.SystemVoiceTemplate
 import com.rhodesisland.terminal.data.model.TtsConfig
 import com.rhodesisland.terminal.data.model.TtsEngine
 import com.rhodesisland.terminal.data.model.TtsLanguage
+import com.rhodesisland.terminal.data.model.VoiceConfig
+import com.rhodesisland.terminal.data.model.VoicePair
 import com.rhodesisland.terminal.data.repository.SettingsRepository
 import com.rhodesisland.terminal.tts.SystemTtsEngine
 import com.rhodesisland.terminal.tts.VolcTtsClient
@@ -90,23 +93,26 @@ class TtsManager(
     /** 云端引擎合成并播放（原 MediaPlayer 路径；仅在 [speak] 持有 mutex 时调用，自身不加锁）。 */
     private suspend fun speakCloud(text: String, characterId: String, language: TtsLanguage) {
         val ttsConfig = settings.getTtsConfigNow()
-        val volume = withTimeoutOrNull(5000) { settings.ttsVolume.first() } ?: 60
+        val volume = withTimeoutOrNull(5000) { settings.ttsVolume.first() }
+            ?: AppConfig.TTS_DEFAULT_VOLUME
 
         if (!client.hasCredentials(ttsConfig)) {
             throw Exception("请先在设置页配置火山引擎 TTS 凭据（或改用手机系统语音）")
         }
 
-        // 角色音色映射：优先使用用户配置的音色 ID，留空则由服务端默认选择
-        val voiceMap = settings.getTtsVoiceMapNow()
-        val voice = voiceMap[characterId]?.let { pair ->
-            if (language == TtsLanguage.JA) pair.ja.voiceId else pair.zh.voiceId
-        }?.takeIf { it.isNotBlank() }
+        // 当前语言的音色与 Resource ID 必须成对配置，避免服务端返回资源不匹配错误。
+        val voice = selectVoiceConfig(settings.getTtsVoiceMapNow()[characterId], language)
+        if (!voice.isComplete) {
+            throw Exception(
+                voice.validationError(if (language == TtsLanguage.ZH) "中文" else "日文")
+                    ?: "请先在设置页为该角色配置${language.label}音色与 Resource ID",
+            )
+        }
 
         // 清理括号内容
         val cleanText = cleanTtsText(text)
 
-        // 合成（网络 IO，由 Retrofit 调度）
-        val audioBytes = client.synthesize(cleanText, language.code, characterId, ttsConfig, voice)
+        val audioBytes = client.synthesize(cleanText, characterId, ttsConfig, voice)
 
         // 写入临时文件（磁盘 IO，切到 IO 调度器）
         val tempFile = File(context.cacheDir, "tts_${System.currentTimeMillis()}.mp3")
@@ -196,4 +202,9 @@ class TtsManager(
             .replace(Regex("\\s+"), " ")
             .trim()
     }
+}
+
+internal fun selectVoiceConfig(pair: VoicePair?, language: TtsLanguage): VoiceConfig = when (language) {
+    TtsLanguage.ZH -> pair?.zh ?: VoiceConfig()
+    TtsLanguage.JA -> pair?.ja ?: VoiceConfig()
 }

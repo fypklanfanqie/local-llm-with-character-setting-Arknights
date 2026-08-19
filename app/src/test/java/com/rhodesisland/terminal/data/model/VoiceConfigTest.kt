@@ -1,5 +1,6 @@
 package com.rhodesisland.terminal.data.model
 
+import com.rhodesisland.terminal.manager.selectVoiceConfig
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -25,5 +26,16 @@ class VoiceConfigTest {
         assertEquals(TtsAuthMode.API_KEY, TtsConfig(apiKey = "key", appId = "id", accessKey = "token").authMode())
         assertEquals(TtsAuthMode.LEGACY, TtsConfig(appId = "id", accessKey = "token").authMode())
         assertEquals(TtsAuthMode.NONE, TtsConfig(appId = "id").authMode())
+    }
+
+    @Test
+    fun selectVoiceConfigUsesLanguageSpecificBinding() {
+        val pair = VoicePair(
+            zh = VoiceConfig("S_cn", "seed-icl-2.0"),
+            ja = VoiceConfig("S_ja", "seed-icl-1.0"),
+        )
+
+        assertEquals(VoiceConfig("S_cn", "seed-icl-2.0"), selectVoiceConfig(pair, TtsLanguage.ZH))
+        assertEquals(VoiceConfig("S_ja", "seed-icl-1.0"), selectVoiceConfig(pair, TtsLanguage.JA))
     }
 }
