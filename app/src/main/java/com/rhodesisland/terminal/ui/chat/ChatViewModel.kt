@@ -1178,12 +1178,7 @@ class ChatViewModel(
                 // 日语：仅云端引擎走 LLM 翻译；系统引擎直接朗读原文（设备无日语语音时由引擎报清晰错误），
                 // 避免为系统 TTS 白白消耗一次翻译调用。
                 val speakText = if (lang == TtsLanguage.JA && engine == TtsEngine.CLOUD) {
-                    // 日语 -> 翻译
-                    try {
-                        translateToJapanese(cleanText)
-                    } catch (e: Exception) {
-                        cleanText
-                    }
+                    translateToJapanese(cleanText)
                 } else {
                     cleanText
                 }
@@ -1222,7 +1217,9 @@ class ChatViewModel(
 
     private suspend fun translateToJapanese(text: String): String {
         val apiConfig = container.settingsRepository.getApiConfigNow()
-        if (apiConfig.apiKey.isBlank()) return text
+        if (apiConfig.apiKey.isBlank()) {
+            throw Exception("日语翻译需要配置云端对话 API Key")
+        }
         // 直连对话商：用翻译 prompt 调一次非流式 chat，不经代理
         val messages = listOf(
             ChatMessageDto("system", JsonPrimitive("你是专业翻译。将下面的中文翻译成自然日文，仅输出译文，不要解释或加引号。")),
@@ -1233,8 +1230,11 @@ class ChatViewModel(
             apiKey = apiConfig.apiKey,
             model = apiConfig.model,
             messages = messages,
-        )
-        return translated.ifBlank { text }
+        ).trim()
+        if (translated.isBlank() || translated == text.trim()) {
+            throw Exception("日语翻译失败，请检查云端对话 API 配置后重试")
+        }
+        return translated
     }
 
     override fun onCleared() {
