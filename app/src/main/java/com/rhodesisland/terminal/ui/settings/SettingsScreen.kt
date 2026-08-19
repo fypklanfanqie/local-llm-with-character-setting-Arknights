@@ -140,7 +140,6 @@ fun SettingsScreen(
     var ttsPreviewBusy by remember { mutableStateOf(false) }
     var ttsPreviewError by remember { mutableStateOf<String?>(null) }
     var ttsPreviewCharacterId by remember { mutableStateOf<String?>(null) }
-    var ttsPreviewCharacterExpanded by remember { mutableStateOf(false) }
 
     val ttsVoiceMap by container.settingsRepository.ttsVoiceMap.collectAsState(initial = emptyMap())
     var voiceEdit by remember(ttsVoiceMap) { mutableStateOf(ttsVoiceMap) }
