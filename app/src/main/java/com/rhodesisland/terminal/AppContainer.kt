@@ -92,7 +92,6 @@ class AppContainer(private val context: Context) {
     val specialEventConversationCoordinator: SpecialEventConversationCoordinator by lazy {
         SpecialEventConversationCoordinator(
             database = database,
-            affinityRepository = affinityRepository,
             conversations = conversationRepository,
             chats = chatRepository,
             settings = settingsRepository,
