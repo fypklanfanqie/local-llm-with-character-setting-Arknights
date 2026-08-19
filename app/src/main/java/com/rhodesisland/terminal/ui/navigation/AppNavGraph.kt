@@ -63,6 +63,8 @@ import com.rhodesisland.terminal.ui.theme.LocalDynamicAccent
 import com.rhodesisland.terminal.ui.video.EncounterScreen
 import com.rhodesisland.terminal.ui.affinity.DailyCheckinBus
 import com.rhodesisland.terminal.ui.affinity.DailyCheckinDialog
+import com.rhodesisland.terminal.ui.affinity.CheckinShopScreen
+import com.rhodesisland.terminal.ui.affinity.AffinityScreen
 import androidx.compose.ui.graphics.Color
 
 /**
@@ -79,6 +81,10 @@ sealed class BottomTab(val route: String, val label: String, val icon: ImageVect
     object Models : BottomTab("models", "模型", Icons.Outlined.Storage, Icons.Filled.Storage)
     object Settings : BottomTab("settings", "设置", Icons.Outlined.Settings, Icons.Filled.Settings)
 }
+
+private const val CHECKIN_SHOP_ROUTE = "checkin_shop"
+private const val AFFINITY_ROUTE = "affinity/{characterId}"
+private fun affinityRoute(characterId: String): String = "affinity/${android.net.Uri.encode(characterId)}"
 
 @Composable
 fun AppNavGraph(container: AppContainer, initialChatOpen: Boolean = false) {
@@ -146,6 +152,8 @@ fun AppNavGraph(container: AppContainer, initialChatOpen: Boolean = false) {
         // 置 0 交由各页自处理；底部 NavigationBar 自带 navigationBars inset，行为不变。
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
+            val isAffinityDestination = currentDestination?.route == CHECKIN_SHOP_ROUTE || currentDestination?.route == AFFINITY_ROUTE
+            if (!isAffinityDestination) {
             val currentTabRoute = tabs.firstOrNull { tab ->
                 currentDestination?.hierarchy?.any { it.route == tab.route } == true
             }?.route
@@ -172,6 +180,7 @@ fun AppNavGraph(container: AppContainer, initialChatOpen: Boolean = false) {
                     }
                 },
             )
+            }
         }
     ) { padding ->
         // Scaffold 内容底部 padding（= 底栏高度）作为 bottomBarHeight 传入：通讯 Tab 全屏铺背景、
@@ -296,7 +305,40 @@ fun AppNavGraph(container: AppContainer, initialChatOpen: Boolean = false) {
                             launchSingleTop = true
                         }
                     },
+                    onOpenCheckinShop = { navController.navigate(CHECKIN_SHOP_ROUTE) },
+                    onOpenAffinity = { characterId -> navController.navigate(affinityRoute(characterId)) },
                 ) }
+            }
+            composable(CHECKIN_SHOP_ROUTE) {
+                // 独立目的地：不包在角色页或底栏内容容器中，避免浮在角色网格上。
+                CheckinShopScreen(container = container, onBack = { navController.popBackStack() })
+            }
+            composable(
+                route = AFFINITY_ROUTE,
+                arguments = listOf(navArgument("characterId") { type = NavType.StringType }),
+            ) { entry ->
+                val characterId = entry.arguments?.getString("characterId").orEmpty()
+                val character by container.characterRepository.characters.collectAsState(initial = emptyList())
+                val selected = character.firstOrNull { it.id == characterId }
+                if (selected != null) {
+                    AffinityScreen(
+                        container = container,
+                        character = selected,
+                        imageUrl = if (selected.isCustom && selected.image.isNotBlank()) selected.image else container.assetRepository.getSelectionPicture(selected.id),
+                        onBack = { navController.popBackStack() },
+                        onOpenEventConversation = {
+                            navController.navigate(BottomTab.Chat.route) {
+                                popUpTo(BottomTab.Chat.route) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                            feedNavController.navigate(FeedRoute.CHAT) {
+                                popUpTo(FeedRoute.FEED)
+                                launchSingleTop = true
+                            }
+                        },
+                    )
+                }
             }
             composable(BottomTab.Music.route) {
                 Box(tabBottomPadding) { MusicScreen(container = container) }

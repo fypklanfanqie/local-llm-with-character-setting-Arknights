@@ -53,6 +53,7 @@ import com.rhodesisland.terminal.util.CharacterImageStore
 import com.rhodesisland.terminal.util.PrtsImageLoader
 import com.rhodesisland.terminal.ui.affinity.AffinityScreen
 import com.rhodesisland.terminal.ui.affinity.CheckinShopScreen
+import com.rhodesisland.terminal.ui.affinity.AffinityScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -64,6 +65,8 @@ import kotlinx.serialization.json.Json
 fun CharactersScreen(
     container: AppContainer,
     onNavigateToChat: () -> Unit,
+    onOpenCheckinShop: () -> Unit,
+    onOpenAffinity: (String) -> Unit,
 ) {
     val characters by container.characterRepository.characters.collectAsState(
         initial = Characters.getOrderedList(),
@@ -78,11 +81,6 @@ fun CharactersScreen(
     var showCreate by remember { mutableStateOf(false) }
     var showImport by remember { mutableStateOf(false) }
     var showPersona by remember { mutableStateOf<Character?>(null) }
-    var showAffinity by remember { mutableStateOf<Character?>(null) }
-    var showCheckinShop by remember { mutableStateOf(false) }
-    val currentAffinity by container.affinityRepository.observeAffinity(activeCharacter).collectAsState(
-        initial = com.rhodesisland.terminal.data.model.CharacterAffinity(activeCharacter, 0f, 0L),
-    )
     var toast by remember { mutableStateOf<String?>(null) }
 
     // 干员搜索：按名称 / 代号过滤（全量 384 位干员）
@@ -106,7 +104,7 @@ fun CharactersScreen(
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             GlassLargeTitle(title = "角色") {
-                TextButton(onClick = { showCheckinShop = true }) {
+                TextButton(onClick = onOpenCheckinShop) {
                     Icon(Icons.Filled.Redeem, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
                     Text("每日签到", color = MaterialTheme.colorScheme.primary)
@@ -222,9 +220,9 @@ fun CharactersScreen(
                             }
                         } else null,
                         onViewPersona = { showPersona = char },
-                        onViewAffinity = { showAffinity = char },
+                        onViewAffinity = { onOpenAffinity(char.id) },
                         hasUnreadAffinityEvent = char.id in unreadAffinityCharacterIds,
-                        affinityValue = currentAffinity.value.takeIf { char.id == activeCharacter },
+                        affinityValue = null,
                     )
                 }
             }
@@ -236,24 +234,6 @@ fun CharactersScreen(
                 action = { TextButton(onClick = { toast = null }) { Text("知道了") } },
             ) { Text(msg) }
         }
-    }
-
-    if (showCheckinShop) {
-        CheckinShopScreen(container = container, onBack = { showCheckinShop = false })
-        return
-    }
-    showAffinity?.let { char ->
-        AffinityScreen(
-            container = container,
-            character = char,
-            imageUrl = if (char.isCustom && char.image.isNotBlank()) char.image else container.assetRepository.getSelectionPicture(char.id),
-            onBack = { showAffinity = null },
-            onOpenEventConversation = {
-                showAffinity = null
-                onNavigateToChat()
-            },
-        )
-        return
     }
 
     if (showCreate) {
