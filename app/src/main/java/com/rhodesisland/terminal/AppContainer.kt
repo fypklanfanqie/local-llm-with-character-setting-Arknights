@@ -27,6 +27,8 @@ import com.rhodesisland.terminal.data.repository.SeedanceVideoRepository
 import com.rhodesisland.terminal.data.repository.SettingsRepository
 import com.rhodesisland.terminal.conversationexport.ConversationExportService
 import com.rhodesisland.terminal.affinity.AffinityRepository
+import com.rhodesisland.terminal.affinity.SpecialEventCatalog
+import com.rhodesisland.terminal.affinity.SpecialEventConversationCoordinator
 import com.rhodesisland.terminal.download.DownloadManager
 import com.rhodesisland.terminal.video.DirectLlmSeedancePromptLlm
 import com.rhodesisland.terminal.video.SeedanceConversationContextProvider
@@ -86,6 +88,17 @@ class AppContainer(private val context: Context) {
     val documentRepository: DocumentRepository by lazy { DocumentRepository(directLlmClient) }
     val characterRepository: CharacterRepository by lazy { CharacterRepository(settingsRepository) }
     val affinityRepository: AffinityRepository by lazy { AffinityRepository(database) }
+    val specialEventCatalog: SpecialEventCatalog by lazy { SpecialEventCatalog(context) }
+    val specialEventConversationCoordinator: SpecialEventConversationCoordinator by lazy {
+        SpecialEventConversationCoordinator(
+            database = database,
+            affinityRepository = affinityRepository,
+            conversations = conversationRepository,
+            chats = chatRepository,
+            settings = settingsRepository,
+            catalog = specialEventCatalog,
+        )
+    }
     val conversationExportService: ConversationExportService by lazy {
         ConversationExportService(conversationRepository, chatRepository, characterRepository)
     }

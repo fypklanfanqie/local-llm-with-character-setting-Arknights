@@ -58,4 +58,5 @@ data class SpecialEvent(
     val startedAt: Long? = null,
     val conversationId: Long? = null,
     val isRead: Boolean = false,
+    val openingMessageId: Long? = null,
 )

@@ -93,6 +93,7 @@ data class SpecialEventEntity(
     val startedAt: Long? = null,
     val conversationId: Long? = null,
     val isRead: Boolean = false,
+    val openingMessageId: Long? = null,
 )
 
 /** 以 sourceKey 做唯一约束，阻止消息/视频重试重复增加好感。 */
@@ -161,6 +162,9 @@ interface AffinityDao {
     @Query("SELECT * FROM special_event WHERE characterId = :characterId AND threshold = :threshold")
     suspend fun getSpecialEvent(characterId: String, threshold: Int): SpecialEventEntity?
 
+    @Query("SELECT * FROM special_event WHERE id = :eventId")
+    suspend fun getSpecialEventById(eventId: Long): SpecialEventEntity?
+
     @Query("SELECT * FROM special_event WHERE conversationId = :conversationId LIMIT 1")
     suspend fun getSpecialEventByConversation(conversationId: Long): SpecialEventEntity?
 
@@ -221,4 +225,4 @@ internal fun LungmenWalletEntity.toDomain() = LungmenWallet(balance, updatedAt)
 internal fun GiftDefinitionEntity.toDomain() = GiftDefinition(id, name, description, imagePath, price, affinityGain, createdAt)
 internal fun GiftInventoryEntity.toDomain() = GiftInventory(giftId, quantity, updatedAt)
 internal fun GiftHistoryEntity.toDomain() = GiftHistory(id, characterId, giftId, giftName, giftDescription, giftImagePath, price, affinityGain, sentAt, conversationId)
-internal fun SpecialEventEntity.toDomain() = SpecialEvent(id, characterId, threshold, title, sceneKey, unlockedAt, startedAt, conversationId, isRead)
+internal fun SpecialEventEntity.toDomain() = SpecialEvent(id, characterId, threshold, title, sceneKey, unlockedAt, startedAt, conversationId, isRead, openingMessageId)
