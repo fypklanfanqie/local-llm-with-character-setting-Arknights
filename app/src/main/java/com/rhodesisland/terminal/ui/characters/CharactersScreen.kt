@@ -80,6 +80,9 @@ fun CharactersScreen(
     var showPersona by remember { mutableStateOf<Character?>(null) }
     var showAffinity by remember { mutableStateOf<Character?>(null) }
     var showCheckinShop by remember { mutableStateOf(false) }
+    val currentAffinity by container.affinityRepository.observeAffinity(activeCharacter).collectAsState(
+        initial = com.rhodesisland.terminal.data.model.CharacterAffinity(activeCharacter, 0f, 0L),
+    )
     var toast by remember { mutableStateOf<String?>(null) }
 
     // 干员搜索：按名称 / 代号过滤（全量 384 位干员）
@@ -221,6 +224,7 @@ fun CharactersScreen(
                         onViewPersona = { showPersona = char },
                         onViewAffinity = { showAffinity = char },
                         hasUnreadAffinityEvent = char.id == activeCharacter && unreadAffinityEvents > 0,
+                        affinityValue = currentAffinity.value.takeIf { char.id == activeCharacter },
                     )
                 }
             }
@@ -302,6 +306,7 @@ private fun CharacterCard(
     onViewPersona: () -> Unit,
     onViewAffinity: () -> Unit,
     hasUnreadAffinityEvent: Boolean,
+    affinityValue: Float?,
 ) {
     val scheme = MaterialTheme.colorScheme
     Box(
@@ -374,7 +379,7 @@ private fun CharacterCard(
                     ) {
                         Icon(Icons.Filled.Favorite, contentDescription = null, tint = scheme.primary, modifier = Modifier.size(12.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("好感度", color = scheme.primary, fontSize = 11.5.sp)
+                        Text("好感 ${affinityValue?.let { if (it % 1f == 0f) it.toInt() else it } ?: 0} / 200", color = scheme.primary, fontSize = 10.sp)
                     }
                     if (hasUnreadAffinityEvent) {
                         Box(
