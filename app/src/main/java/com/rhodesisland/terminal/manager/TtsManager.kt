@@ -99,8 +99,8 @@ class TtsManager(
         // 角色音色映射：优先使用用户配置的音色 ID，留空则由服务端默认选择
         val voiceMap = settings.getTtsVoiceMapNow()
         val voice = voiceMap[characterId]?.let { pair ->
-            (if (language == TtsLanguage.JA) pair.ja else pair.zh).takeIf { it.isNotBlank() }
-        }
+            if (language == TtsLanguage.JA) pair.ja.voiceId else pair.zh.voiceId
+        }?.takeIf { it.isNotBlank() }
 
         // 清理括号内容
         val cleanText = cleanTtsText(text)

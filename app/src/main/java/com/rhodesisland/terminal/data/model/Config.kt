@@ -87,11 +87,39 @@ enum class SystemVoiceTemplate(
  * 角色音色映射（火山引擎声音复刻 ID，S_xxx 格式）
  * zh / ja 分别对应中、日语音色；留空则由服务端按 characterId 默认选择。
  */
+enum class TtsAuthMode { API_KEY, LEGACY, NONE }
+
+@Serializable
+data class VoiceConfig(
+    val voiceId: String = "",
+    val resourceId: String = "",
+) {
+    val isEmpty: Boolean get() = voiceId.isBlank() && resourceId.isBlank()
+    val isComplete: Boolean get() = voiceId.isNotBlank() && resourceId.isNotBlank()
+
+    fun validationError(label: String): String? = when {
+        isEmpty || isComplete -> null
+        voiceId.isNotBlank() -> "${label}音色已填写，但缺少对应 Resource ID"
+        else -> "${label} Resource ID 已填写，但缺少对应音色 ID"
+    }
+}
+
 @Serializable
 data class VoicePair(
-    val zh: String = "",
-    val ja: String = "",
+    val zh: VoiceConfig = VoiceConfig(),
+    val ja: VoiceConfig = VoiceConfig(),
 )
+
+fun TtsConfig.authMode(): TtsAuthMode = when {
+    apiKey.isNotBlank() -> TtsAuthMode.API_KEY
+    appId.isNotBlank() && accessKey.isNotBlank() -> TtsAuthMode.LEGACY
+    else -> TtsAuthMode.NONE
+}
+
+fun TtsConfig.validationError(): String? = when (authMode()) {
+    TtsAuthMode.API_KEY, TtsAuthMode.LEGACY -> null
+    TtsAuthMode.NONE -> "请填写 API Key，或同时填写 App ID 与 Access Key"
+}
 
 /**
  * 聊天 Provider 类型

@@ -301,7 +301,7 @@ class AppContainer(private val context: Context) {
         }
 
     // ===== TTS =====
-    val ttsClient: VolcTtsClient by lazy { VolcTtsClient(AppConfig.TTS_PROXY_URL, RetrofitClient.okHttpClient) }
+    val ttsClient: VolcTtsClient by lazy { VolcTtsClient(AppConfig.TTS_DIRECT_URL, RetrofitClient.okHttpClient) }
     val ttsManager: TtsManager by lazy { TtsManager(context, ttsClient, settingsRepository) }
 
     // ===== 音频 =====

@@ -4,10 +4,9 @@ package com.rhodesisland.terminal.config
  * 应用全局配置
  */
 object AppConfig {
-    // ===== TTS 代理 =====
-    // 火山引擎 TTS 透明代理（CloudBase Web 函数），对齐网页版 workers/cloudbase-tts-fn。
-    // 代理直接透传 header + body 到火山引擎 V3 API，不做请求格式转换。
-    const val TTS_PROXY_URL = "https://lanfanqie-d8go1l51d56f44d20.service.tcloudbase.com/tts"
+    // ===== TTS =====
+    /** 火山引擎语音合成 HTTP V3 Chunked 官方直连地址。 */
+    const val TTS_DIRECT_URL = "https://openspeech.bytedance.com/api/v3/tts/unidirectional"
 
     // ===== 云端 AI 默认配置 =====
     const val DEFAULT_API_BASE = "https://api.deepseek.com/v1"

@@ -20,6 +20,7 @@ import com.rhodesisland.terminal.data.model.ThemeMode
 import com.rhodesisland.terminal.data.model.TtsConfig
 import com.rhodesisland.terminal.data.model.TtsEngine
 import com.rhodesisland.terminal.data.model.TtsLanguage
+import com.rhodesisland.terminal.data.model.VoiceConfig
 import com.rhodesisland.terminal.data.model.VoicePair
 import com.rhodesisland.terminal.data.repository.BgmTrack
 import com.rhodesisland.terminal.llm.backend.BackendPreference
@@ -293,14 +294,23 @@ class SettingsStore(
     // ===== 角色音色映射 =====
     private val voiceJson = Json { ignoreUnknownKeys = true; isLenient = true }
 
+    @kotlinx.serialization.Serializable
+    private data class LegacyVoicePair(val zh: String = "", val ja: String = "")
+
+    private fun decodeVoiceMap(raw: String): Map<String, VoicePair> = runCatching {
+        voiceJson.decodeFromString<Map<String, VoicePair>>(raw)
+    }.recoverCatching {
+        voiceJson.decodeFromString<Map<String, LegacyVoicePair>>(raw).mapValues { (_, value) ->
+            VoicePair(
+                zh = VoiceConfig(voiceId = value.zh),
+                ja = VoiceConfig(voiceId = value.ja),
+            )
+        }
+    }.getOrDefault(emptyMap())
+
     val ttsVoiceMap: Flow<Map<String, VoicePair>> = dataStore.data.map { p ->
         val raw = p[Keys.TTS_VOICE_MAP] ?: ""
-        if (raw.isBlank()) emptyMap()
-        else try {
-            voiceJson.decodeFromString<Map<String, VoicePair>>(raw)
-        } catch (e: Exception) {
-            emptyMap()
-        }
+        if (raw.isBlank()) emptyMap() else decodeVoiceMap(raw)
     }
 
     suspend fun setTtsVoiceMap(map: Map<String, VoicePair>) {

@@ -381,20 +381,20 @@ fun SettingsScreen(
                         )
                         VoiceField(
                             label = "中",
-                            value = pair.zh,
+                            value = pair.zh.voiceId,
                             onValueChange = { v ->
                                 val cur = voiceEdit[id] ?: VoicePair()
-                                voiceEdit = voiceEdit + (id to cur.copy(zh = v))
+                                voiceEdit = voiceEdit + (id to cur.copy(zh = cur.zh.copy(voiceId = v)))
                             },
                             modifier = Modifier.weight(1f),
                         )
                         Spacer(Modifier.width(6.dp))
                         VoiceField(
                             label = "日",
-                            value = pair.ja,
+                            value = pair.ja.voiceId,
                             onValueChange = { v ->
                                 val cur = voiceEdit[id] ?: VoicePair()
-                                voiceEdit = voiceEdit + (id to cur.copy(ja = v))
+                                voiceEdit = voiceEdit + (id to cur.copy(ja = cur.ja.copy(voiceId = v)))
                             },
                             modifier = Modifier.weight(1f),
                         )
@@ -407,7 +407,7 @@ fun SettingsScreen(
             saved = voiceSaved,
             onClick = {
                 scope.launch {
-                    val toSave = voiceEdit.filter { it.value.zh.isNotBlank() || it.value.ja.isNotBlank() }
+                    val toSave = voiceEdit.filter { it.value.zh.isComplete || it.value.ja.isComplete }
                     container.settingsRepository.setTtsVoiceMap(toSave)
                     voiceSaved = true
                 }
