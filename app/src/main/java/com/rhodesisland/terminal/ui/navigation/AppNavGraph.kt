@@ -49,6 +49,7 @@ import com.rhodesisland.terminal.AppContainer
 import com.rhodesisland.terminal.ui.characters.CharactersScreen
 import com.rhodesisland.terminal.ui.chat.ChatScreen
 import com.rhodesisland.terminal.ui.feed.CharacterFeedScreen
+import com.rhodesisland.terminal.ui.feed.CharacterFeedHost
 import com.rhodesisland.terminal.ui.feed.FeedRoute
 import com.rhodesisland.terminal.ui.glass.GlassNavBar
 import com.rhodesisland.terminal.ui.glass.GlassNavItem
@@ -219,7 +220,7 @@ fun AppNavGraph(container: AppContainer, initialChatOpen: Boolean = false) {
                     modifier = Modifier.fillMaxSize(),
                 ) {
                     composable(FeedRoute.FEED) {
-                        CharacterFeedScreen(
+                        CharacterFeedHost(
                             container = container,
                             bottomBarHeight = bottomBarHeight,
                             onAccent = { accentColor = it },

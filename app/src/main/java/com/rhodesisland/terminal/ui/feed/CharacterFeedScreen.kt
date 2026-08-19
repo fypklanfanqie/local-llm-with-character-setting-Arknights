@@ -49,7 +49,6 @@ import com.rhodesisland.terminal.config.Characters
 import com.rhodesisland.terminal.data.model.Character
 import com.rhodesisland.terminal.ui.characters.CustomCharacterDialog
 import com.rhodesisland.terminal.ui.characters.PersonaSheet
-import com.rhodesisland.terminal.ui.affinity.AffinityScreen
 import com.rhodesisland.terminal.ui.applySystemBarIcons
 import com.rhodesisland.terminal.util.CharacterImageStore
 import com.rhodesisland.terminal.util.loadThemeColor
@@ -84,6 +83,8 @@ fun CharacterFeedScreen(
     onOpenEncounter: () -> Unit = {},
     /** 进入「群聊」多人同群聊天（顶栏玻璃按钮，仅云端可用）。 */
     onOpenGroupChat: () -> Unit = {},
+    /** 进入好感度独立页面（由 [CharacterFeedHost] 承载）。 */
+    onOpenAffinity: (String) -> Unit = {},
     /** 当前落定立绘的主题色上报（供 dock 栏等全局着色）；页面销毁时应回传 null 复位。 */
     onAccent: (Color?) -> Unit = {},
 ) {
@@ -114,7 +115,6 @@ fun CharacterFeedScreen(
     val pagerState = rememberPagerState(initialPage = 0, pageCount = { characters.size })
 
     var showPersona by remember { mutableStateOf<Character?>(null) }
-    var showAffinity by remember { mutableStateOf<Character?>(null) }
     var showCreate by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<Character?>(null) }
 
@@ -187,7 +187,7 @@ fun CharacterFeedScreen(
                     }
                 },
                 onPersona = { showPersona = char },
-                onAffinity = { showAffinity = char },
+                onAffinity = { onOpenAffinity(char.id) },
                 onVoice = container.assetRepository.getVoice(char.id).takeIf { it.isNotBlank() }?.let { url ->
                     { scope.launch { container.audioManager.playVoice(url, volume) } }
                 },
@@ -281,20 +281,6 @@ fun CharacterFeedScreen(
             }
             }
         }
-    }
-
-    showAffinity?.let { char ->
-        AffinityScreen(
-            container = container,
-            character = char,
-            imageUrl = if (char.isCustom && char.image.isNotBlank()) char.image else container.assetRepository.getSelectionPicture(char.id),
-            onBack = { showAffinity = null },
-            onOpenEventConversation = {
-                showAffinity = null
-                onOpenChat(char.id)
-            },
-        )
-        return
     }
 
     showPersona?.let { char ->

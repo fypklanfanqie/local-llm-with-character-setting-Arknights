@@ -1108,18 +1108,7 @@ class ChatViewModel(
                 container.affinityRepository.saveGiftThankYouText(gift.id, response)
                 val rowId = container.chatRepository.addMessage(char.id, convId, ChatMessage(role = "assistant", content = response))
                 container.conversationRepository.touch(convId)
-                _uiState.update { state ->
-                    state.copy(
-                        messages = state.messages + DisplayMessage(
-                            id = "msg-$rowId",
-                            role = "assistant",
-                            content = response,
-                            segments = MarkdownParser.parseWithThink(MarkdownParser.stripThink(response), isStreaming = false),
-                            sender = char.name,
-                            databaseId = rowId,
-                        ),
-                    )
-                }
+                // Room Flow 会回填该消息。不要再手动 append 同一 databaseId，否则 LazyColumn key 重复并崩溃。
             }.onFailure { error ->
                 _uiState.update { it.copy(errorMessage = "礼物已送出，感谢回复生成失败：${error.message ?: "请稍后重试"}") }
             }
