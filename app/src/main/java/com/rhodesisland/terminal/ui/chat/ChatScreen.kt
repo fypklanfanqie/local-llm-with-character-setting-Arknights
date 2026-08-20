@@ -815,124 +815,128 @@ private fun ChatTopBar(
     val scheme = MaterialTheme.colorScheme
     val glass = chatGlass()
     val context = LocalContext.current
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 6.dp)
             .liquidGlass(GlassShapes.cardSmall, shadowElevation = glass.shadow, tint = glass.topBarTint, blurRadius = glass.blur)
             .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        IconBubble(
-            icon = Icons.AutoMirrored.Outlined.ArrowBack,
-            contentDescription = "返回",
-            onClick = onBack,
-        )
-        Spacer(Modifier.width(2.dp))
-
-        // 头像 + 角色信息（点击进角色页）
+        // 第一行：返回 + 头像/角色名 + 会话记录（角色信息占满剩余空间）。
         Row(
-            modifier = Modifier
-                .weight(1f)
-                .clip(GlassShapes.cardSmall)
-                .clickable(onClick = onClickCharacter)
-                .padding(vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Box {
-                ChatAvatar(imageUrl = imageUrl, name = name, size = AiAvatarSize)
-                // 在线点
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .size(10.dp)
-                        .clip(CircleShape)
-                        .background(SuccessGreen)
-                        .border(BorderStroke(2.dp, scheme.surface), CircleShape),
-                )
-            }
-            Spacer(Modifier.width(10.dp))
-            Column {
-                Text(
-                    name.ifBlank { "未选择角色" },
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = scheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    role.ifBlank { "角色" },
-                    color = scheme.onSurfaceVariant,
-                    fontSize = 11.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
+            IconBubble(
+                icon = Icons.AutoMirrored.Outlined.ArrowBack,
+                contentDescription = "返回",
+                onClick = onBack,
+            )
+            Spacer(Modifier.width(2.dp))
 
-        // 右侧按钮组（分段切换 + 图标 + 中/日语言）：窄屏或大字号放不下时整组可横向滑动，
-        // 避免按钮被挤压变形或最右侧（语言按钮）被裁掉。
-        Box(
-            modifier = Modifier.horizontalScroll(rememberScrollState()),
-            contentAlignment = Alignment.CenterEnd,
-        ) {
+            // 头像 + 角色信息（点击进角色页）
             Row(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(GlassShapes.cardSmall)
+                    .clickable(onClick = onClickCharacter)
+                    .padding(vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                GlassSegmented(
-                    options = if (specialEventActive) {
-                        listOf(ChatProviderType.CLOUD to "☁ 云端")
-                    } else {
-                        ChatProviderType.values().map {
-                            it to "${it.icon} ${if (it == ChatProviderType.CLOUD) "云端" else "本地"}"
-                        }
-                    },
-                    selected = activeProvider,
-                    onSelect = onSwitchProvider,
-                )
-
-                IconBubble(
-                    icon = Icons.Outlined.Psychology,
-                    contentDescription = "深度思考",
-                    highlighted = deepThinkingEnabled,
-                    onClick = onToggleDeepThinking,
-                )
-                // Seedance 自动视频开关（Task 7）：特殊邂逅与本地 Provider 下禁用；群聊入口本身不创建视频任务。
-                IconBubble(
-                    icon = Icons.Outlined.Videocam,
-                    contentDescription = when {
-                        specialEventActive -> "特殊邂逅中不可生成视频"
-                        videoToggleDisabled -> "自动视频：仅云端可用"
-                        else -> "自动视频"
-                    },
-                    highlighted = videoAutoEnabled && !videoToggleDisabled && !specialEventActive,
-                    onClick = {
-                        when {
-                            specialEventActive -> Toast.makeText(context, "特殊邂逅中不可生成视频", Toast.LENGTH_SHORT).show()
-                            videoToggleDisabled -> Toast.makeText(context, "自动视频仅云端可用", Toast.LENGTH_SHORT).show()
-                            else -> onToggleVideoAuto()
-                        }
-                    },
-                )
-                IconBubble(
-                    icon = Icons.AutoMirrored.Outlined.Chat,
-                    contentDescription = "会话记录",
-                    badge = conversationCount.takeIf { it > 0 },
-                    onClick = onOpenConversations,
-                )
-                LangBubble(
-                    lang = ttsLanguage,
-                    contentDescription = "语音语言：${ttsLanguage.label}",
-                    onClick = {
-                        val next = if (ttsLanguage == TtsLanguage.ZH) TtsLanguage.JA else TtsLanguage.ZH
-                        onToggleLang()
-                        Toast.makeText(context, "语音语言已切换至${next.label}", Toast.LENGTH_SHORT).show()
-                    },
-                )
+                Box {
+                    ChatAvatar(imageUrl = imageUrl, name = name, size = AiAvatarSize)
+                    // 在线点
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .background(SuccessGreen)
+                            .border(BorderStroke(2.dp, scheme.surface), CircleShape),
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
+                Column {
+                    Text(
+                        name.ifBlank { "未选择角色" },
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = scheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        role.ifBlank { "角色" },
+                        color = scheme.onSurfaceVariant,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
+            // 会话记录
+            IconBubble(
+                icon = Icons.AutoMirrored.Outlined.Chat,
+                contentDescription = "会话记录",
+                badge = conversationCount.takeIf { it > 0 },
+                onClick = onOpenConversations,
+            )
+        }
+
+        // 第二行：云端/本地 + 深度思考 + 视频 + 中英文切换。独占整行、窄屏可横向滑动，
+        // 保证最右侧语言按钮（中/日）始终可见，不再被同行头像/分段挤到屏外。
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            GlassSegmented(
+                options = if (specialEventActive) {
+                    listOf(ChatProviderType.CLOUD to "☁ 云端")
+                } else {
+                    ChatProviderType.values().map {
+                        it to "${it.icon} ${if (it == ChatProviderType.CLOUD) "云端" else "本地"}"
+                    }
+                },
+                selected = activeProvider,
+                onSelect = onSwitchProvider,
+            )
+
+            IconBubble(
+                icon = Icons.Outlined.Psychology,
+                contentDescription = "深度思考",
+                highlighted = deepThinkingEnabled,
+                onClick = onToggleDeepThinking,
+            )
+            // Seedance 自动视频开关（Task 7）：特殊邂逅与本地 Provider 下禁用；群聊入口本身不创建视频任务。
+            IconBubble(
+                icon = Icons.Outlined.Videocam,
+                contentDescription = when {
+                    specialEventActive -> "特殊邂逅中不可生成视频"
+                    videoToggleDisabled -> "自动视频：仅云端可用"
+                    else -> "自动视频"
+                },
+                highlighted = videoAutoEnabled && !videoToggleDisabled && !specialEventActive,
+                onClick = {
+                    when {
+                        specialEventActive -> Toast.makeText(context, "特殊邂逅中不可生成视频", Toast.LENGTH_SHORT).show()
+                        videoToggleDisabled -> Toast.makeText(context, "自动视频仅云端可用", Toast.LENGTH_SHORT).show()
+                        else -> onToggleVideoAuto()
+                    }
+                },
+            )
+            LangBubble(
+                lang = ttsLanguage,
+                contentDescription = "语音语言：${ttsLanguage.label}",
+                onClick = {
+                    val next = if (ttsLanguage == TtsLanguage.ZH) TtsLanguage.JA else TtsLanguage.ZH
+                    onToggleLang()
+                    Toast.makeText(context, "语音语言已切换至${next.label}", Toast.LENGTH_SHORT).show()
+                },
+            )
         }
     }
 }
