@@ -130,6 +130,17 @@ fun SettingsScreen(
     var probeRunning by remember { mutableStateOf(false) }
     var probeResult by remember { mutableStateOf<String?>(null) }
 
+    /**
+     * 由当前 UI 编辑态组装 ApiConfig（预设=preset baseUrl/model，自定义=手动输入值；
+     * 免费服务商 key 恒为空）。用于切换服务商时保存旧槽、以及保存按钮写入。
+     */
+    fun buildCurrentUiConfig(): ApiConfig {
+        val baseUrl = if (selectedProvider == null) customBaseUrl else selectedProvider?.baseUrl ?: customBaseUrl
+        val model = if (selectedProvider == null) customModel else selectedModel?.id ?: customModel
+        val key = if (selectedProvider?.id == "siliconflow-free") "" else apiKey
+        return ApiConfig(baseUrl, key, model)
+    }
+
     var ttsApiKey by remember(ttsConfig) { mutableStateOf(ttsConfig.apiKey) }
     var showTtsKey by remember { mutableStateOf(false) }
 
@@ -226,10 +237,36 @@ fun SettingsScreen(
                     expanded = providerExpanded,
                     onExpandedChange = { providerExpanded = it },
                     onProviderSelected = { provider ->
+                        // 切换服务商：先把旧服务商的编辑状态存回它自己的槽位，再加载新服务商
+                        // 的独立配置并立即生效（baseUrl/model/key 互不串）。
+                        val oldKey = selectedProvider?.id ?: "custom"
+                        val oldConfig = buildCurrentUiConfig()
                         selectedProvider = provider
                         selectedModel = provider?.models?.firstOrNull()
                         providerExpanded = false
                         if (provider?.id == "siliconflow-free") showFreeTip = true
+                        scope.launch {
+                            container.settingsRepository.setProviderApiConfig(oldKey, oldConfig)
+                            val newKey = provider?.id ?: "custom"
+                            val stored = container.settingsRepository.getProviderApiConfigNow(newKey)
+                            if (provider != null) {
+                                val model = stored?.model?.let { m -> provider.models.find { it.id == m } }
+                                    ?: provider.models.firstOrNull()
+                                val key = if (provider.id == "siliconflow-free") "" else (stored?.apiKey ?: "")
+                                selectedModel = model
+                                apiKey = key
+                                container.settingsRepository.setApiConfig(
+                                    ApiConfig(provider.baseUrl, key, model?.id ?: provider.defaultModel),
+                                )
+                            } else {
+                                customBaseUrl = stored?.baseUrl ?: customBaseUrl
+                                customModel = stored?.model ?: customModel
+                                apiKey = stored?.apiKey ?: apiKey
+                                container.settingsRepository.setApiConfig(
+                                    ApiConfig(customBaseUrl, apiKey, customModel),
+                                )
+                            }
+                        }
                     },
                 )
                 if (!isCustom && selectedProvider != null) {
@@ -297,11 +334,11 @@ fun SettingsScreen(
             saved = apiSaved,
             onClick = {
                 scope.launch {
-                    val baseUrl = if (isCustom) customBaseUrl else selectedProvider?.baseUrl ?: customBaseUrl
-                    val model = if (isCustom) customModel else selectedModel?.id ?: customModel
-                    // 内置免费服务商：key 由 Cloudflare 代理注入，客户端无需/不填 key
-                    val effectiveKey = if (isFreeProvider) "" else apiKey
-                    container.settingsRepository.setApiConfig(ApiConfig(baseUrl, effectiveKey, model))
+                    // 写入当前服务商的独立槽位 + 生效为 active（聊天即时用这份配置）。
+                    val config = buildCurrentUiConfig()
+                    val slotKey = selectedProvider?.id ?: "custom"
+                    container.settingsRepository.setProviderApiConfig(slotKey, config)
+                    container.settingsRepository.setApiConfig(config)
                     apiSaved = true
                 }
             },

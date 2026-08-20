@@ -28,6 +28,7 @@ import com.rhodesisland.terminal.llm.profile.InferencePerformanceMode
 import com.rhodesisland.terminal.llm.thinking.LocalThinkingLevel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -53,6 +54,8 @@ class SettingsStore(
         val API_BASE = stringPreferencesKey("api_base")
         val API_KEY = stringPreferencesKey("api_key")
         val API_MODEL = stringPreferencesKey("api_model")
+        // 每服务商独立保存的 API 配置（key = 预设 id 或 "custom"），切换服务商互不串 key/model/baseUrl。
+        val PROVIDER_API_CONFIGS = stringPreferencesKey("provider_api_configs")
 
         // TTS
         val TTS_API_KEY = stringPreferencesKey("tts_api_key")
@@ -192,6 +195,30 @@ class SettingsStore(
             p[Keys.API_BASE] = config.baseUrl
             p[Keys.API_KEY] = config.apiKey
             p[Keys.API_MODEL] = config.model
+        }
+    }
+
+    // ===== 每服务商 API 配置（切换服务商互不串 key/model/baseUrl）=====
+    private val providerApiJson = Json { ignoreUnknownKeys = true; isLenient = true }
+
+    /** 每服务商独立配置表：key = 预设 id 或 "custom"。 */
+    val providerApiConfigs: Flow<Map<String, ApiConfig>> = dataStore.data.map { p ->
+        p[Keys.PROVIDER_API_CONFIGS]?.let { raw ->
+            runCatching { providerApiJson.decodeFromString<Map<String, ApiConfig>>(raw) }.getOrDefault(emptyMap())
+        } ?: emptyMap()
+    }
+
+    /** 读取某服务商已保存的独立配置（无则 null）。 */
+    suspend fun getProviderApiConfig(key: String): ApiConfig? =
+        providerApiConfigs.first()[key]
+
+    /** 写入某服务商的独立配置（原子读改写，避免并发丢更新）。 */
+    suspend fun setProviderApiConfig(key: String, config: ApiConfig) {
+        dataStore.edit { p ->
+            val current = p[Keys.PROVIDER_API_CONFIGS]?.let { raw ->
+                runCatching { providerApiJson.decodeFromString<Map<String, ApiConfig>>(raw) }.getOrDefault(emptyMap())
+            } ?: emptyMap()
+            p[Keys.PROVIDER_API_CONFIGS] = providerApiJson.encodeToString(current + (key to config))
         }
     }
 

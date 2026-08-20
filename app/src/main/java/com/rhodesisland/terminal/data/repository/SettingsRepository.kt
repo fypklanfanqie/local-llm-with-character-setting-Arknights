@@ -111,6 +111,11 @@ class SettingsRepository(private val store: SettingsStore) {
     suspend fun setThemeMode(mode: ThemeMode) = store.setThemeMode(mode)
 
     suspend fun setApiConfig(config: ApiConfig) = store.setApiConfig(config)
+    /** 每服务商独立配置表（key = 预设 id 或 "custom"）。 */
+    val providerApiConfigs: Flow<Map<String, ApiConfig>> = store.providerApiConfigs
+    suspend fun getProviderApiConfigNow(key: String): ApiConfig? =
+        withTimeoutOrNull(DATASTORE_TIMEOUT_MS) { store.getProviderApiConfig(key) }
+    suspend fun setProviderApiConfig(key: String, config: ApiConfig) = store.setProviderApiConfig(key, config)
     suspend fun setSeedanceConfig(config: SeedanceConfig) = store.setSeedanceConfig(config)
     suspend fun setTtsConfig(config: TtsConfig) = store.setTtsConfig(config)
     suspend fun setTtsLanguage(lang: TtsLanguage) = store.setTtsLanguage(lang)
