@@ -79,6 +79,7 @@ fun GroupCreateDialog(
     var coverCleared by remember { mutableStateOf(false) }
     var coverError by remember { mutableStateOf<String?>(null) }
     var creating by remember { mutableStateOf(false) }
+    var memberSearch by remember { mutableStateOf("") }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
@@ -173,8 +174,33 @@ fun GroupCreateDialog(
                         Text("清空", color = scheme.error, fontSize = 12.sp)
                     }
                 }
+                // 搜索：按中文名 / 英文 ID 快速筛选全量干员与自定义角色。
+                BasicTextField(
+                    value = memberSearch,
+                    onValueChange = { memberSearch = it },
+                    singleLine = true,
+                    textStyle = TextStyle(color = textColor, fontSize = 13.sp),
+                    cursorBrush = SolidColor(scheme.primary),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(scheme.surface.copy(alpha = 0.6f))
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                    decorationBox = { inner ->
+                        if (memberSearch.isEmpty()) {
+                            Text("搜索角色名 / ID（如 能天使 / exusiai）", color = scheme.onSurfaceVariant, fontSize = 12.sp)
+                        }
+                        inner()
+                    },
+                )
+                val filteredChars = if (memberSearch.isBlank()) {
+                    characters
+                } else {
+                    val q = memberSearch.trim()
+                    characters.filter { it.name.contains(q, true) || it.id.contains(q, true) }
+                }
                 LazyColumn(modifier = Modifier.fillMaxWidth().height(240.dp)) {
-                    items(characters, key = { it.id }) { c ->
+                    items(filteredChars, key = { it.id }) { c ->
                         val checked = c.id in selectedIds
                         val atCap = selectedIds.size >= AppConfig.GroupChat.MAX_MEMBERS && !checked
                         Row(

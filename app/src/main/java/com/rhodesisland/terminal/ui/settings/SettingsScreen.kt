@@ -145,6 +145,7 @@ fun SettingsScreen(
     var ttsPreviewBusy by remember { mutableStateOf(false) }
     var ttsPreviewError by remember { mutableStateOf<String?>(null) }
     var showAdvancedTtsVoices by remember { mutableStateOf(false) }
+    var voiceSearch by remember { mutableStateOf("") }
     var ttsPreviewCharacterId by remember { mutableStateOf<String?>(null) }
 
     val ttsVoiceMap by container.settingsRepository.ttsVoiceMap.collectAsState(initial = emptyMap())
@@ -155,8 +156,9 @@ fun SettingsScreen(
     }
 
     val customCharacters by container.settingsRepository.customCharacters.collectAsState(initial = emptyList())
+    // 全量干员（基础 20 + 自动生成 364）+ 自定义角色，供角色音色表搜索选用。
     val voiceCharacters = remember(customCharacters) {
-        Characters.ORDER.mapNotNull { id -> Characters.ALL[id] } + customCharacters
+        Characters.ORDER_ALL.mapNotNull { id -> Characters.ALL[id] } + customCharacters
     }
 
     var showGuide by remember { mutableStateOf(false) }
@@ -443,7 +445,31 @@ fun SettingsScreen(
                     Text(if (showAdvancedTtsVoices) "收起角色音色表" else "展开角色音色表", color = scheme.primary)
                 }
                 if (showAdvancedTtsVoices) {
-                    voiceCharacters.forEach { char ->
+                    // 搜索框：按中文名或英文 ID 快速筛选全量干员（384）与自定义角色。
+                    GlassInputField(
+                        value = voiceSearch,
+                        onValueChange = { voiceSearch = it },
+                        placeholder = "搜索角色名 / ID（如 阿米娅 / amiya）",
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    val filtered = if (voiceSearch.isBlank()) {
+                        // 未搜索：默认只展示已配置音色的角色（避免 384 个全展开）；搜索后展示全部匹配。
+                        voiceCharacters.filter { char ->
+                            val p = voiceEdit[char.id]
+                            !p?.zh?.voiceId.isNullOrBlank() || !p?.ja?.voiceId.isNullOrBlank()
+                        }
+                    } else {
+                        val q = voiceSearch.trim()
+                        voiceCharacters.filter { it.name.contains(q, true) || it.id.contains(q, true) }
+                    }
+                    if (filtered.isEmpty()) {
+                        Text(
+                            if (voiceSearch.isBlank()) "尚未配置任何角色音色，输入角色名搜索后开始配置。"
+                            else "未找到「${voiceSearch.trim()}」，试试中文名或英文 ID。",
+                            color = scheme.onSurfaceVariant, fontSize = 11.sp,
+                        )
+                    }
+                    filtered.forEach { char ->
                         val id = char.id
                         val pair = voiceEdit[id] ?: VoicePair()
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
