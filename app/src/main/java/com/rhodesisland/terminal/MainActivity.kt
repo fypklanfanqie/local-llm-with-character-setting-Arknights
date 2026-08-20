@@ -205,28 +205,30 @@ class MainActivity : ComponentActivity() {
      * 仅筛同分辨率模式，避免触发分辨率切换。
      */
     private fun requestHighRefreshRate() {
-        // decorView 在 onResume 才 attach 到 display，onCreate 里取不到 -> 用 WindowManager.defaultDisplay
-        // （API 30 起标记 deprecated，但 onCreate 阶段仍是最可靠拿到 Display 的方式，单屏手机即本屏）。
-        @Suppress("DEPRECATION")
-        val display = windowManager.defaultDisplay ?: return
-        val current = display.mode
-        // 筛同分辨率模式，避免触发分辨率切换；取最高刷新率（120Hz / 90Hz / 144Hz 视设备而定）。
-        val best = display.supportedModes
-            .filter { it.physicalWidth == current.physicalWidth && it.physicalHeight == current.physicalHeight }
-            .maxByOrNull { it.refreshRate } ?: return
-        if (best.modeId != current.modeId) {
-            // API 23+：preferredDisplayModeId 把显示模式强制切到最高刷新率（主机制）；
-            // preferredRefreshRate 作为补充刷新率提示（API 30 起标记 deprecated 但仍生效）。
-            // 二者叠加后，Compose 帧时钟按显示刷新率跑满帧（配合持续动画不会掉回 60Hz）。
+        // 整段 runCatching：display.mode / supportedModes 在部分 ROM（鸿蒙/ColorOS）的 Display
+        // 实现上可能抛 IllegalStateException，任何一环失败都只降级不崩（高刷只是锦上添花）。
+        runCatching {
+            // decorView 在 onResume 才 attach 到 display，onCreate 里取不到 -> 用 WindowManager.defaultDisplay
+            // （API 30 起标记 deprecated，但 onCreate 阶段仍是最可靠拿到 Display 的方式，单屏手机即本屏）。
             @Suppress("DEPRECATION")
-            runCatching {
+            val display = windowManager.defaultDisplay ?: return
+            val current = display.mode
+            // 筛同分辨率模式，避免触发分辨率切换；取最高刷新率（120Hz / 90Hz / 144Hz 视设备而定）。
+            val best = display.supportedModes
+                .filter { it.physicalWidth == current.physicalWidth && it.physicalHeight == current.physicalHeight }
+                .maxByOrNull { it.refreshRate } ?: return
+            if (best.modeId != current.modeId) {
+                // API 23+：preferredDisplayModeId 把显示模式强制切到最高刷新率（主机制）；
+                // preferredRefreshRate 作为补充刷新率提示（API 30 起标记 deprecated 但仍生效）。
+                // 二者叠加后，Compose 帧时钟按显示刷新率跑满帧（配合持续动画不会掉回 60Hz）。
+                @Suppress("DEPRECATION")
                 window.attributes = window.attributes.apply {
                     preferredDisplayModeId = best.modeId
                     preferredRefreshRate = best.refreshRate
                 }
-            }.onFailure {
-                android.util.Log.w("MainActivity", "requestHighRefreshRate failed: ${it.message}")
             }
+        }.onFailure {
+            android.util.Log.w("MainActivity", "requestHighRefreshRate failed: ${it.message}")
         }
     }
 }

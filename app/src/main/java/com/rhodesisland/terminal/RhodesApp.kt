@@ -12,6 +12,7 @@ import com.rhodesisland.terminal.notification.AppLifecycleObserver
 import com.rhodesisland.terminal.notification.GreetingNotificationManager
 import com.rhodesisland.terminal.notification.GroupChatNotificationManager
 import com.rhodesisland.terminal.service.InferenceForegroundService
+import com.rhodesisland.terminal.util.CrashCapture
 import com.rhodesisland.terminal.util.PrtsImageLoader
 import com.rhodesisland.terminal.work.GreetingScheduler
 import com.rhodesisland.terminal.work.GroupChatScheduler
@@ -34,12 +35,17 @@ class RhodesApp : Application(), ImageLoaderFactory {
     /** 应用级协程作用域：用于启动时触发角色问候后台调度（不阻塞 onCreate）。 */
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    /** Coil 图片加载器：PRTS 立绘需要浏览器头 + 反热链 cookie（见 PrtsImageLoader）。 */
-    override fun newImageLoader(): ImageLoader =
+    /** Coil 图片加载器：PRTS 立绘需要浏览器头 + 反热链 cookie（见 PrtsImageLoader）。
+     *  构建失败（个别 ROM 对 Coil 定制 OkHttp 的兼容问题）时回退默认加载器，绝不因图片加载崩。 */
+    override fun newImageLoader(): ImageLoader = try {
         ImageLoader.Builder(this)
             .okHttpClient(PrtsImageLoader.okHttpClient)
             .crossfade(true)
             .build()
+    } catch (e: Throwable) {
+        Log.w(TAG, "自定义 ImageLoader 构建失败，回退默认: ${e.message}")
+        ImageLoader.Builder(this).crossfade(true).build()
+    }
 
     // Task 15/16：内存压力释放安全网——系统 trim 到「明确内存紧张」档时释放已加载模型
     // （BackendManager.release 为 deferred-safe：生成中延迟到 JNI 返回后释放）。**不调整后台驻留
@@ -67,6 +73,10 @@ class RhodesApp : Application(), ImageLoaderFactory {
 
     override fun onCreate() {
         super.onCreate()
+        // 全局崩溃捕获：把未捕获 Java/Kotlin 异常堆栈写入 files/crash_logs/*.txt，
+        // 供 OPPO/鸿蒙「点图标就闪退」类无堆栈反馈事后定位。须在 isMnnProbeProcess 早退之前，
+        // 让 :mnn_probe 等所有进程也捕获。native 崩溃不走此 handler（见 CrashCapture 类注释）。
+        CrashCapture.install(this)
         // :mnn_probe 隔离进程只运行 OpenCL 探测 service，不执行主应用初始化（AppContainer、
         // 通知渠道、问候调度等均与探测无关）。短路可显著加快探测进程启动——否则完整
         // onCreate（含通知/前台观察/后台调度）在冷启动 + 驱动初始化之上叠加延迟，

@@ -64,6 +64,7 @@ import com.rhodesisland.terminal.data.model.Character
 import com.rhodesisland.terminal.data.model.SeedanceConfig
 import com.rhodesisland.terminal.data.model.UserProfileConfig
 import com.rhodesisland.terminal.util.AppStorageUsage
+import com.rhodesisland.terminal.util.CrashCapture
 import com.rhodesisland.terminal.util.UserProfileImageStore
 import com.rhodesisland.terminal.data.model.SeedanceModelVariant
 import com.rhodesisland.terminal.data.model.SeedanceRatio
@@ -1279,6 +1280,9 @@ private fun StorageSection(container: AppContainer, scope: CoroutineScope) {
     var items by remember { mutableStateOf<List<AppStorageUsage.StorageItem>>(emptyList()) }
     var refreshing by remember { mutableStateOf(false) }
     var confirmKey by remember { mutableStateOf<String?>(null) }
+    // 崩溃日志查看（OPPO/鸿蒙「闪退」定位：CrashCapture 把堆栈写盘，此处读最新一份展示）。
+    var showCrashLog by remember { mutableStateOf(false) }
+    val crashLogText = remember(context) { CrashCapture.latestCrashText(context) }
 
     fun refresh() {
         scope.launch {
@@ -1344,7 +1348,52 @@ private fun StorageSection(container: AppContainer, scope: CoroutineScope) {
                     }
                 }
             }
+            // 崩溃日志：查看最近一次闪退堆栈（CrashCapture 写入），导出可定位 OPPO/鸿蒙闪退根因。
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("最近崩溃日志", color = scheme.onSurface, fontSize = 13.sp)
+                    Text(
+                        if (crashLogText == null) "暂无（仅捕获 Java/Kotlin 异常，native 崩溃请用 logcat）"
+                        else "存在崩溃记录，点「查看」复制内容发送给开发者",
+                        color = scheme.onSurfaceVariant,
+                        fontSize = 10.sp,
+                    )
+                }
+                TextButton(
+                    onClick = { showCrashLog = true },
+                    enabled = crashLogText != null,
+                    modifier = Modifier.width(64.dp),
+                ) {
+                    Text("查看", color = scheme.primary, fontSize = 12.sp)
+                }
+            }
         }
+    }
+
+    // 崩溃日志查看弹窗（堆栈可能较长，限制高度可滚动）。
+    if (showCrashLog && crashLogText != null) {
+        AlertDialog(
+            onDismissRequest = { showCrashLog = false },
+            containerColor = scheme.surfaceContainerHigh,
+            title = { Text("最近崩溃日志", color = scheme.onSurface) },
+            text = {
+                Text(
+                    crashLogText,
+                    color = scheme.onSurfaceVariant,
+                    fontSize = 10.sp,
+                    lineHeight = 14.sp,
+                    modifier = Modifier
+                        .heightIn(max = 320.dp)
+                        .verticalScroll(rememberScrollState()),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showCrashLog = false }) { Text("关闭", color = scheme.primary) }
+            },
+        )
     }
 
     confirmKey?.let { key ->
