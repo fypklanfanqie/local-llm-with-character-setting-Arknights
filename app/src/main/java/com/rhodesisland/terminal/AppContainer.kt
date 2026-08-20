@@ -99,7 +99,7 @@ class AppContainer(private val context: Context) {
         )
     }
     val conversationExportService: ConversationExportService by lazy {
-        ConversationExportService(conversationRepository, chatRepository, characterRepository)
+        ConversationExportService(conversationRepository, chatRepository, characterRepository, settingsRepository)
     }
 
     // 群聊：复用 conversation + chat_history（哨兵 characterId），仅云端可用。

@@ -25,6 +25,8 @@ data class ConversationExportMessage(
     val senderName: String,
     val content: String,
     val attachments: List<String> = emptyList(),
+    /** 发送者头像源（内置=assets 相对路径，自定义/用户=file 绝对路径；空=无头像画 monogram）。 */
+    val avatarPath: String = "",
 )
 
 fun suggestedExportBaseName(ownerName: String, title: String, exportedAt: Long): String {

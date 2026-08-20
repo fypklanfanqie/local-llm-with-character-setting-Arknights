@@ -2,6 +2,22 @@ package com.rhodesisland.terminal.conversationexport
 
 const val EXPORT_MESSAGE_GAP_PX = 14
 
+// ===== 头像 + 气泡占宽（渲染器与布局共用，保证换行/高度一致）=====
+/** 导出图左右留白（gutter）。 */
+const val EXPORT_GUTTER = 48
+/** 头像圆直径。 */
+const val EXPORT_AVATAR_SIZE = 56
+/** 头像与气泡间距。 */
+const val EXPORT_AVATAR_GAP = 12
+/** 气泡内边距（左右各）。 */
+const val EXPORT_BUBBLE_PADDING = 20
+/** 气泡占宽（角色/用户对称）：右缘 3/4 宽 - 左 gutter - 头像 - 间距。 */
+const val EXPORT_BUBBLE_WIDTH = EXPORT_IMAGE_WIDTH_PX * 3 / 4 - EXPORT_GUTTER - EXPORT_AVATAR_SIZE - EXPORT_AVATAR_GAP
+/** 气泡内文本换行宽度。 */
+const val EXPORT_BUBBLE_CONTENT_WIDTH = EXPORT_BUBBLE_WIDTH - EXPORT_BUBBLE_PADDING * 2
+/** 气泡头像（圆形）垂直中心相对消息顶部的偏移：对齐元信息行。 */
+const val EXPORT_AVATAR_CENTER_Y = 44
+
 class LongImageTooTallException(val height: Int) : IllegalStateException(
     "当前对话过长，无法安全生成单张长图；请改用“自动分页多张图”或 TXT（预计高度 ${height}px）",
 )
@@ -14,9 +30,9 @@ data class ImageRenderPlan(
 )
 
 object ConversationImageLayout {
-    private const val CONTENT_WIDTH = EXPORT_IMAGE_WIDTH_PX - 96
+    private const val CONTENT_WIDTH = EXPORT_BUBBLE_CONTENT_WIDTH
     private const val HEADER_HEIGHT = 180
-    private const val MESSAGE_PADDING = 40
+    private const val MESSAGE_PADDING = EXPORT_BUBBLE_PADDING
     private const val META_LINE_HEIGHT = 32
     private const val BODY_LINE_HEIGHT = 42
     private const val ATTACHMENT_LINE_HEIGHT = 38

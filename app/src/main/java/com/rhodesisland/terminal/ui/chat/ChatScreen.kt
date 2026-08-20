@@ -258,7 +258,7 @@ fun ChatScreen(
         pendingImageMode = null
         exportBusy = true
         exportScope.launch {
-            runCatching { ConversationImageRenderer.render(ConversationImageLayout.plan(document, mode)).single() }
+            runCatching { ConversationImageRenderer.render(ConversationImageLayout.plan(document, mode), context).single() }
                 .onSuccess { png ->
                     conversationExportWriter.writePng(uri, png)
                         .onSuccess { Toast.makeText(context, "聊天记录图片已导出", Toast.LENGTH_SHORT).show() }
@@ -284,7 +284,7 @@ fun ChatScreen(
         if (treeUri != null && document != null) {
             exportBusy = true
             exportScope.launch {
-                runCatching { ConversationImageRenderer.render(ConversationImageLayout.plan(document, ConversationImageMode.PAGINATED)) }
+                runCatching { ConversationImageRenderer.render(ConversationImageLayout.plan(document, ConversationImageMode.PAGINATED), context) }
                     .fold(
                         onSuccess = { pngs ->
                             conversationExportWriter.writePngPages(treeUri, suggestedExportBaseName(document.ownerName, document.title, document.exportedAt), pngs)

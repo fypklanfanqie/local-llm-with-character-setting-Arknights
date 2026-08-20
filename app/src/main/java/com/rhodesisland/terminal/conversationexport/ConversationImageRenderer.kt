@@ -1,13 +1,20 @@
 package com.rhodesisland.terminal.conversationexport
 
+import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.Rect
+import android.graphics.RectF
 import android.text.TextPaint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.FileInputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -19,22 +26,31 @@ object ConversationImageRenderer {
     private const val USER_BUBBLE = 0xFF3B2D13.toInt()
     private const val TEXT = 0xFFF1EEE7.toInt()
     private const val MUTED = 0xFFA9B3C2.toInt()
-    private const val INSET = 48
+    private const val AVATAR_RING = 0xFF3A5377.toInt()
     private const val HEADER_HEIGHT = 180
-    private const val MESSAGE_PADDING = 20
+    private const val MESSAGE_PADDING = EXPORT_BUBBLE_PADDING
     private const val BODY_TEXT_SIZE = 30f
     private const val BODY_LINE_HEIGHT = 42
     private const val META_LINE_HEIGHT = 32
     private const val ATTACHMENT_LINE_HEIGHT = 38
 
-    suspend fun render(plan: ImageRenderPlan): List<ByteArray> = withContext(Dispatchers.Default) {
+    // ===== 气泡几何（与 ConversationImageLayout 共享常量，保持换行/高度一致）=====
+    /** 角色气泡：左缘 = gutter + 头像 + 间距；右缘 = 3/4 宽。 */
+    private val charBubbleLeft = EXPORT_GUTTER + EXPORT_AVATAR_SIZE + EXPORT_AVATAR_GAP
+    private val charBubbleRight = EXPORT_IMAGE_WIDTH_PX * 3 / 4
+    /** 用户气泡：左缘 = 1/4 宽；右缘 = 宽 - gutter - 头像 - 间距。 */
+    private val userBubbleLeft = EXPORT_IMAGE_WIDTH_PX / 4
+    private val userBubbleRight = EXPORT_IMAGE_WIDTH_PX - EXPORT_GUTTER - EXPORT_AVATAR_SIZE - EXPORT_AVATAR_GAP
+
+    suspend fun render(plan: ImageRenderPlan, context: Context): List<ByteArray> = withContext(Dispatchers.Default) {
         when (plan.mode) {
-            ConversationImageMode.LONG_IMAGE -> listOf(renderPage(plan.document, plan.document.messages, plan.totalHeight, 1, 1))
-            ConversationImageMode.PAGINATED -> renderPages(plan.document)
+            ConversationImageMode.LONG_IMAGE ->
+                listOf(renderPage(context, plan.document, plan.document.messages, plan.totalHeight, 1, 1))
+            ConversationImageMode.PAGINATED -> renderPages(context, plan.document)
         }
     }
 
-    private fun renderPages(document: ConversationExportDocument): List<ByteArray> {
+    private fun renderPages(context: Context, document: ConversationExportDocument): List<ByteArray> {
         val pages = mutableListOf<List<ConversationExportMessage>>()
         val page = mutableListOf<ConversationExportMessage>()
         var used = HEADER_HEIGHT
@@ -62,11 +78,12 @@ object ConversationImageRenderer {
         }
         if (page.isNotEmpty()) pages += page.toList()
         return pages.mapIndexed { index, messages ->
-            renderPage(document, messages, EXPORT_PAGE_HEIGHT_PX, index + 1, pages.size)
+            renderPage(context, document, messages, EXPORT_PAGE_HEIGHT_PX, index + 1, pages.size)
         }
     }
 
     private fun renderPage(
+        context: Context,
         document: ConversationExportDocument,
         messages: List<ConversationExportMessage>,
         height: Int,
@@ -78,9 +95,11 @@ object ConversationImageRenderer {
             val canvas = Canvas(bitmap)
             canvas.drawColor(BACKGROUND)
             drawHeader(canvas, document, pageNumber, pageCount)
+            // 头像按路径去重解码（1:1 会话只有角色+博士两张，群聊每成员一张）。
+            val avatarCache = HashMap<String, Bitmap?>()
             var y = HEADER_HEIGHT
             messages.forEach { message ->
-                y = drawMessage(canvas, message, y)
+                y = drawMessage(canvas, context, message, y, avatarCache)
             }
             return ByteArrayOutputStream().use { output ->
                 check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output))
@@ -94,20 +113,40 @@ object ConversationImageRenderer {
     private fun drawHeader(canvas: Canvas, document: ConversationExportDocument, pageNumber: Int, pageCount: Int) {
         val title = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = GOLD; textSize = 42f; isFakeBoldText = true }
         val subtitle = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = MUTED; textSize = 24f }
-        canvas.drawText("罗德岛通讯记录", INSET.toFloat(), 62f, title)
-        canvas.drawText("${document.ownerName} · ${document.title}", INSET.toFloat(), 102f, subtitle)
-        canvas.drawText("第 $pageNumber / $pageCount 页", INSET.toFloat(), 138f, subtitle)
-        canvas.drawRect(INSET.toFloat(), 156f, (EXPORT_IMAGE_WIDTH_PX - INSET).toFloat(), 160f, Paint().apply { color = GOLD })
+        canvas.drawText("罗德岛通讯记录", EXPORT_GUTTER.toFloat(), 62f, title)
+        canvas.drawText("${document.ownerName} · ${document.title}", EXPORT_GUTTER.toFloat(), 102f, subtitle)
+        canvas.drawText("第 $pageNumber / $pageCount 页", EXPORT_GUTTER.toFloat(), 138f, subtitle)
+        canvas.drawRect(EXPORT_GUTTER.toFloat(), 156f, (EXPORT_IMAGE_WIDTH_PX - EXPORT_GUTTER).toFloat(), 160f, Paint().apply { color = GOLD })
     }
 
-    private fun drawMessage(canvas: Canvas, message: ConversationExportMessage, top: Int): Int {
-        val lines = ConversationImageLayout.wrap(message.content.ifBlank { "（无文本内容）" }, EXPORT_IMAGE_WIDTH_PX - INSET * 2 - MESSAGE_PADDING * 2, BODY_TEXT_SIZE)
-        val height = MESSAGE_PADDING * 2 + META_LINE_HEIGHT + lines.size * BODY_LINE_HEIGHT + message.attachments.size * ATTACHMENT_LINE_HEIGHT + 18
+    private fun drawMessage(
+        canvas: Canvas,
+        context: Context,
+        message: ConversationExportMessage,
+        top: Int,
+        avatarCache: MutableMap<String, Bitmap?>,
+    ): Int {
+        val lines = ConversationImageLayout.wrap(
+            message.content.ifBlank { "（无文本内容）" },
+            EXPORT_BUBBLE_CONTENT_WIDTH,
+            BODY_TEXT_SIZE,
+        )
+        val height = MESSAGE_PADDING * 2 + META_LINE_HEIGHT + lines.size * BODY_LINE_HEIGHT +
+            message.attachments.size * ATTACHMENT_LINE_HEIGHT + 18
         val isUser = message.senderName == "博士" || message.senderName == "用户"
-        val left = if (isUser) EXPORT_IMAGE_WIDTH_PX / 4 else INSET
-        val right = if (isUser) EXPORT_IMAGE_WIDTH_PX - INSET else EXPORT_IMAGE_WIDTH_PX * 3 / 4
+        val left = if (isUser) userBubbleLeft else charBubbleLeft
+        val right = if (isUser) userBubbleRight else charBubbleRight
+
         val bubble = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = if (isUser) USER_BUBBLE else SURFACE }
         canvas.drawRoundRect(left.toFloat(), top.toFloat(), right.toFloat(), (top + height).toFloat(), 22f, 22f, bubble)
+
+        // 头像：角色在左、博士在右，垂直对齐元信息行。
+        val avatarCenterX = if (isUser) {
+            (EXPORT_IMAGE_WIDTH_PX - EXPORT_GUTTER - EXPORT_AVATAR_SIZE / 2).toFloat()
+        } else {
+            (EXPORT_GUTTER + EXPORT_AVATAR_SIZE / 2).toFloat()
+        }
+        drawAvatar(canvas, context, message, avatarCenterX, (top + EXPORT_AVATAR_CENTER_Y).toFloat(), avatarCache)
 
         val meta = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = GOLD; textSize = 22f; isFakeBoldText = true }
         val body = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = TEXT; textSize = BODY_TEXT_SIZE }
@@ -126,9 +165,88 @@ object ConversationImageRenderer {
         return top + height + 14
     }
 
+    /** 画圆形头像：有图裁圆，无图/加载失败画 monogram（姓名首字）。 */
+    private fun drawAvatar(
+        canvas: Canvas,
+        context: Context,
+        message: ConversationExportMessage,
+        centerX: Float,
+        centerY: Float,
+        avatarCache: MutableMap<String, Bitmap?>,
+    ) {
+        val radius = EXPORT_AVATAR_SIZE / 2f
+        // 外圈
+        canvas.drawCircle(
+            centerX, centerY, radius,
+            Paint(Paint.ANTI_ALIAS_FLAG).apply { color = AVATAR_RING; style = Paint.Style.STROKE; strokeWidth = 3f },
+        )
+        val avatar = avatarFor(context, message.avatarPath, avatarCache)
+        if (avatar != null) {
+            val path = Path().apply { addCircle(centerX, centerY, radius - 2f, Path.Direction.CW) }
+            val save = canvas.save()
+            canvas.clipPath(path)
+            val dest = RectF(centerX - radius, centerY - radius, centerX + radius, centerY + radius)
+            canvas.drawBitmap(
+                avatar,
+                Rect(0, 0, EXPORT_AVATAR_SIZE, EXPORT_AVATAR_SIZE),
+                dest,
+                Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG),
+            )
+            canvas.restoreToCount(save)
+        } else {
+            canvas.drawCircle(
+                centerX, centerY, radius,
+                Paint(Paint.ANTI_ALIAS_FLAG).apply { color = monogramColor(message.senderName) },
+            )
+            val initial = message.senderName.take(1).ifBlank { "?" }
+            val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.WHITE; textSize = 26f; isFakeBoldText = true
+            }
+            val textWidth = paint.measureText(initial)
+            val baseline = centerY - (paint.descent() + paint.ascent()) / 2
+            canvas.drawText(initial, centerX - textWidth / 2, baseline, paint)
+        }
+    }
+
+    /** 按路径解码头像并缩放裁成正方形（assets 相对路径 / file:// / 绝对路径）。 */
+    private fun avatarFor(
+        context: Context,
+        path: String,
+        cache: MutableMap<String, Bitmap?>,
+    ): Bitmap? {
+        if (path.isBlank()) return null
+        cache[path]?.let { return it }
+        val decoded = runCatching {
+            val input = when {
+                path.startsWith("file://") -> FileInputStream(File(path.removePrefix("file://")))
+                path.startsWith("/") -> FileInputStream(File(path))
+                else -> context.assets.open(path)
+            }
+            input.use { BitmapFactory.decodeStream(it) }
+        }.getOrNull()
+        val bmp = decoded?.let { raw ->
+            val side = minOf(raw.width, raw.height)
+            val srcX = (raw.width - side) / 2
+            val srcY = (raw.height - side) / 2
+            val square = Bitmap.createBitmap(raw, srcX, srcY, side, side)
+            if (square !== raw) raw.recycle()
+            Bitmap.createScaledBitmap(square, EXPORT_AVATAR_SIZE, EXPORT_AVATAR_SIZE, true)
+        }
+        cache[path] = bmp
+        return bmp
+    }
+
+    private fun monogramColor(name: String): Int {
+        val palette = intArrayOf(
+            0xFF3A5377.toInt(), 0xFF6B4F8A.toInt(), 0xFF7A5A3A.toInt(),
+            0xFF3A6B6B.toInt(), 0xFF6B3A4A.toInt(),
+        )
+        return palette[Math.floorMod(name.hashCode(), palette.size)]
+    }
+
     private fun ConversationExportMessage.splitForPage(maxHeight: Int): List<ConversationExportMessage> {
         val maxLines = ((maxHeight - MESSAGE_PADDING * 2 - META_LINE_HEIGHT - 18) / BODY_LINE_HEIGHT).coerceAtLeast(1)
-        val lines = ConversationImageLayout.wrap(content.ifBlank { "（无文本内容）" }, EXPORT_IMAGE_WIDTH_PX - INSET * 2 - MESSAGE_PADDING * 2, BODY_TEXT_SIZE)
+        val lines = ConversationImageLayout.wrap(content.ifBlank { "（无文本内容）" }, EXPORT_BUBBLE_CONTENT_WIDTH, BODY_TEXT_SIZE)
         return lines.chunked(maxLines).mapIndexed { index, part ->
             copy(
                 content = part.joinToString("\n"),
