@@ -2,6 +2,7 @@ package com.rhodesisland.terminal.affinity
 
 import androidx.room.withTransaction
 import com.rhodesisland.terminal.data.local.AppDatabase
+import com.rhodesisland.terminal.data.local.SpecialEventEntity
 import com.rhodesisland.terminal.data.local.toDomain
 import com.rhodesisland.terminal.data.model.ChatMessage
 import com.rhodesisland.terminal.data.model.ChatProviderType
@@ -29,6 +30,23 @@ class SpecialEventConversationCoordinator(
     suspend fun launch(characterId: String, threshold: Int): SpecialEventLaunchResult {
         val result = database.withTransaction {
             val event = database.affinityDao().getSpecialEvent(characterId, threshold)
+                ?: run {
+                    // 事件未落库（好感度经其他路径越过阈值 / 数据异常）时：只要当前好感度达标就自动补建，
+                    // 保证「开始」始终可进入对话，而非静默无响应（Missing）。
+                    val affinity = database.affinityDao().getAffinity(characterId)?.value ?: 0f
+                    if (affinity < threshold) return@withTransaction SpecialEventLaunchResult.Missing
+                    val script = catalog.eventFor(characterId, threshold)
+                    database.affinityDao().insertSpecialEvent(
+                        SpecialEventEntity(
+                            characterId = characterId,
+                            threshold = threshold,
+                            title = script.title,
+                            sceneKey = SpecialEventCatalog.keyOf(characterId, threshold),
+                            unlockedAt = System.currentTimeMillis(),
+                        ),
+                    )
+                    database.affinityDao().getSpecialEvent(characterId, threshold)
+                }
                 ?: return@withTransaction SpecialEventLaunchResult.Missing
             if (event.conversationId != null) {
                 return@withTransaction SpecialEventLaunchResult.Existing(event.toDomain())
