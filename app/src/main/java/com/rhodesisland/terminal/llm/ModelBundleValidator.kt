@@ -21,13 +21,18 @@ import java.io.File
  */
 object ModelBundleValidator {
 
-    /** 必需的 MNN 默认文件（config.json 未显式引用时仍要求存在）。 */
-    private val DEFAULT_REQUIRED = listOf("llm.mnn", "llm.mnn.weight", "tokenizer.txt")
+    /** 必需的 MNN 默认文件（config.json 未显式引用时仍要求存在；tokenizer 单独兜底处理）。 */
+    private val DEFAULT_REQUIRED = listOf("llm.mnn", "llm.mnn.weight")
 
-    /** 引用路径值的文件扩展（用于从 config JSON 收集引用路径）。 */
+    /** 引用路径值的文件扩展（用于从 config JSON 收集引用路径）。
+     *  含 .mtok/.tok：部分 MNN 模型的 tokenizer 文件名是 tokenizer.mtok 而非 tokenizer.txt，
+     *  不加会漏收集导致误报「缺少必需文件 tokenizer.txt」。 */
     private val REFERENCED_EXTENSIONS = listOf(
-        ".mnn", ".weight", ".bin", ".txt", ".model", ".safetensors", ".json",
+        ".mnn", ".weight", ".bin", ".txt", ".mtok", ".tok", ".model", ".safetensors", ".json",
     )
+
+    /** tokenizer 兜底候选：config 未显式引用 tokenizer 时，要求以下文件至少存在一个。 */
+    private val TOKENIZER_CANDIDATES = listOf("tokenizer.txt", "tokenizer.mtok", "tokenizer.bin")
 
     /** 已知临时/中间文件后缀（不视为完整文件）。 */
     private val PART_SUFFIX = Regex("\\.part\\d+$")
@@ -83,6 +88,30 @@ object ModelBundleValidator {
         for (rel in required) {
             validateRequiredFile(File(root, rel), rel, root, errors, warnings)
         }
+        // 3a. tokenizer 兜底：config 未显式引用 tokenizer 时，要求 tokenizer.txt / tokenizer.mtok
+        //     / tokenizer.bin 至少一个存在（不同 MNN 模型 tokenizer 文件名不同，硬卡 tokenizer.txt
+        //     会误报「缺少必需文件」）。解析出的实际 tokenizer 一并计入 requiredFiles / 指纹。
+        val tokenizerFromConfig = required.firstOrNull { isTokenizerName(it) }
+        val tokenizerPresent: String?
+        if (tokenizerFromConfig != null) {
+            // config 已引用 tokenizer：主循环已校验存在/为空。
+            tokenizerPresent = tokenizerFromConfig
+        } else {
+            val existing = TOKENIZER_CANDIDATES
+                .map { File(root, it) }
+                .firstOrNull { it.exists() }
+            when {
+                existing == null -> {
+                    errors += "缺少必需 tokenizer 文件（tokenizer.txt 或 tokenizer.mtok）"
+                    tokenizerPresent = null
+                }
+                existing.length() <= 0L -> {
+                    errors += "tokenizer 文件为空: ${existing.name}"
+                    tokenizerPresent = null
+                }
+                else -> tokenizerPresent = existing.name
+            }
+        }
         // 3b. 可选多模态文件（visual/audio）：缺失仅告警，不阻止加载纯文本模型。
         for (rel in optionalReferenced) {
             if (!File(root, rel).exists()) {
@@ -96,9 +125,12 @@ object ModelBundleValidator {
             warnings += "存在 ${parts.size} 个未合并分片（.partN）"
         }
 
-        // 5. 模型指纹：文件清单（名 + 大小 + mtime）规范化哈希。
+        // 5. 模型指纹：文件清单（名 + 大小 + mtime）规范化哈希（含实际 tokenizer，保证切换
+        //     tokenizer 文件名后健康记录失效、重新探测）。
+        val requiredFiles = required.toMutableList()
+        if (tokenizerPresent != null && tokenizerPresent !in requiredFiles) requiredFiles += tokenizerPresent
         val fingerprint = DeviceRuntimeFingerprint.computeModel(
-            (DEFAULT_REQUIRED + referenced)
+            requiredFiles
                 .filter { File(root, it).exists() }
                 .associate { it to fileIdentity(File(root, it)) },
         )
@@ -106,7 +138,7 @@ object ModelBundleValidator {
         return ModelValidationResult(
             valid = errors.isEmpty(),
             modelFingerprint = fingerprint,
-            requiredFiles = required,
+            requiredFiles = requiredFiles,
             warnings = warnings,
             errors = errors,
         )
@@ -176,4 +208,7 @@ object ModelBundleValidator {
     }
 
     private fun fileIdentity(file: File): String = "${file.length()}:${file.lastModified()}"
+
+    /** 是否为 tokenizer 文件（文件名含 tokenizer，兼容 tokenizer.txt / tokenizer.mtok / tokenizer.bin 等）。 */
+    private fun isTokenizerName(name: String): Boolean = name.lowercase().contains("tokenizer")
 }
