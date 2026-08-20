@@ -95,15 +95,19 @@ class TtsManager(
         val volume = withTimeoutOrNull(5000) { settings.ttsVolume.first() }
             ?: AppConfig.TTS_DEFAULT_VOLUME
 
-        if (!client.hasCredentials(ttsConfig)) {
-            throw Exception("请先填写火山引擎 API Key")
-        }
-
         val voiceMap = settings.getTtsVoiceMapNow()
         val speakerId = speakerIdForLanguage(characterId, language, voiceMap)
-            ?: throw Exception(
-                "请先在设置 → 角色双语音色中填写该角色的${language.label} speaker_id",
+        if (!client.hasCredentials(ttsConfig) || speakerId == null) {
+            // 未配置火山凭据 / 该角色音色 -> 回退系统引擎朗读，保证所有角色（含未配置音色的
+            // 364 位自动生成干员）都能直接出声，而非报错让用户以为不能用。
+            Log.w(
+                TAG,
+                "云端 TTS 不可用（${if (speakerId == null) "缺 ${language.label} speaker_id" else "缺 API Key"}），回退系统引擎",
             )
+            val template = settings.getTtsSystemTemplateNow()
+            systemTts.speak(cleanTtsText(text), language, template)
+            return
+        }
 
         // 清理括号内容
         val cleanText = cleanTtsText(text)

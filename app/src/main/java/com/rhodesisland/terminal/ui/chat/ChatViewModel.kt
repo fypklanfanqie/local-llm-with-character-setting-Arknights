@@ -255,8 +255,11 @@ class ChatViewModel(
                 characterRole = char.role,
                 characterImage = imageUrl,
                 watermarkName = char.watermarkName,
-                // 自定义角色也允许 TTS（朗读按钮显示），音色由角色音色映射按 characterId 选取
-                ttsEnabled = char.ttsEnabled || char.isCustom,
+                // 所有角色都显示朗读按钮：音色由「设置 → 角色双语音色」按 characterId 配置，
+                // 云端引擎未配置 speaker_id 时给出引导提示（见 TtsManager.speakCloud）；
+                // 系统引擎对所有角色可用。不再用 char.ttsEnabled 隐藏按钮（仅基础干员设置了该标记，
+                // 其余干员按钮会消失导致无法朗读）。
+                ttsEnabled = true,
                 subtitleJp = char.voiceLines?.jp ?: "",
                 subtitleCn = char.voiceLines?.cn ?: "",
             )
