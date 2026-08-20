@@ -113,7 +113,7 @@ fun GuideDialog(onDismiss: () -> Unit) {
                         StepTitle("方式四：智谱 GLM")
                         StepText("访问 open.bigmodel.cn -> 设置选「智谱 GLM」-> 填入 API Key -> 选择 GLM-5.2 / 5.1 等。")
                         StepTitle("自定义接口（硅基流动 / 月之暗面 等）")
-                        StepText("提供商选「自定义」-> 手动输入 API Base URL（如硅基流动 https://api.siliconflow.cn/v1）-> 填入 Key 与模型名，只要返回 OpenAI 格式的 /chat/completions 即可。")
+                        StepText("提供商选「自定义」-> 手动输入 API Base URL -> 填入 Key 与模型名。支持 OpenAI 兼容格式（如硅基流动 https://api.siliconflow.cn/v1，返回 /chat/completions）和 Anthropic 格式（如 https://api.anthropic.com，自动走 /v1/messages）。")
                     }
 
                     GuideSection("📱 本地大模型（离线）") {
