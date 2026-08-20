@@ -12,6 +12,8 @@ import android.graphics.RectF
 import android.text.TextPaint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlin.math.max
+import kotlin.math.min
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileInputStream
@@ -27,6 +29,8 @@ object ConversationImageRenderer {
     private const val TEXT = 0xFFF1EEE7.toInt()
     private const val MUTED = 0xFFA9B3C2.toInt()
     private const val AVATAR_RING = 0xFF3A5377.toInt()
+    /** 聊天背景上的暗色遮罩（60% 黑），保证文字/气泡可读。 */
+    private const val BACKGROUND_SCRIM = 0x99000000
     private const val HEADER_HEIGHT = 180
     private const val MESSAGE_PADDING = EXPORT_BUBBLE_PADDING
     private const val BODY_TEXT_SIZE = 30f
@@ -94,6 +98,8 @@ object ConversationImageRenderer {
         try {
             val canvas = Canvas(bitmap)
             canvas.drawColor(BACKGROUND)
+            // 用户自定义聊天背景（若有）：满幅铺底 + 暗色遮罩，文字保持可读。
+            drawBackground(canvas, context, document.backgroundPath, height)
             drawHeader(canvas, document, pageNumber, pageCount)
             // 头像按路径去重解码（1:1 会话只有角色+博士两张，群聊每成员一张）。
             val avatarCache = HashMap<String, Bitmap?>()
@@ -124,6 +130,50 @@ object ConversationImageRenderer {
             EXPORT_GUTTER.toFloat(), 156f, (EXPORT_IMAGE_WIDTH_PX - EXPORT_GUTTER).toFloat(), 160f,
             Paint().apply { color = GOLD },
         )
+    }
+
+    /**
+     * 画聊天背景（用户自定义/内置 assets）：scale-crop 铺满整页 + 暗色遮罩保证文字可读。
+     * 背景为空或加载失败时保持纯色底（调用方已先 drawColor(BACKGROUND)），绝不抛错。
+     */
+    private fun drawBackground(canvas: Canvas, context: Context, backgroundPath: String, height: Int) {
+        if (backgroundPath.isBlank()) return
+        val bmp = loadBackground(context, backgroundPath) ?: return
+        val pageW = EXPORT_IMAGE_WIDTH_PX
+        // ContentScale.Crop：按最大缩放比铺满页面，从原图中心裁出与页面同宽高比的区域。
+        val scale = max(pageW / bmp.width.toFloat(), height / bmp.height.toFloat())
+        val cropW = (pageW / scale).toInt().coerceIn(1, bmp.width)
+        val cropH = (height / scale).toInt().coerceIn(1, bmp.height)
+        val srcX = (bmp.width - cropW) / 2
+        val srcY = (bmp.height - cropH) / 2
+        canvas.drawBitmap(
+            bmp,
+            Rect(srcX, srcY, srcX + cropW, srcY + cropH),
+            Rect(0, 0, pageW, height),
+            Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG),
+        )
+        // 暗色遮罩：让金色/白色文字与气泡在图片上也清晰。
+        canvas.drawColor(BACKGROUND_SCRIM)
+        bmp.recycle()
+    }
+
+    /** 解码头像：先读尺寸用 inSampleSize 降采样（避免超高分辨率背景 OOM），再真正解码。 */
+    private fun loadBackground(context: Context, path: String): Bitmap? = runCatching {
+        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        openInput(path, context)?.use { BitmapFactory.decodeStream(it, null, options) }
+        if (options.outWidth <= 0 || options.outHeight <= 0) return@runCatching null
+        val sample = max(
+            1,
+            min(options.outWidth / (EXPORT_IMAGE_WIDTH_PX * 2), options.outHeight / (EXPORT_PAGE_HEIGHT_PX * 2)),
+        )
+        val decodeOptions = BitmapFactory.Options().apply { inSampleSize = sample }
+        openInput(path, context)?.use { BitmapFactory.decodeStream(it, null, decodeOptions) }
+    }.getOrNull()
+
+    private fun openInput(path: String, context: Context): java.io.InputStream? = when {
+        path.startsWith("file://") -> runCatching { FileInputStream(File(path.removePrefix("file://"))) }.getOrNull()
+        path.startsWith("/") -> runCatching { FileInputStream(File(path)) }.getOrNull()
+        else -> runCatching { context.assets.open(path) }.getOrNull()
     }
 
     private fun drawMessage(

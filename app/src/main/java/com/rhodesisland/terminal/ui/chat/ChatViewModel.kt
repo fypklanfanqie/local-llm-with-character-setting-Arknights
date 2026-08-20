@@ -393,11 +393,12 @@ class ChatViewModel(
 
     fun prepareConversationExport(
         conversationId: Long,
+        backgroundPath: String = "",
         onReady: (ConversationExportDocument) -> Unit,
         onError: (String) -> Unit,
     ) {
         viewModelScope.launch {
-            runCatching { container.conversationExportService.prepare(conversationId) }
+            runCatching { container.conversationExportService.prepare(conversationId, backgroundPath) }
                 .onSuccess(onReady)
                 .onFailure { onError(it.message ?: "无法准备对话导出") }
         }

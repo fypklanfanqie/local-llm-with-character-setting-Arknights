@@ -18,7 +18,7 @@ class ConversationExportService(
     private val settings: SettingsRepository,
 ) {
 
-    suspend fun prepare(conversationId: Long): ConversationExportDocument {
+    suspend fun prepare(conversationId: Long, backgroundPath: String = ""): ConversationExportDocument {
         val conversation = conversations.getById(conversationId)
             ?: throw ConversationExportException("该会话已不存在")
         val messages = chats.getAllHistoryForExport(conversation.id)
@@ -33,6 +33,8 @@ class ConversationExportService(
             createdAt = conversation.createdAt,
             exportedAt = System.currentTimeMillis(),
             messages = messages.map { message -> message.toExportMessage(conversation, userAvatarPath) },
+            // 聊天背景（由调用方传入当前轮播到的背景路径；http(s) 网络直链离线不可加载，留空回退纯色底）。
+            backgroundPath = backgroundPath.takeIf { !it.startsWith("http://") && !it.startsWith("https://") }.orEmpty(),
         )
     }
 

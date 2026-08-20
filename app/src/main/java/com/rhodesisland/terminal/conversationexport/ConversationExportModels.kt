@@ -18,6 +18,8 @@ data class ConversationExportDocument(
     val createdAt: Long,
     val exportedAt: Long,
     val messages: List<ConversationExportMessage>,
+    /** 聊天背景源（自定义=绝对路径，内置=assets 路径；空=无背景用纯色底）。 */
+    val backgroundPath: String = "",
 )
 
 data class ConversationExportMessage(

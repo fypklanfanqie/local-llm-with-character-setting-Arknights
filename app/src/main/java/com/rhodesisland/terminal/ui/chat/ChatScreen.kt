@@ -580,6 +580,8 @@ fun ChatScreen(
                     exportBusy = true
                     viewModel.prepareConversationExport(
                         conversationId,
+                        // 导出包含当前正在轮播显示的聊天背景（自定义图片或内置 assets）。
+                        backgroundPath = bgUrls.getOrNull(bgIndex) ?: bgUrls.firstOrNull().orEmpty(),
                         onReady = { document ->
                             pendingConversationExport = document
                             exportBusy = false
