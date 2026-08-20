@@ -157,6 +157,11 @@ class DownloadManager(private val context: Context) {
         Log.i(TAG, "MNN 模型 ${model.id}: ${files.size} 个文件 -> ${dir.absolutePath}")
 
         updateState(model.id, DownloadState.Downloading(0L, total))
+        // 重试/续传时：把已有部分文件字节计入初始进度，避免进度清零让用户误以为重新下载。
+        val existingBytes = dir.listFiles()?.filter { it.isFile }?.sumOf { it.length() } ?: 0L
+        if (existingBytes > 0L) {
+            updateState(model.id, DownloadState.Downloading(existingBytes.coerceAtMost(total), total))
+        }
         var aggregate = 0L
         for (file in files) {
             if (pauseFlags[model.id] == true || !currentCoroutineContext().isActive) return
@@ -221,8 +226,12 @@ class DownloadManager(private val context: Context) {
             val supportRange = response.code == 206
             val currentStart = if (supportRange) startBytes else 0L
             if (!supportRange && target.exists()) target.delete()
+            // 期望字节数：本次响应应写入的字节（206=剩余部分；200=全文）。用于检测服务器提前
+            // 断连导致的文件截断（OkHttp source.read() 返回 -1 会误判为完成）。
+            val expectedBytes = response.header("Content-Length")?.toLongOrNull()
 
             val raf = RandomAccessFile(target, "rw")
+            var writtenBytes = 0L
             try {
                 raf.seek(currentStart)
                 val source = body.byteStream()
@@ -240,6 +249,7 @@ class DownloadManager(private val context: Context) {
                     if (read <= 0) break
                     raf.write(buffer, 0, read)
                     currentBytes += read
+                    writtenBytes += read
                     val now = System.currentTimeMillis()
                     if (now - lastReport > 200) {
                         updateState(modelId, DownloadState.Downloading(aggregateBefore + currentBytes, total))
@@ -248,6 +258,11 @@ class DownloadManager(private val context: Context) {
                 }
             } finally {
                 raf.close()
+            }
+            // 服务器提前断连：实际写入 < Content-Length -> 文件截断。抛错让上层（重试/切镜像）
+            // 续传该文件，而不是把残缺文件当完整 -> 末尾大小校验失败 -> 引导用户删除重下。
+            if (expectedBytes != null && writtenBytes < expectedBytes) {
+                throw Exception("下载不完整：${target.name} 截断（${writtenBytes} / ${expectedBytes} 字节）")
             }
         } finally {
             response.close()
