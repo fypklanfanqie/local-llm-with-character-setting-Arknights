@@ -825,7 +825,7 @@ private fun ChatTopBar(
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        // 第一行：返回 + 头像/角色名 + 会话记录（角色信息占满剩余空间）。
+        // 第一行：返回 + 头像/角色名（角色信息占满剩余空间）。
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -877,20 +877,13 @@ private fun ChatTopBar(
                     )
                 }
             }
-            // 会话记录
-            IconBubble(
-                icon = Icons.AutoMirrored.Outlined.Chat,
-                contentDescription = "会话记录",
-                badge = conversationCount.takeIf { it > 0 },
-                onClick = onOpenConversations,
-            )
         }
 
-        // 第二行：云端/本地 + 深度思考 + 视频 + 中英文切换。独占整行、窄屏可横向滑动，
-        // 保证最右侧语言按钮（中/日）始终可见，不再被同行头像/分段挤到屏外。
+        // 第二行：云端/本地 + 深度思考 + 视频 + 会话记录 + 中英文切换。
+        // 整组横向居中（竖屏下居中对齐）；内容超宽时横向滑动兜底。
         Row(
             modifier = Modifier
-                .fillMaxWidth()
+                .align(Alignment.CenterHorizontally)
                 .horizontalScroll(rememberScrollState()),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -929,6 +922,13 @@ private fun ChatTopBar(
                         else -> onToggleVideoAuto()
                     }
                 },
+            )
+            // 会话记录（与语言切换同排，紧邻）。
+            IconBubble(
+                icon = Icons.AutoMirrored.Outlined.Chat,
+                contentDescription = "会话记录",
+                badge = conversationCount.takeIf { it > 0 },
+                onClick = onOpenConversations,
             )
             LangBubble(
                 lang = ttsLanguage,
