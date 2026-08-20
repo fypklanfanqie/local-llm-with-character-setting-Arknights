@@ -189,8 +189,23 @@ class DirectLlmClient(
         return renderAccumulated(reasoningBuf, contentBuf, contentStarted)
     }
 
-    private fun buildEndpoint(baseUrl: String): String =
-        baseUrl.trimEnd('/') + "/chat/completions"
+    /**
+     * 构建 OpenAI 兼容 chat/completions 端点。
+     *
+     * 自定义模型提供商（中转站/网关）常把「Base URL」直接填成完整 chat/completions 端点
+     * （与 Seedance 中转站「可填完整地址或只填主机」一致）。此时若再无条件追加
+     * /chat/completions 会拼成 .../chat/completions/chat/completions 导致 404。
+     * 因此：已含该后缀则原样使用；否则按 OpenAI 约定追加。先 trim 空白，
+     * 避免粘贴带入空格/换行生成非法 URL。
+     */
+    private fun buildEndpoint(baseUrl: String): String {
+        val base = baseUrl.trim().trimEnd('/')
+        return if (base.endsWith("/chat/completions", ignoreCase = true)) {
+            base
+        } else {
+            "$base/chat/completions"
+        }
+    }
 
     private fun buildBody(
         model: String,
@@ -212,7 +227,7 @@ class DirectLlmClient(
             })
             put("stream", stream)
             // 深度思考：对支持开关的供应商注入 enable_thinking（开=请求思考，关=显式停止）
-            if (supportsThinkingToggle(baseUrl, model)) {
+            if (supportsThinkingToggle(model)) {
                 put("enable_thinking", deepThinking)
             }
             // 结构化输出：仅显式请求 JSON 模式时注入（白名单判定已在调用侧完成，见 supportsJsonObjectResponse）
@@ -268,13 +283,13 @@ class DirectLlmClient(
         return if (contentStarted) "<think>$reasoning</think>$content" else "<think>$reasoning"
     }
 
-    /** 是否支持 enable_thinking 参数（仅 Qwen 系：dashscope / 硅基 / qwen3 / qwq）。
-     *  DeepSeek/GLM/OpenAI/自定义端点不注入，避免未知参数导致 400。 */
-    private fun supportsThinkingToggle(baseUrl: String, model: String): Boolean {
-        val b = baseUrl.lowercase()
+    /** 是否支持 enable_thinking 参数（Qwen3 / QwQ 系模型才支持思考开关）。
+     *  按模型能力判断、不按 baseUrl：baseUrl 命中 dashscope/siliconflow 但模型是 Qwen2.5 等
+     *  不支持思考开关的模型时（如免费对话的 Qwen/Qwen2.5-7B-Instruct、自定义硅基端点），
+     *  inject enable_thinking 会被上游拒收（400）。DeepSeek/GLM/OpenAI/其余自定义端点不注入。 */
+    private fun supportsThinkingToggle(model: String): Boolean {
         val m = model.lowercase()
-        return b.contains("dashscope") || b.contains("siliconflow") ||
-            m.contains("qwen3") || m.contains("qwq")
+        return m.contains("qwen3") || m.contains("qwq")
     }
 
     /** 是否支持 response_format=json_object（结构化输出）。
