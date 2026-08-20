@@ -11,8 +11,8 @@ const val EXPORT_AVATAR_SIZE = 56
 const val EXPORT_AVATAR_GAP = 12
 /** 气泡内边距（左右各）。 */
 const val EXPORT_BUBBLE_PADDING = 20
-/** 气泡占宽（角色/用户对称）：右缘 3/4 宽 - 左 gutter - 头像 - 间距。 */
-const val EXPORT_BUBBLE_WIDTH = EXPORT_IMAGE_WIDTH_PX * 3 / 4 - EXPORT_GUTTER - EXPORT_AVATAR_SIZE - EXPORT_AVATAR_GAP
+/** 气泡占宽（角色/用户对称）：右缘 2/3 宽 - 左 gutter - 头像 - 间距，整体更居中。 */
+const val EXPORT_BUBBLE_WIDTH = EXPORT_IMAGE_WIDTH_PX * 2 / 3 - EXPORT_GUTTER - EXPORT_AVATAR_SIZE - EXPORT_AVATAR_GAP
 /** 气泡内文本换行宽度。 */
 const val EXPORT_BUBBLE_CONTENT_WIDTH = EXPORT_BUBBLE_WIDTH - EXPORT_BUBBLE_PADDING * 2
 /** 气泡头像（圆形）垂直中心相对消息顶部的偏移：对齐元信息行。 */

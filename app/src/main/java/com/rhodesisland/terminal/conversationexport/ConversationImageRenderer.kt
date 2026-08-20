@@ -34,13 +34,13 @@ object ConversationImageRenderer {
     private const val META_LINE_HEIGHT = 32
     private const val ATTACHMENT_LINE_HEIGHT = 38
 
-    // ===== 气泡几何（与 ConversationImageLayout 共享常量，保持换行/高度一致）=====
-    /** 角色气泡：左缘 = gutter + 头像 + 间距；右缘 = 3/4 宽。 */
+    // ===== 气泡几何（与 ConversationImageLayout 共享常量，严格以中轴镜像、居中）=====
+    /** 角色气泡：左缘 = gutter + 头像 + 间距；宽 = EXPORT_BUBBLE_WIDTH。 */
     private val charBubbleLeft = EXPORT_GUTTER + EXPORT_AVATAR_SIZE + EXPORT_AVATAR_GAP
-    private val charBubbleRight = EXPORT_IMAGE_WIDTH_PX * 3 / 4
-    /** 用户气泡：左缘 = 1/4 宽；右缘 = 宽 - gutter - 头像 - 间距。 */
-    private val userBubbleLeft = EXPORT_IMAGE_WIDTH_PX / 4
+    private val charBubbleRight = charBubbleLeft + EXPORT_BUBBLE_WIDTH
+    /** 用户气泡：右缘 = 宽 - gutter - 头像 - 间距；宽 = EXPORT_BUBBLE_WIDTH（与角色气泡镜像对称）。 */
     private val userBubbleRight = EXPORT_IMAGE_WIDTH_PX - EXPORT_GUTTER - EXPORT_AVATAR_SIZE - EXPORT_AVATAR_GAP
+    private val userBubbleLeft = userBubbleRight - EXPORT_BUBBLE_WIDTH
 
     suspend fun render(plan: ImageRenderPlan, context: Context): List<ByteArray> = withContext(Dispatchers.Default) {
         when (plan.mode) {
@@ -113,10 +113,17 @@ object ConversationImageRenderer {
     private fun drawHeader(canvas: Canvas, document: ConversationExportDocument, pageNumber: Int, pageCount: Int) {
         val title = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = GOLD; textSize = 42f; isFakeBoldText = true }
         val subtitle = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = MUTED; textSize = 24f }
-        canvas.drawText("罗德岛通讯记录", EXPORT_GUTTER.toFloat(), 62f, title)
-        canvas.drawText("${document.ownerName} · ${document.title}", EXPORT_GUTTER.toFloat(), 102f, subtitle)
-        canvas.drawText("第 $pageNumber / $pageCount 页", EXPORT_GUTTER.toFloat(), 138f, subtitle)
-        canvas.drawRect(EXPORT_GUTTER.toFloat(), 156f, (EXPORT_IMAGE_WIDTH_PX - EXPORT_GUTTER).toFloat(), 160f, Paint().apply { color = GOLD })
+        // 头部整体居中：标题/副标题/页码按各自宽度水平居中，金线横贯居中区。
+        canvas.drawText("罗德岛通讯记录", (EXPORT_IMAGE_WIDTH_PX - title.measureText("罗德岛通讯记录")) / 2f, 62f, title)
+        val subtitleText = "${document.ownerName} · ${document.title}"
+        canvas.drawText(subtitleText, (EXPORT_IMAGE_WIDTH_PX - subtitle.measureText(subtitleText)) / 2f, 102f, subtitle)
+        val pageText = "第 $pageNumber / $pageCount 页"
+        canvas.drawText(pageText, (EXPORT_IMAGE_WIDTH_PX - subtitle.measureText(pageText)) / 2f, 138f, subtitle)
+        // 分隔线：从 gutter 到右侧 gutter（本身关于中轴对称），顶部间距保持与标题节奏一致。
+        canvas.drawRect(
+            EXPORT_GUTTER.toFloat(), 156f, (EXPORT_IMAGE_WIDTH_PX - EXPORT_GUTTER).toFloat(), 160f,
+            Paint().apply { color = GOLD },
+        )
     }
 
     private fun drawMessage(
