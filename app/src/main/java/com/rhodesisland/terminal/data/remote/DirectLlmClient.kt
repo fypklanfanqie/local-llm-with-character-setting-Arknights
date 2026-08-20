@@ -216,7 +216,8 @@ class DirectLlmClient(
         responseFormatJson: Boolean = false,
     ): String {
         val obj = buildJsonObject {
-            put("model", model)
+            // trim：粘贴带入的首尾空白会让模型名不匹配被上游拒 400。
+            put("model", model.trim())
             put("messages", buildJsonArray {
                 messages.forEach { m ->
                     add(buildJsonObject {
@@ -226,8 +227,9 @@ class DirectLlmClient(
                 }
             })
             put("stream", stream)
-            // 深度思考：对支持开关的供应商注入 enable_thinking（开=请求思考，关=显式停止）
-            if (supportsThinkingToggle(model)) {
+            // 深度思考：对支持开关的已知 Qwen/SiliconFlow 端点注入 enable_thinking（开=请求思考，
+            // 关=显式停止）。自定义端点/中转站一律不注入，避免未知参数被上游拒收 400。
+            if (supportsThinkingToggle(baseUrl, model)) {
                 put("enable_thinking", deepThinking)
             }
             // 结构化输出：仅显式请求 JSON 模式时注入（白名单判定已在调用侧完成，见 supportsJsonObjectResponse）
@@ -242,7 +244,8 @@ class DirectLlmClient(
         val reqBody = body.toRequestBody(jsonMediaType)
         return Request.Builder()
             .url(endpoint)
-            .header("Authorization", "Bearer $apiKey")
+            // trim：粘贴带入的首尾空白会让 Bearer 头不合法被上游拒收（401/400）。
+            .header("Authorization", "Bearer ${apiKey.trim()}")
             .header("Content-Type", "application/json")
             .apply { if (accept != null) header("Accept", accept) }
             .post(reqBody)
@@ -283,30 +286,29 @@ class DirectLlmClient(
         return if (contentStarted) "<think>$reasoning</think>$content" else "<think>$reasoning"
     }
 
-    /** 是否支持 enable_thinking 参数（Qwen3 / QwQ 系模型才支持思考开关）。
-     *  按模型能力判断、不按 baseUrl：baseUrl 命中 dashscope/siliconflow 但模型是 Qwen2.5 等
-     *  不支持思考开关的模型时（如免费对话的 Qwen/Qwen2.5-7B-Instruct、自定义硅基端点），
-     *  inject enable_thinking 会被上游拒收（400）。DeepSeek/GLM/OpenAI/其余自定义端点不注入。 */
-    private fun supportsThinkingToggle(model: String): Boolean {
+    /** 是否支持 enable_thinking 参数（Qwen3 / QwQ 系模型 + 已知 Qwen 系端点）。
+     *  必须**同时**满足：baseUrl 命中已知 Qwen/SiliconFlow 端点，且模型支持思考开关。
+     *  自定义端点/中转站即使模型名含 qwen3/qwq 也不注入——中转站可能不认识该参数，
+     *  inject 会被上游拒收（400）。Qwen2.5 等不支持思考开关的模型也不注入
+     *  （如免费对话的 Qwen/Qwen2.5-7B-Instruct）。DeepSeek/GLM/OpenAI/其余自定义端点不注入。 */
+    private fun supportsThinkingToggle(baseUrl: String, model: String): Boolean {
+        val b = baseUrl.lowercase()
         val m = model.lowercase()
-        return m.contains("qwen3") || m.contains("qwq")
+        val knownQwenEndpoint = b.contains("dashscope") || b.contains("siliconflow")
+        return knownQwenEndpoint && (m.contains("qwen3") || m.contains("qwq"))
     }
 
     /** 是否支持 response_format=json_object（结构化输出）。
-     *  仅白名单供应商：OpenAI（api.openai.com / gpt-*）、DeepSeek（baseUrl 或模型含 deepseek）、
-     *  Qwen（dashscope / siliconflow / qwen 系模型）。其余端点保守不注入，避免未知参数 400；
+     *  仅对**已知端点**注入：OpenAI（api.openai.com）、DeepSeek（域名含 deepseek）、
+     *  Qwen/SiliconFlow（dashscope / siliconflow）。**不再按模型名前缀（gpt / deepseek / qwen）
+     *  判断**——自定义端点/中转站即使代理这些模型也不注入，未知参数可能被上游拒收 400；
      *  生成器对返回内容仍严格解析，不依赖本白名单兜底。 */
     private fun supportsJsonObjectResponse(baseUrl: String, model: String): Boolean {
         val b = baseUrl.lowercase()
-        val m = model.lowercase()
         return b.contains("api.openai.com") ||
             b.contains("deepseek") ||
             b.contains("dashscope") ||
-            b.contains("siliconflow") ||
-            m.startsWith("gpt-") ||
-            m.startsWith("deepseek-") ||
-            m.startsWith("qwen") ||
-            m.startsWith("qwq")
+            b.contains("siliconflow")
     }
 
     /** 解析非流式 JSON 完整回复；若实为 SSE 文本则退化为逐行解析。 */
@@ -343,6 +345,10 @@ class DirectLlmClient(
         } catch (e: Exception) {
             null
         }
-        return if (msg.isNullOrBlank()) "HTTP $code" else "HTTP $code: $msg"
+        if (!msg.isNullOrBlank()) return "HTTP $code: $msg"
+        // JSON 解析失败（HTML/纯文本错误页，常见于中转站/网关）：附上响应体片段便于定位
+        // 自定义提供商 400 的真实原因（如 model not found / unknown parameter）。
+        val snippet = raw.trim().replace('\r', ' ').replace('\n', ' ').take(160)
+        return if (snippet.isNotBlank()) "HTTP $code: $snippet" else "HTTP $code"
     }
 }

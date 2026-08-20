@@ -37,6 +37,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import coil.compose.AsyncImage
 import com.rhodesisland.terminal.AppContainer
+import com.rhodesisland.terminal.data.remote.ChatMessageDto
+import kotlinx.serialization.json.JsonPrimitive
 import com.rhodesisland.terminal.util.BackgroundSurvivalHelper
 import com.rhodesisland.terminal.data.model.ApiConfig
 import com.rhodesisland.terminal.data.model.TtsConfig
@@ -122,6 +124,11 @@ fun SettingsScreen(
     LaunchedEffect(apiSaved) {
         if (apiSaved) { delay(2000); apiSaved = false }
     }
+
+    // 测试连接：用当前编辑框里的 baseUrl/model/key 发一条最短请求，当场看通不通
+    // （自定义提供商 400/404/401 的根因——未知参数注入、模型名/Key 带空白等——直接暴露）。
+    var probeRunning by remember { mutableStateOf(false) }
+    var probeResult by remember { mutableStateOf<String?>(null) }
 
     var ttsApiKey by remember(ttsConfig) { mutableStateOf(ttsConfig.apiKey) }
     var showTtsKey by remember { mutableStateOf(false) }
@@ -231,6 +238,42 @@ fun SettingsScreen(
                     PasswordField("API KEY", "通过云端代理（无需密钥）", true, {}, {})
                 } else {
                     PasswordField("API KEY", apiKey, showApiKey, { apiKey = it }, { showApiKey = !showApiKey })
+                }
+                // 测试连接：用当前输入实时验证（未保存也测）。自定义提供商 400/404/401 当场可见原因。
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    TextButton(
+                        onClick = {
+                            scope.launch {
+                                probeRunning = true
+                                probeResult = null
+                                val baseUrl = if (isCustom) customBaseUrl else selectedProvider?.baseUrl ?: customBaseUrl
+                                val model = if (isCustom) customModel else selectedModel?.id ?: customModel
+                                val key = if (isFreeProvider) "" else apiKey
+                                probeResult = runCatching {
+                                    container.directLlmClient.chatOnce(
+                                        baseUrl = baseUrl,
+                                        apiKey = key,
+                                        model = model,
+                                        messages = listOf(ChatMessageDto("user", JsonPrimitive("你好，请回复「测试通过」")))
+                                    ).take(60).let { "连接成功：$it" }
+                                }.onFailure {
+                                    // 上游 400/401/404 的真实 message 已在异常文案里（HTTP {code}: {msg}）。
+                                    android.util.Log.w("SettingsScreen", "LLM 测试连接失败", it)
+                                }.exceptionOrNull()?.message?.let { "连接失败：$it" }
+                                probeRunning = false
+                            }
+                        },
+                        enabled = !probeRunning,
+                    ) { Text(if (probeRunning) "测试中…" else "测试连接", fontSize = 12.sp) }
+                    probeResult?.let {
+                        Text(
+                            it,
+                            color = if (it.startsWith("连接成功")) scheme.tertiary else scheme.error,
+                            fontSize = 10.sp,
+                            lineHeight = 13.sp,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                 }
             }
         }
