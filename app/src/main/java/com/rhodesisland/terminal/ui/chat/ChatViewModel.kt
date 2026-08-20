@@ -1221,9 +1221,11 @@ class ChatViewModel(
         if (apiConfig.apiKey.isBlank()) {
             throw Exception("日语翻译需要配置云端对话 API Key")
         }
-        // 直连对话商：用翻译 prompt 调一次非流式 chat，不经代理
+        // 直连对话商：用翻译 prompt 调一次非流式 chat，不经代理。
+        // 明确「博士」= 明日方舟对玩家的称呼，一律译为「ドクター」，避免翻译模型偶尔译成
+        // はかせ（学者义）或保留中文，保证日语朗读读音稳定。
         val messages = listOf(
-            ChatMessageDto("system", JsonPrimitive("你是专业翻译。将下面的中文翻译成自然日文，仅输出译文，不要解释或加引号。")),
+            ChatMessageDto("system", JsonPrimitive("你是专业翻译。将下面的中文翻译成自然日文，仅输出译文，不要解释或加引号。其中「博士」（角色对玩家的称呼）一律译为「ドクター」。")),
             ChatMessageDto("user", JsonPrimitive(text)),
         )
         val translated = container.directLlmClient.chatOnce(
