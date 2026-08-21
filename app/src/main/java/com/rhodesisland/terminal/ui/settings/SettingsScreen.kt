@@ -147,6 +147,8 @@ fun SettingsScreen(
     // 朗读引擎（系统自带 / 云端）与系统声音模板。
     val ttsEngine by container.settingsRepository.ttsEngine.collectAsState(initial = TtsEngine.DEFAULT)
     val ttsTemplate by container.settingsRepository.ttsSystemTemplate.collectAsState(initial = SystemVoiceTemplate.DEFAULT_TEMPLATE)
+    /** 自动朗读完整角色回复（默认关闭）。 */
+    val ttsAutoRead by container.settingsRepository.ttsAutoRead.collectAsState(initial = false)
     var ttsEngineEdit by remember(ttsEngine) { mutableStateOf(ttsEngine) }
     var ttsTemplateEdit by remember(ttsTemplate) { mutableStateOf(ttsTemplate) }
     var ttsSaved by remember { mutableStateOf(false) }
@@ -399,6 +401,24 @@ fun SettingsScreen(
                     selected = ttsEngineEdit,
                     onSelect = { ttsEngineEdit = it },
                 )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("自动朗读角色回复", color = scheme.onSurface, fontSize = 13.sp)
+                        Text(
+                            "角色完整回复生成后自动使用当前朗读引擎播放；手动停止的部分回复不朗读。",
+                            color = scheme.onSurfaceVariant, fontSize = 10.sp,
+                        )
+                    }
+                    Switch(
+                        checked = ttsAutoRead,
+                        onCheckedChange = { enabled ->
+                            scope.launch { container.settingsRepository.setTtsAutoRead(enabled) }
+                        },
+                    )
+                }
                 if (ttsEngineEdit == TtsEngine.SYSTEM) {
                     FieldLabel("声音模板")
                     SeedanceDropdown(

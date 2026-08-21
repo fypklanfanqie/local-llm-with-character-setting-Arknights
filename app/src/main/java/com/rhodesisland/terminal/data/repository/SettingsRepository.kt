@@ -43,6 +43,8 @@ class SettingsRepository(private val store: SettingsStore) {
     val ttsEngine: Flow<TtsEngine> = store.ttsEngine
     /** 系统引擎声音模板。 */
     val ttsSystemTemplate: Flow<SystemVoiceTemplate> = store.ttsSystemTemplate
+    /** 自动朗读角色每次完整回复（默认关闭）。 */
+    val ttsAutoRead: Flow<Boolean> = store.ttsAutoRead
     val activeCharacter: Flow<String> = store.activeCharacter
     val customCharacters: Flow<List<Character>> = store.customCharacters
     val volume: Flow<Int> = store.volume
@@ -123,6 +125,7 @@ class SettingsRepository(private val store: SettingsStore) {
     suspend fun setTtsVoiceMap(map: Map<String, VoicePair>) = store.setTtsVoiceMap(map)
     suspend fun setTtsEngine(engine: TtsEngine) = store.setTtsEngine(engine)
     suspend fun setTtsSystemTemplate(template: SystemVoiceTemplate) = store.setTtsSystemTemplate(template)
+    suspend fun setTtsAutoRead(enabled: Boolean) = store.setTtsAutoRead(enabled)
     suspend fun setActiveCharacter(id: String) = store.setActiveCharacter(id)
     val activeConversations: Flow<Map<String, Long>> = store.activeConversations
     suspend fun setActiveConversation(characterId: String, conversationId: Long) =
@@ -222,6 +225,10 @@ class SettingsRepository(private val store: SettingsStore) {
     suspend fun getTtsSystemTemplateNow(): SystemVoiceTemplate = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
         ttsSystemTemplate.first()
     } ?: SystemVoiceTemplate.DEFAULT_TEMPLATE
+
+    suspend fun getTtsAutoReadNow(): Boolean = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
+        ttsAutoRead.first()
+    } ?: false
 
     suspend fun getTtsVoiceMapNow(): Map<String, VoicePair> = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
         ttsVoiceMap.first()

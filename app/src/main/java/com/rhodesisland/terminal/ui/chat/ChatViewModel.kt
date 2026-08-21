@@ -992,6 +992,58 @@ class ChatViewModel(
                 activeGenerationId = null,
             )
         }
+        // 自动朗读只针对完整回复：用户主动停止的部分文本不突然播放，避免打断感和不完整语义。
+        if (completionState == MessageCompletionState.COMPLETE &&
+            container.settingsRepository.getTtsAutoReadNow()
+        ) {
+            autoReadAssistantResponse(displayResponse, charId, assistantRowId)
+        }
+    }
+
+    /**
+     * 自动朗读一条完整角色回复。与手动朗读一致：云端日语先翻译、随后按当前 TTS 引擎播放；
+     * 当前已有播放时以最新回复为准，停止旧播放以避免多段声音叠加。
+     * 自动模式的配置/音色问题只写日志，不弹出错误横幅干扰正常聊天。
+     */
+    private fun autoReadAssistantResponse(text: String, characterId: String, messageId: Long) {
+        val cleanText = container.ttsManager.cleanTtsText(text)
+        if (cleanText.isBlank()) return
+        ttsJob?.cancel()
+        container.ttsManager.stopAll()
+        ttsJob = viewModelScope.launch {
+            val messageIndex = _uiState.value.messages.indexOfFirst { it.id == "msg-$messageId" }
+            try {
+                _uiState.update { it.copy(ttsLoadingIndex = messageIndex, showSwitchSubtitle = false) }
+                val language = container.settingsRepository.getTtsLanguageNow()
+                val engine = container.settingsRepository.getTtsEngineNow()
+                val speakText = if (language == TtsLanguage.JA && engine == TtsEngine.CLOUD) {
+                    translateToJapanese(cleanText)
+                } else {
+                    cleanText
+                }
+                _uiState.update {
+                    it.copy(
+                        ttsPlayingIndex = messageIndex,
+                        ttsSubtitleCn = cleanText,
+                        ttsSubtitleJp = if (language == TtsLanguage.JA) speakText else "",
+                    )
+                }
+                container.ttsManager.speak(speakText, characterId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "自动朗读失败: ${e.message}", e)
+            } finally {
+                _uiState.update {
+                    it.copy(
+                        ttsLoadingIndex = -1,
+                        ttsPlayingIndex = -1,
+                        ttsSubtitleJp = "",
+                        ttsSubtitleCn = "",
+                    )
+                }
+            }
+        }
     }
 
     /**

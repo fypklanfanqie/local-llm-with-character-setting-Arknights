@@ -67,6 +67,8 @@ class SettingsStore(
         val TTS_VOICE_MAP = stringPreferencesKey("tts_voice_map")  // JSON: Map<characterId, VoicePair>
         val TTS_ENGINE = stringPreferencesKey("tts_engine")        // system（默认，手机自带）/ cloud（火山豆包）
         val TTS_SYSTEM_TEMPLATE = stringPreferencesKey("tts_system_template")  // 系统引擎声音模板
+        /** 自动朗读角色完整回复（默认关闭，避免首次升级后突然播放声音）。 */
+        val TTS_AUTO_READ = booleanPreferencesKey("tts_auto_read")
 
         // 角色
         val ACTIVE_CHARACTER = stringPreferencesKey("active_character")
@@ -310,6 +312,13 @@ class SettingsStore(
 
     suspend fun setTtsSystemTemplate(template: SystemVoiceTemplate) {
         dataStore.edit { it[Keys.TTS_SYSTEM_TEMPLATE] = template.storageKey }
+    }
+
+    /** 自动朗读角色每次完整回复（默认关闭）。 */
+    val ttsAutoRead: Flow<Boolean> = dataStore.data.map { p -> p[Keys.TTS_AUTO_READ] ?: false }
+
+    suspend fun setTtsAutoRead(enabled: Boolean) {
+        dataStore.edit { it[Keys.TTS_AUTO_READ] = enabled }
     }
 
     val ttsVolume: Flow<Int> = dataStore.data.map { p ->
