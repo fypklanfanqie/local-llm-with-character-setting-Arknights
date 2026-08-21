@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Android 11 及以下 (API <=30) fullBackupContent 兼容规则，语义与 data_extraction_rules.xml 一致：
+    - 排除 datastore/ 明文 API Key；
+    - 包含 Room 聊天数据库。
+    注意：fullBackupContent 的 exclude 优先于 include；domain="file" 对应 filesDir，
+    Room 默认位于 internal database 目录故 domain="database"。
+-->
+<full-backup-content>
+    <exclude domain="file" path="datastore/" />
+    <include domain="database" path="." />
+</full-backup-content>

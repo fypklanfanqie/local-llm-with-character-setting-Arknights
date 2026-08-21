@@ -66,12 +66,7 @@ object MnnSupportDetector {
         return locked == "1" || vbs == "green" || vbs == "red"
     }
 
-    /** 反射读 `android.os.SystemProperties.get`（@hide），失败返回 ""。 */
-    private fun readSystemProp(name: String): String = try {
-        val cls = Class.forName("android.os.SystemProperties")
-        val get = cls.getMethod("get", String::class.java)
-        get.invoke(null, name) as? String ?: ""
-    } catch (e: Throwable) {
-        ""
-    }
+    /** 反射读 `android.os.SystemProperties.get`（@hide），失败返回 ""。复用 RomDetector 公共实现。 */
+    private fun readSystemProp(name: String): String =
+        com.rhodesisland.terminal.util.RomDetector.readSystemProp(name) ?: ""
 }

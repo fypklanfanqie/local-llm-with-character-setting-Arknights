@@ -40,14 +40,38 @@ class MainActivity : ComponentActivity() {
      *  防止 Application 单例长期持有旧 Activity 的 Window（配置变更重建时的内存泄漏）。 */
     private var sustainedModeSetter: ((Boolean) -> Unit)? = null
 
+    /**
+     * 字体缩放钳制：系统字体放大超过 1.3 倍时截断到 1.3。
+     * 聊天气泡/玻璃面板布局按默认字号设计，1.5x+ 的无障碍超大字会挤压溢出；
+     * 1.3 以内保留可读性提升。Android 14 的 per-app 字体设置同样经过此处（其值 >1.3 时被钳制）。
+     */
+    override fun attachBaseContext(newBase: android.content.Context) {
+        val config = android.content.res.Configuration(newBase.resources.configuration)
+        if (config.fontScale > FONT_SCALE_MAX) {
+            config.fontScale = FONT_SCALE_MAX
+        }
+        super.attachBaseContext(newBase.createConfigurationContext(config))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // 刘海屏：SHORT_EDGES 允许内容延伸进刘海区（配合各屏 insets 自理，横屏视频页
+        // EncounterScreen 用 safeDrawing padding 保证控件不顶进传感器区）。
+        // 默认 default 模式在部分厂商 ROM 横屏时会留黑边或裁切，显式声明行为一致。
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            runCatching {
+                window.attributes = window.attributes.apply {
+                    layoutInDisplayCutoutMode =
+                        android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                }
+            }
+        }
 
         val app = application as RhodesApp
 
         // PRTS 深色主题：本应用固定深色科幻风，忽略系统/设置的主题模式（themeMode 设置保留但不再生效）。
         val initialDarkTheme = true
-
         // 沉浸式全屏：内容延伸到状态栏 / 导航栏背后，系统栏透明化。
         // 初始样式根据当前主题偏好设定；后续 setContent 中 ChatTheme 的 SideEffect 会继续同步。
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -164,6 +188,11 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         handleGreetingIntent(intent, application as RhodesApp)
         handleGroupIntent(intent)
+    }
+
+    companion object {
+        /** attachBaseContext 字体缩放钳制上限。 */
+        private const val FONT_SCALE_MAX = 1.3f
     }
 
     /**

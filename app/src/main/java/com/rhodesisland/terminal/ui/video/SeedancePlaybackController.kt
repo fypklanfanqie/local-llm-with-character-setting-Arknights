@@ -71,6 +71,9 @@ class SeedancePlaybackController(
 
     private var bgmWasPlaying = false
 
+    /** API 26+ 的音频焦点请求句柄（acquire 时创建，release 时归还）。 */
+    private var focusRequest: android.media.AudioFocusRequest? = null
+
     private val focusListener = AudioManager.OnAudioFocusChangeListener { change ->
         when (change) {
             AudioManager.AUDIOFOCUS_LOSS,
@@ -166,15 +169,38 @@ class SeedancePlaybackController(
             bgm.pause()
         }
         onAcquireAudio()
-        systemAudio.requestAudioFocus(
-            focusListener,
-            AudioManager.STREAM_MUSIC,
-            AudioManager.AUDIOFOCUS_GAIN,
-        )
+        // API 26+ 用 AudioFocusRequest（三参 requestAudioFocus 已弃用）；<26 仍走弃用重载。
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            val req = android.media.AudioFocusRequest.Builder(
+                AudioManager.AUDIOFOCUS_GAIN,
+            )
+                .setAudioAttributes(
+                    android.media.AudioAttributes.Builder()
+                        .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MOVIE)
+                        .build(),
+                )
+                .build()
+            focusRequest = req
+            systemAudio.requestAudioFocus(req)
+        } else {
+            @Suppress("DEPRECATION")
+            systemAudio.requestAudioFocus(
+                focusListener,
+                AudioManager.STREAM_MUSIC,
+                AudioManager.AUDIOFOCUS_GAIN,
+            )
+        }
     }
 
     private fun releaseAudio() {
-        systemAudio.abandonAudioFocus(focusListener)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            focusRequest?.let { systemAudio.abandonAudioFocusRequest(it) }
+            focusRequest = null
+        } else {
+            @Suppress("DEPRECATION")
+            systemAudio.abandonAudioFocus(focusListener)
+        }
         if (bgmWasPlaying) {
             bgmWasPlaying = false
             bgm?.resume()

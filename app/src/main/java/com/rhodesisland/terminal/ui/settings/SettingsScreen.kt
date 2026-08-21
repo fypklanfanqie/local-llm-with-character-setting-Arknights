@@ -40,6 +40,7 @@ import com.rhodesisland.terminal.AppContainer
 import com.rhodesisland.terminal.data.remote.ChatMessageDto
 import kotlinx.serialization.json.JsonPrimitive
 import com.rhodesisland.terminal.util.BackgroundSurvivalHelper
+import com.rhodesisland.terminal.util.RomDetector
 import com.rhodesisland.terminal.data.model.ApiConfig
 import com.rhodesisland.terminal.data.model.TtsConfig
 import com.rhodesisland.terminal.data.model.TtsLanguage
@@ -1120,7 +1121,8 @@ private fun GreetingSection(container: AppContainer, scope: CoroutineScope) {
                         steps = AppConfig.Greeting.MAX_DAILY_COUNT - AppConfig.Greeting.MIN_DAILY_COUNT - 1,
                     )
                     Text(
-                        "部分国产 ROM 需手动允许后台运行 / 自启动，否则可能收不到主动消息：",
+                        "部分国产 ROM 需手动允许后台运行 / 自启动，否则可能收不到主动消息：" +
+                            "当前系统 ${RomDetector.detect().type.displayName}",
                         color = scheme.onSurfaceVariant, fontSize = 10.sp,
                     )
                     // 电池优化白名单：未允许时可能被省电冻结，点「去允许」跳系统电池设置
@@ -1158,6 +1160,26 @@ private fun GreetingSection(container: AppContainer, scope: CoroutineScope) {
                                 modifier = Modifier.weight(1f),
                             )
                             TextButton(onClick = { runCatching { context.startActivity(autostartIntent) } }) {
+                                Text("去设置", color = scheme.primary, fontSize = 12.sp)
+                            }
+                        }
+                    }
+                    // 后台弹出界面（仅小米系）：MIUI/HyperOS 独立开关，未开启时通知点按无法跳转会话
+                    val popupIntent = remember { BackgroundSurvivalHelper.backgroundPopupIntent(context) }
+                    if (popupIntent != null) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("🪟", fontSize = 14.sp)
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "后台弹出界面（影响点通知跳转）",
+                                color = scheme.onSurface,
+                                fontSize = 11.sp,
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(onClick = { runCatching { context.startActivity(popupIntent) } }) {
                                 Text("去设置", color = scheme.primary, fontSize = 12.sp)
                             }
                         }
@@ -1350,7 +1372,8 @@ private fun GroupChatSection(container: AppContainer, scope: CoroutineScope) {
                         steps = AppConfig.GroupChat.MAX_DAILY_ROUNDS - AppConfig.GroupChat.MIN_DAILY_ROUNDS - 1,
                     )
                     Text(
-                        "部分国产 ROM 需手动允许后台运行 / 自启动，否则收不到自动聊天提醒（同「角色问候」）。",
+                        "部分国产 ROM 需手动允许后台运行 / 自启动，否则收不到自动聊天提醒" +
+                            "（同「角色问候」，当前系统 ${RomDetector.detect().type.displayName}）。",
                         color = scheme.onSurfaceVariant, fontSize = 10.sp,
                     )
                 }

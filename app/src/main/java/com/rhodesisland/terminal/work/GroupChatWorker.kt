@@ -55,16 +55,28 @@ class GroupChatWorker(
         private const val WAKE_LOCK_TAG = "rhodes:groupchat"
         private const val WAKE_LOCK_TIMEOUT_MS = 120_000L
 
+        /**
+         * 群聊生成前台化信息：低优先级 ongoing 通知 + 前台类型。
+         * API 35+ 用 specialUse（Android 15 起 dataSync 有 6h/24h 超时，生成时长不可控）；
+         * API 34 用 dataSync；<34 无类型概念两参构造。
+         */
         fun buildGroupForegroundInfo(context: Context): ForegroundInfo {
             val notification = GroupChatNotificationManager.buildProgressNotification(context)
-            return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                ForegroundInfo(
-                    GroupChatNotificationManager.PROGRESS_NOTIFICATION_ID,
-                    notification,
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
-                )
-            } else {
-                ForegroundInfo(GroupChatNotificationManager.PROGRESS_NOTIFICATION_ID, notification)
+            return when {
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM ->
+                    ForegroundInfo(
+                        GroupChatNotificationManager.PROGRESS_NOTIFICATION_ID,
+                        notification,
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
+                    )
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE ->
+                    ForegroundInfo(
+                        GroupChatNotificationManager.PROGRESS_NOTIFICATION_ID,
+                        notification,
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
+                    )
+                else ->
+                    ForegroundInfo(GroupChatNotificationManager.PROGRESS_NOTIFICATION_ID, notification)
             }
         }
 

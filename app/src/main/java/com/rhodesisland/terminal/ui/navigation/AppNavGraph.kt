@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.layout.LayoutModifier
 import androidx.compose.ui.layout.MeasureResult
 import androidx.compose.ui.layout.Measurable
@@ -297,7 +299,9 @@ fun AppNavGraph(container: AppContainer, initialChatOpen: Boolean = false) {
                 }
             }
             composable(BottomTab.Characters.route) {
-                Box(tabBottomPadding) { CharactersScreen(
+                // 宽屏适配：内容列限宽 640dp 居中（Box 默认 TopCenter），手机宽度下无效果；
+                // 通讯 Tab（feed/chat/群聊/邂逅）刻意全出血沉浸设计，不加限宽。
+                Box(tabBottomPadding) { Box(Modifier.widthIn(max = 640.dp)) { CharactersScreen(
                     container = container,
                     onNavigateToChat = {
                         // 切到聊天 Tab（保底栏状态）
@@ -314,7 +318,7 @@ fun AppNavGraph(container: AppContainer, initialChatOpen: Boolean = false) {
                     },
                     onOpenCheckinShop = { navController.navigate(CHECKIN_SHOP_ROUTE) },
                     onOpenAffinity = { characterId -> navController.navigate(affinityRoute(characterId)) },
-                ) }
+                ) } }
             }
             composable(CHECKIN_SHOP_ROUTE) {
                 // 独立目的地：不包在角色页或底栏内容容器中，避免浮在角色网格上。
@@ -374,27 +378,31 @@ fun AppNavGraph(container: AppContainer, initialChatOpen: Boolean = false) {
                 }
             }
             composable(BottomTab.Music.route) {
-                Box(tabBottomPadding) { MusicScreen(container = container) }
+                Box(tabBottomPadding) { Box(Modifier.widthIn(max = 640.dp)) { MusicScreen(container = container) } }
             }
             composable(BottomTab.Models.route) {
-                Box(tabBottomPadding) { ModelManagerScreen(container = container) }
+                Box(tabBottomPadding) { Box(Modifier.widthIn(max = 640.dp)) { ModelManagerScreen(container = container) } }
             }
             composable(BottomTab.Settings.route) {
                 Box(tabBottomPadding) {
-                    SettingsScreen(
-                        container = container,
-                        onNavigateToBackendSettings = {
-                            navController.navigate("backend_settings") { launchSingleTop = true }
-                        },
-                    )
+                    Box(Modifier.widthIn(max = 640.dp)) {
+                        SettingsScreen(
+                            container = container,
+                            onNavigateToBackendSettings = {
+                                navController.navigate("backend_settings") { launchSingleTop = true }
+                            },
+                        )
+                    }
                 }
             }
             composable("backend_settings") {
                 Box(tabBottomPadding) {
-                    BackendSettingsScreen(
-                        container = container,
-                        onBack = { navController.popBackStack() },
-                    )
+                    Box(Modifier.widthIn(max = 640.dp)) {
+                        BackendSettingsScreen(
+                            container = container,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
                 }
             }
         }

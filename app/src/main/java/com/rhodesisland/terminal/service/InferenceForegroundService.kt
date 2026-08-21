@@ -40,13 +40,23 @@ class InferenceForegroundService : Service() {
         return START_NOT_STICKY
     }
 
-    /** startForeground 须在 onStartCommand 第一步；API 34+ 用 3 参重载显式传 type。 */
+    /**
+     * startForeground 须在 onStartCommand 第一步。前台类型按 API 分支：
+     * - API 35+（targetSdk 35）：`specialUse`——Android 15 起 dataSync 有 6h/24h 超时上限，
+     *   本地推理时长不可控会撞线；specialUse 无时限（manifest 已声明 subtype property）。
+     * - API 34：`dataSync`——specialUse 类型常量虽在 API 34 引入，但 targetSdk 34 下 dataSync
+     *   无超时限制，且 WorkManager/系统对 dataSync 校验路径更成熟。
+     * - <34：两参重载（无类型概念）。
+     */
     private fun startForegroundCompat(id: Int, notification: Notification) {
         runCatching {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                startForeground(id, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-            } else {
-                startForeground(id, notification)
+            when {
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM ->
+                    startForeground(id, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE ->
+                    startForeground(id, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+                else ->
+                    startForeground(id, notification)
             }
         }.onFailure {
             Log.w(TAG, "startForeground failed: ${it.message}; stopSelf")

@@ -17,7 +17,8 @@ if (redirectBuildDir.parentFile?.exists() == true) {
 
 android {
     namespace = "com.rhodesisland.terminal"
-    compileSdk = 34
+    // compileSdk 35：Android 15 API（FOREGROUND_SERVICE_TYPE_SPECIAL_USE 等）。需 AGP >= 8.6.1。
+    compileSdk = 35
     // 与 local.properties 的 ndk.dir(D:\android-ndk-r27c)对齐，版本 27.2.12479018。
     // 否则 AGP 报 [CXX1104]：ndk.dir 版本与 android.ndkVersion 默认值(26.x)不一致。
     ndkVersion = "27.2.12479018"
@@ -30,9 +31,11 @@ android {
     defaultConfig {
         applicationId = "com.rhodesisland.terminal"
         minSdk = 24
-        targetSdk = 34
-        versionCode = 5
-        versionName = "2.5.1"
+        // targetSdk 35（Android 15）：强制 edge-to-edge（本项目已自处理 insets，天然合规）；
+        // dataSync FGS 引入 6h/24h 超时 -> 推理前台服务已迁移 specialUse 类型（见 InferenceForegroundService）。
+        targetSdk = 35
+        versionCode = 6
+        versionName = "2.6.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }

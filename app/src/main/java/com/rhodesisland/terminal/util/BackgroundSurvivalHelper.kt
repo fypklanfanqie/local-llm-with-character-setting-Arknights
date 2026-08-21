@@ -64,6 +64,9 @@ object BackgroundSurvivalHelper {
     /**
      * 按厂商返回「自启动 / 后台管理」设置 Activity intent；本机不可达返回 null。
      * 每个候选用 `resolveActivity` 探测，首个可达者返回（并加 `FLAG_ACTIVITY_NEW_TASK`）。无匹配厂商返回 null。
+     *
+     * 注意魅族：`com.meizu.safe.security.SHOW_APPSEC` 是 **action** 而非类名，须用
+     * [actionIntent] 构造并 setPackage 限定接收方（见各厂商适配文章），否则 resolveActivity 恒 null。
      */
     fun manufacturerAutostartIntent(context: Context): Intent? {
         val mfr = (Build.MANUFACTURER ?: "").lowercase()
@@ -76,14 +79,20 @@ object BackgroundSurvivalHelper {
                 add(component("com.miui.securitycenter",
                     "com.miui.permcenter.permissions.PermissionsEditorActivity"))
             }
-            // OPPO / realme / ColorOS
-            if (mfr.contains("oppo") || brand.contains("oppo") || brand.contains("realme")) {
+            // OPPO / realme / OnePlus / ColorOS
+            if (mfr.contains("oppo") || brand.contains("oppo") || brand.contains("realme")
+                || mfr.contains("oneplus") || brand.contains("oneplus")) {
                 add(component("com.coloros.safecenter",
                     "com.coloros.safecenter.permission.startup.StartupAppListActivity"))
                 add(component("com.coloros.safecenter",
                     "com.coloros.safecenter.startupapp.StartupAppListActivity"))
                 add(component("com.oppo.safe",
                     "com.oppo.safe.permission.startup.StartupAppListActivity"))
+                // ColorOS 新版（13+）自启动管理迁移到手机管家主进程
+                add(component("com.oplus.battery",
+                    "com.oplus.battery.StartUpManagerActivity"))
+                add(component("com.heytap.market",
+                    "com.heytap.cdo.usercenter.startup.StartupAppListActivity"))
             }
             // vivo / iQOO / OriginOS
             if (mfr.contains("vivo") || brand.contains("vivo") || brand.contains("iqoo")) {
@@ -91,11 +100,16 @@ object BackgroundSurvivalHelper {
                     "com.vivo.permissionmanager.activity.BgStartUpManagerActivity"))
                 add(component("com.iqoo.secure",
                     "com.iqoo.secure.ui.phoneoptimize.AddWhiteListActivity"))
+                // OriginOS 新版：i管家换包名
+                add(component("com.vivo.permissionmanager",
+                    "com.vivo.permissionmanager.activity.PurviewTabActivity"))
             }
             // HONOR / MagicOS（老 Honor 走 huawei.systemmanager，新 Honor 走 hihonor）
             if (mfr.contains("honor") || brand.contains("honor")) {
                 add(component("com.hihonor.systemmanager",
                     "com.hihonor.systemmanager.optimize.process.ProtectActivity"))
+                add(component("com.hihonor.systemmanager",
+                    "com.hihonor.systemmanager.startupmgr.ui.StartupNormalAppListActivity"))
                 add(component("com.huawei.systemmanager",
                     "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity"))
             } else if (mfr.contains("huawei") || brand.contains("huawei")) {
@@ -105,16 +119,48 @@ object BackgroundSurvivalHelper {
                 add(component("com.huawei.systemmanager",
                     "com.huawei.systemmanager.optimize.process.ProtectActivity"))
             }
-            // Meizu / Flyme
+            // Meizu / Flyme：SHOW_APPSEC 是 action 不是类名，setPackage 限定安全中心
             if (mfr.contains("meizu") || brand.contains("meizu")) {
-                add(component("com.meizu.safe", "com.meizu.safe.security.SHOW_APPSEC"))
+                add(Intent("com.meizu.safe.security.SHOW_APPSEC").apply {
+                    setPackage("com.meizu.safe")
+                    putExtra("packageName", context.packageName)
+                })
             }
-            // Samsung / OneUI
+            // Samsung / OneUI：「自动运行应用程序」开关（OneUI 5+ 位于电池→背景使用限制）
             if (mfr.contains("samsung") || brand.contains("samsung")) {
                 add(component("com.samsung.android.lool",
+                    "com.samsung.android.sm.battery.ui.BatteryActivity"))
+                add(component("com.samsung.android.lool",
                     "com.samsung.android.sm.ui.battery.BatteryActivity"))
+                add(component("com.samsung.android.lox",
+                    "com.samsung.android.sm.battery.ui.BatteryActivity"))
             }
         }
+        return candidates.firstOrNull { it.resolveActivity(context.packageManager) != null }
+            ?.apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+    }
+
+    /**
+     * 「后台弹出界面」权限引导（仅小米系）：MIUI 把「从后台启动 Activity」做成独立开关，
+     * 未开启时通知点按无法跳转会话。仅小米/红米返回非 null（其他 ROM 无此项）。
+     */
+    fun backgroundPopupIntent(context: Context): Intent? {
+        val mfr = (Build.MANUFACTURER ?: "").lowercase()
+        val brand = (Build.BRAND ?: "").lowercase()
+        if (!mfr.contains("xiaomi") && !brand.contains("xiaomi") && !brand.contains("redmi")) {
+            return null
+        }
+        val candidates = listOf(
+            // 权限编辑页（含后台弹出界面开关）
+            Intent("miui.intent.action.APP_PERM_EDITOR").apply {
+                setClassName("com.miui.securitycenter",
+                    "com.miui.permcenter.permissions.AppPermissionsEditorActivity")
+                putExtra("extra_pkgname", context.packageName)
+            },
+            // 新版 HyperOS：应用详情-权限页
+            component("com.miui.securitycenter",
+                "com.miui.appmanager.ApplicationsDetailsActivity"),
+        )
         return candidates.firstOrNull { it.resolveActivity(context.packageManager) != null }
             ?.apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
     }

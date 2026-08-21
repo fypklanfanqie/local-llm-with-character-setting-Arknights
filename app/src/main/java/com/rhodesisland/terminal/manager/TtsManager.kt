@@ -46,6 +46,9 @@ class TtsManager(
     /** 系统引擎（懒初始化，见 SystemTtsEngine）。 */
     private val systemTts = SystemTtsEngine(context)
 
+    /** 云端 TTS（MediaPlayer 路径）的音频焦点：播放前申请、结束/停止归还。系统 TextToSpeech 引擎自带焦点管理无需处理。 */
+    private val ttsFocus = AudioFocusHelper(context)
+
     /** 串行化 speak，避免并发调用互相打断导致状态错乱/资源泄漏 */
     private val mutex = Mutex()
 
@@ -129,6 +132,7 @@ class TtsManager(
         val player = MediaPlayer()
         mediaPlayer = player
         currentFile = file
+        ttsFocus.request()
 
         val vol = (volume / 100f).coerceIn(0f, 1f)
 
@@ -137,6 +141,7 @@ class TtsManager(
         player.setOnCompletionListener { mp ->
             isPlaying = false
             mediaPlayer = null
+            ttsFocus.abandon()
             try { mp.release() } catch (e: Exception) {}
             file.delete()
         }
@@ -144,6 +149,7 @@ class TtsManager(
             Log.e(TAG, "MediaPlayer error: what=$what extra=$extra")
             isPlaying = false
             mediaPlayer = null
+            ttsFocus.abandon()
             try { mp.release() } catch (e: Exception) {}
             file.delete()
             true
@@ -162,6 +168,7 @@ class TtsManager(
         }
         mediaPlayer = null
         isPlaying = false
+        ttsFocus.abandon()
         // 中途停止时 onCompletion 不会触发，主动删除临时文件避免泄漏
         currentFile?.let { runCatching { it.delete() } }
         currentFile = null

@@ -12,21 +12,20 @@
     <!-- 性能监控浮窗（仅本地聊天界面显示，需「显示在其他应用上层」权限） -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
-    <!-- 读取媒体文件（Android 13+ 细分权限） -->
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
-
-    <!-- Android 12 及以下兼容 -->
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
-        android:maxSdkVersion="32" />
+    <!-- 媒体读取权限已移除：图片/音频导入全走 Photo Picker (PickVisualMedia) 与 SAF
+         (OpenDocument/CreateDocument)，无需存储类运行时权限（兼容 minSdk 24）。 -->
 
     <!-- 角色问候：主动消息通知（Android 13+ 需运行时申请 POST_NOTIFICATIONS）-->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
-    <!-- 本地推理保活：前台服务（生成期间常驻通知栏，防国产 ROM 杀进程）+ WakeLock -->
+    <!-- 本地推理保活：前台服务（生成期间常驻通知栏，防国产 ROM 杀进程）+ WakeLock。
+         specialUse：Android 15 (targetSdk 35) 起 dataSync 类型有 6h/24h 硬上限，长推理会触发
+         ServiceForegroundTimeoutException；specialUse 无时限，subtype 说明见 service 的 property。
+         dataSync 保留给 API 34 运行时三参 startForeground 使用。 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <!-- 后台保活引导：电池白名单 / 精确闹钟（问候兜底）/ 开机重排闹钟 -->
@@ -45,6 +44,8 @@
     <application
         android:name=".RhodesApp"
         android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
         android:extractNativeLibs="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
@@ -53,7 +54,11 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.RhodesIslandTerminal"
         android:usesCleartextTraffic="true"
-        tools:targetApi="31">
+        tools:targetApi="35">
+        <!-- 全局明文流量（usesCleartextTraffic=true）：为用户自填的局域网端点
+             （Ollama / llama.cpp 等 http:// 服务）兜底。所有内置端点均为 https
+             （ModelProviders/Seedance/PRTS/网易云）。network_security_config 无法表达
+             「任意局域网 IP 放行」，收窄会直接破坏自建端点功能，故保留全局明文并在此说明。 -->
 
         <!-- OpenCL 探测（Task 10）：声明可选 vendor OpenCL 库；探测进程动态加载，缺库不崩溃。 -->
         <uses-native-library
@@ -78,17 +83,28 @@
             android:process=":mnn_probe"
             android:exported="false" />
 
-        <!-- 本地推理保活前台服务（生成期间常驻通知栏 + WakeLock，防国产 ROM 杀进程） -->
+        <!-- 本地推理保活前台服务（生成期间常驻通知栏 + WakeLock，防国产 ROM 杀进程）。
+             specialUse：Android 15 起 dataSync 有 6h/24h 超时上限，本地 LLM 推理时长不可控，
+             迁移 specialUse（无时限）；subtype 说明供 Play 审核与系统诊断。 -->
         <service
             android:name=".service.InferenceForegroundService"
-            android:foregroundServiceType="dataSync"
-            android:exported="false" />
+            android:foregroundServiceType="dataSync|specialUse"
+            android:exported="false">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="on-device LLM real-time inference, user-initiated chat generation, duration unbounded" />
+        </service>
 
-        <!-- WorkManager 前台 Worker（GreetingWorker 生成问候时 setForeground 用），与自定义服务共存需 merge -->
+        <!-- WorkManager 前台 Worker（GreetingWorker/GroupChatWorker 生成问候时 setForeground 用），
+             与自定义服务共存需 merge。specialUse 同上：问候/群聊生成时长不可控，规避 dataSync 超时。 -->
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"
-            android:foregroundServiceType="dataSync"
-            tools:node="merge" />
+            android:foregroundServiceType="dataSync|specialUse"
+            tools:node="merge">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="background character greeting / group chat message generation, user-configured, duration unbounded" />
+        </service>
 
         <!-- 问候精确闹钟兜底：WorkManager 周期工作被国产 ROM 冻结时，闹钟到点触发一次问候 Worker -->
         <receiver

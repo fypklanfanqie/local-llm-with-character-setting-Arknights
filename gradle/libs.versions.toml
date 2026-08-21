@@ -1,5 +1,6 @@
 [versions]
-agp = "8.5.0"
+# AGP 8.6.1：首个官方支持 compileSdk 35 的稳定版（8.5 最高 34）；Gradle 要求 >=8.7，wrapper 现为 8.7 无需变更。
+agp = "8.6.1"
 kotlin = "2.0.0"
 coreKtx = "1.13.1"
 lifecycle = "2.8.2"

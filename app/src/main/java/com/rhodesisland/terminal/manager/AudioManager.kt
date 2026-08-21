@@ -44,10 +44,14 @@ class AudioManager(
     // ===== 角色语音 =====
     private var voicePlayer: MediaPlayer? = null
 
+    /** 语音播放的音频焦点助手：播放前申请瞬时焦点（可 duck），结束/出错归还，防与其他 App 叠音。 */
+    private val voiceFocus = AudioFocusHelper(context)
+
     suspend fun playVoice(url: String, volume: Int = 60) {
         if (url.isBlank()) return
 
         stopVoice()
+        voiceFocus.request()
 
         val player = MediaPlayer()
         voicePlayer = player
@@ -82,11 +86,13 @@ class AudioManager(
             player.setOnCompletionListener { mp ->
                 try { mp.release() } catch (e: Exception) {}
                 voicePlayer = null
+                voiceFocus.abandon()
             }
             player.setOnErrorListener { mp, _, _ ->
                 Log.w(TAG, "Voice play failed: $url")
                 try { mp.release() } catch (e: Exception) {}
                 voicePlayer = null
+                voiceFocus.abandon()
                 true
             }
             // 异步准备：网络 URL 时 prepare() 会阻塞主线程导致 ANR，改用 prepareAsync
@@ -100,6 +106,7 @@ class AudioManager(
     }
 
     fun stopVoice() {
+        voiceFocus.abandon()
         voicePlayer?.let {
             // stop() 在 IDLE/ERROR 等状态会抛 IllegalStateException，单独 try 以保证 release() 一定执行
             try { it.stop() } catch (e: Exception) {}
@@ -152,6 +159,16 @@ class AudioManager(
             bgmPlayer = ExoPlayer.Builder(context)
                 .setMediaSourceFactory(mediaSourceFactory)
                 .build()
+            // 音频焦点交给 Media3 内置管理：其他 App（音乐/视频/导航）请求焦点时自动 duck/暂停，
+            // 焦点归还后恢复；handleAudioBecomingNoisy：拔耳机/断蓝牙时自动暂停（外放突兀）。
+            bgmPlayer?.setAudioAttributes(
+                androidx.media3.common.AudioAttributes.Builder()
+                    .setUsage(androidx.media3.common.C.USAGE_MEDIA)
+                    .setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_MUSIC)
+                    .build(),
+                /* handleAudioFocus = */ true,
+            )
+            bgmPlayer?.setHandleAudioBecomingNoisy(true)
             // 列表循环用 REPEAT_MODE_OFF（播完触发 STATE_ENDED 后手动切下一首）；
             // 单曲循环用 REPEAT_MODE_ONE（ExoPlayer 自身循环，不会进入 STATE_ENDED）
             bgmPlayer?.repeatMode = if (repeatMode == REPEAT_ONE) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF

@@ -57,17 +57,28 @@ class GreetingWorker(
         /** 设置写入（配额/上次角色/目标时间）超时（ms），防止 DataStore 阻塞拖垮 Worker。 */
         private const val WRITE_TIMEOUT_MS = 5_000L
 
-        /** 问候生成前台化信息：低优先级 ongoing 通知 + dataSync 类型（Android 14）。 */
+        /**
+         * 问候生成前台化信息：低优先级 ongoing 通知 + 前台类型。
+         * API 35+ 用 specialUse（Android 15 起 dataSync 有 6h/24h 超时，生成时长不可控）；
+         * API 34 用 dataSync；<34 无类型概念两参构造。
+         */
         fun buildGreetingForegroundInfo(context: Context): ForegroundInfo {
             val notification = GreetingNotificationManager.buildProgressNotification(context)
-            return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                ForegroundInfo(
-                    GreetingNotificationManager.PROGRESS_NOTIFICATION_ID,
-                    notification,
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
-                )
-            } else {
-                ForegroundInfo(GreetingNotificationManager.PROGRESS_NOTIFICATION_ID, notification)
+            return when {
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM ->
+                    ForegroundInfo(
+                        GreetingNotificationManager.PROGRESS_NOTIFICATION_ID,
+                        notification,
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
+                    )
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE ->
+                    ForegroundInfo(
+                        GreetingNotificationManager.PROGRESS_NOTIFICATION_ID,
+                        notification,
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
+                    )
+                else ->
+                    ForegroundInfo(GreetingNotificationManager.PROGRESS_NOTIFICATION_ID, notification)
             }
         }
 
