@@ -65,7 +65,7 @@ class TtsManager(
         if (text.isBlank()) throw Exception("没有可朗读的文本")
         if (playing) stopAll()
         val language = settings.getTtsLanguageNow()
-        systemTts.speak(cleanTtsText(text), language, template)
+        systemTts.speak(cleanTtsTextForLanguage(text, language), language, template)
     }
 
     /**
@@ -82,7 +82,7 @@ class TtsManager(
         when (engine) {
             TtsEngine.SYSTEM -> {
                 val template = settings.getTtsSystemTemplateNow()
-                val cleanText = cleanTtsText(text)
+                val cleanText = cleanTtsTextForLanguage(text, language)
                 systemTts.speak(cleanText, language, template)
             }
             TtsEngine.CLOUD -> speakCloud(text, characterId, language)
@@ -105,12 +105,12 @@ class TtsManager(
                 "云端 TTS 不可用（${if (speakerId == null) "缺 ${language.label} speaker_id" else "缺 API Key"}），回退系统引擎",
             )
             val template = settings.getTtsSystemTemplateNow()
-            systemTts.speak(cleanTtsText(text), language, template)
+            systemTts.speak(cleanTtsTextForLanguage(text, language), language, template)
             return
         }
 
-        // 清理括号内容
-        val cleanText = cleanTtsText(text)
+        // 清理括号内容 + 按目标语言规范称呼（中文不把ドクター交给中文音色朗读）。
+        val cleanText = cleanTtsTextForLanguage(text, language)
 
         val audioBytes = client.synthesize(cleanText, characterId, ttsConfig, speakerId)
 
@@ -201,5 +201,23 @@ class TtsManager(
             .replace(Regex("[（(][^）)]*[）)]"), "")
             .replace(Regex("\\s+"), " ")
             .trim()
+    }
+
+    /**
+     * 按目标朗读语言规范化术语。
+     *
+     * 日语翻译会将罗德岛玩家称呼「博士」正确译成「ドクター」。但若用户切回中文朗读，
+     * 中文 TTS 直接读日文片假名会发出日语读音，体验不一致；故中文模式统一还原为「博士」。
+     * 日语模式原样保留，确保仍按明日方舟日服正确称呼读作「ドクター」。
+     */
+    fun cleanTtsTextForLanguage(text: String, language: TtsLanguage): String {
+        val cleaned = cleanTtsText(text)
+        return if (language == TtsLanguage.ZH) {
+            cleaned
+                .replace("ドクター", "博士")
+                .replace("ドクタ－", "博士") // 全角长音符的常见输入变体
+        } else {
+            cleaned
+        }
     }
 }
