@@ -12,7 +12,11 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
-private val Context.healthDataStore by preferencesDataStore(name = "health_store")
+// corruptionHandler：损坏重置为空（见 DataStoreCorruption.kt），健康记录丢失可由探测重建，绝不崩。
+private val Context.healthDataStore by preferencesDataStore(
+    name = "health_store",
+    corruptionHandler = com.rhodesisland.terminal.data.local.tolerantCorruptionHandler,
+)
 
 /** 后端健康状态（Task 9）。 */
 enum class HealthState { UNKNOWN, PROBE_OK, MODEL_OK, COOLDOWN, CRASH_BLACKLISTED }

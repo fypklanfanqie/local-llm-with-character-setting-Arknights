@@ -34,7 +34,12 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
-private val Context.settingsDataStore by preferencesDataStore(name = "rhodes_settings")
+// corruptionHandler：文件损坏（国产 ROM 强杀进程写中断）时重置为空偏好，绝不抛异常——
+// 启动路径读取损坏文件曾直接闪退（见 DataStoreCorruption.kt 说明）。
+private val Context.settingsDataStore by preferencesDataStore(
+    name = "rhodes_settings",
+    corruptionHandler = tolerantCorruptionHandler,
+)
 
 /**
  * 设置存储（DataStore）

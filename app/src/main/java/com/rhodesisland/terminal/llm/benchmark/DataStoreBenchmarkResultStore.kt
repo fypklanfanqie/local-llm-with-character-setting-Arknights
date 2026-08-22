@@ -10,8 +10,11 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
-/** 基准结果专用 DataStore（文件 benchmark_store.preferences_pb）。 */
-private val Context.benchmarkResultStore by preferencesDataStore(name = "benchmark_store")
+/** 基准结果专用 DataStore（文件 benchmark_store.preferences_pb）。corruptionHandler：损坏重置为空（见 DataStoreCorruption.kt）。 */
+private val Context.benchmarkResultStore by preferencesDataStore(
+    name = "benchmark_store",
+    corruptionHandler = com.rhodesisland.terminal.data.local.tolerantCorruptionHandler,
+)
 
 /**
  * DataStore + JSON 基准结果持久化（Task 5 Step 4）。

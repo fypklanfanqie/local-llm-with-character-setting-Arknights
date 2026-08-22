@@ -14,7 +14,11 @@ import kotlinx.serialization.json.Json
 import java.security.MessageDigest
 import com.chatbyyourside.llm.backend.MnnBridge
 
-private val Context.certificationDataStore by preferencesDataStore(name = "certification_store")
+// corruptionHandler：损坏重置为空（见 DataStoreCorruption.kt），认证丢失可重新基准，绝不崩。
+private val Context.certificationDataStore by preferencesDataStore(
+    name = "certification_store",
+    corruptionHandler = com.rhodesisland.terminal.data.local.tolerantCorruptionHandler,
+)
 
 /**
  * 已认证推理选项（Task 6）。
