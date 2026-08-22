@@ -88,9 +88,8 @@ object CrashCapture {
         appendLine("进程: ${processName()}")
     }
 
-    private fun processName(): String = runCatching {
-        Process.myProcessName() ?: "unknown"
-    }.getOrDefault("unknown")
+    private fun processName(): String =
+        ProcessName.current() ?: "unknown"
 
     private fun timestamp(): String =
         SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(Date())

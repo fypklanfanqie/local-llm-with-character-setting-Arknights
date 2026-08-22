@@ -13,6 +13,7 @@ import com.rhodesisland.terminal.notification.GreetingNotificationManager
 import com.rhodesisland.terminal.notification.GroupChatNotificationManager
 import com.rhodesisland.terminal.service.InferenceForegroundService
 import com.rhodesisland.terminal.util.CrashCapture
+import com.rhodesisland.terminal.util.ProcessName
 import com.rhodesisland.terminal.util.PrtsImageLoader
 import com.rhodesisland.terminal.work.GreetingScheduler
 import com.rhodesisland.terminal.work.GroupChatScheduler
@@ -164,7 +165,9 @@ class RhodesApp : Application(), ImageLoaderFactory {
         private const val TAG = "RhodesApp"
     }
 
-    /** 当前是否运行于 :mnn_probe 隔离进程（OpenCL 探测专用，见 OpenClProbeService）。 */
+    /** 当前是否运行于 :mnn_probe 隔离进程（OpenCL 探测专用，见 OpenClProbeService）。
+     *  经 [ProcessName]：Process.myProcessName() 是 API 33 才公开的 API，minSdk 24 直接调用
+     *  在 Android 12 及以下 NoSuchMethodError 启动即崩（OPPO/vivo 排查修复）。 */
     private fun isMnnProbeProcess(): Boolean =
-        (Process.myProcessName() ?: "").endsWith(":mnn_probe")
+        (ProcessName.current() ?: "").endsWith(":mnn_probe")
 }
