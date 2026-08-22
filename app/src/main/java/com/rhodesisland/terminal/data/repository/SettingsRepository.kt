@@ -21,6 +21,7 @@ import com.rhodesisland.terminal.llm.profile.InferencePerformanceMode
 import com.rhodesisland.terminal.llm.thinking.LocalThinkingLevel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
@@ -116,7 +117,7 @@ class SettingsRepository(private val store: SettingsStore) {
     /** 每服务商独立配置表（key = 预设 id 或 "custom"）。 */
     val providerApiConfigs: Flow<Map<String, ApiConfig>> = store.providerApiConfigs
     suspend fun getProviderApiConfigNow(key: String): ApiConfig? =
-        withTimeoutOrNull(DATASTORE_TIMEOUT_MS) { store.getProviderApiConfig(key) }
+        dataStoreFirstOrNull(providerApiConfigs.map { it[key] })
     suspend fun setProviderApiConfig(key: String, config: ApiConfig) = store.setProviderApiConfig(key, config)
     suspend fun setSeedanceConfig(config: SeedanceConfig) = store.setSeedanceConfig(config)
     suspend fun setTtsConfig(config: TtsConfig) = store.setTtsConfig(config)
@@ -133,7 +134,7 @@ class SettingsRepository(private val store: SettingsStore) {
     suspend fun clearActiveConversation(characterId: String) = store.clearActiveConversation(characterId)
     suspend fun clearAllActiveConversations() = store.clearAllActiveConversations()
     suspend fun getActiveConversationNow(characterId: String): Long? =
-        withTimeoutOrNull(DATASTORE_TIMEOUT_MS) { activeConversations.first() }?.get(characterId)
+        dataStoreFirstOrNull(activeConversations.map { it[characterId] })
     suspend fun setCustomCharacters(list: List<Character>) = store.setCustomCharacters(list)
     suspend fun updateCustomCharacters(transform: (List<Character>) -> List<Character>) =
         store.updateCustomCharacters(transform)
@@ -155,9 +156,10 @@ class SettingsRepository(private val store: SettingsStore) {
     suspend fun setLlmPerformanceMode(mode: InferencePerformanceMode) =
         store.setLlmPerformanceMode(mode)
 
-    /** 同步读取本地推理设置快照；DataStore I/O 被拦截时超时回退不可变默认快照。 */
+    /** 同步读取本地推理设置快照；DataStore I/O 被拦截/异常时超时回退不可变默认快照。 */
     suspend fun getLocalInferenceSettingsNow(timeoutMs: Long = DATASTORE_TIMEOUT_MS): LocalInferenceSettings =
-        withTimeoutOrNull(timeoutMs) { localInferenceSettings.first() } ?: LocalInferenceSettings()
+        runCatching { withTimeoutOrNull(timeoutMs) { localInferenceSettings.first() } }
+            .getOrNull() ?: LocalInferenceSettings()
 
     suspend fun setLlmCpuBoost(enabled: Boolean) = store.setLlmCpuBoost(enabled)
 
@@ -198,136 +200,106 @@ class SettingsRepository(private val store: SettingsStore) {
 
     suspend fun setLlmLastConfigHash(hash: String?) = store.setLlmLastConfigHash(hash)
 
-    /** 同步获取当前 API 配置（阻塞读取 Flow 首值，5s 超时返回默认配置）。
+    /** 同步获取当前 API 配置（5s 超时/异常返回默认配置）。
      *  国产 ROM（MIUI/EMUI/ColorOS）的电池优化可能拦截 DataStore 文件 I/O 导致 .first() 永久挂起；
-     *  withTimeoutOrNull 保证 UI 不卡死。 */
-    suspend fun getApiConfigNow(): ApiConfig = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
-        apiConfig.first()
-    } ?: ApiConfig(baseUrl = "", apiKey = "", model = "")
+     *  文件损坏则抛 CorruptionException。dataStoreFirst 双兜底保证 UI 不卡死、不崩溃。 */
+    suspend fun getApiConfigNow(): ApiConfig = dataStoreFirst(
+        apiConfig, ApiConfig(baseUrl = "", apiKey = "", model = ""),
+    )
 
-    suspend fun getTtsConfigNow(): TtsConfig = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
-        ttsConfig.first()
-    } ?: TtsConfig(apiKey = "", appId = "", accessKey = "")
+    suspend fun getTtsConfigNow(): TtsConfig = dataStoreFirst(
+        ttsConfig, TtsConfig(apiKey = "", appId = "", accessKey = ""),
+    )
 
-    /** 同步获取当前 Seedance 配置（5s 超时回退默认配置，保证国产 ROM 文件 I/O 被拦截时 UI 不卡死）。 */
-    suspend fun getSeedanceConfigNow(): SeedanceConfig = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
-        seedanceConfig.first()
-    } ?: SeedanceConfig()
+    /** 同步获取当前 Seedance 配置（超时/异常回退默认配置，保证国产 ROM 文件 I/O 被拦截时 UI 不卡死）。 */
+    suspend fun getSeedanceConfigNow(): SeedanceConfig = dataStoreFirst(seedanceConfig, SeedanceConfig())
 
-    suspend fun getTtsLanguageNow(): TtsLanguage = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
-        ttsLanguage.first()
-    } ?: TtsLanguage.ZH
+    suspend fun getTtsLanguageNow(): TtsLanguage = dataStoreFirst(ttsLanguage, TtsLanguage.ZH)
 
-    suspend fun getTtsEngineNow(): TtsEngine = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
-        ttsEngine.first()
-    } ?: TtsEngine.DEFAULT
+    suspend fun getTtsEngineNow(): TtsEngine = dataStoreFirst(ttsEngine, TtsEngine.DEFAULT)
 
-    suspend fun getTtsSystemTemplateNow(): SystemVoiceTemplate = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
-        ttsSystemTemplate.first()
-    } ?: SystemVoiceTemplate.DEFAULT_TEMPLATE
+    suspend fun getTtsSystemTemplateNow(): SystemVoiceTemplate =
+        dataStoreFirst(ttsSystemTemplate, SystemVoiceTemplate.DEFAULT_TEMPLATE)
 
-    suspend fun getTtsAutoReadNow(): Boolean = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
-        ttsAutoRead.first()
-    } ?: false
+    suspend fun getTtsAutoReadNow(): Boolean = dataStoreFirst(ttsAutoRead, false)
 
-    suspend fun getTtsVoiceMapNow(): Map<String, VoicePair> = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
-        ttsVoiceMap.first()
-    } ?: emptyMap()
+    suspend fun getTtsVoiceMapNow(): Map<String, VoicePair> = dataStoreFirst(ttsVoiceMap, emptyMap())
 
-    suspend fun getActiveProviderNow(): ChatProviderType = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
-        activeProvider.first()
-    } ?: ChatProviderType.CLOUD
+    suspend fun getActiveProviderNow(): ChatProviderType = dataStoreFirst(activeProvider, ChatProviderType.CLOUD)
 
-    suspend fun getActiveLocalModelIdNow(): String? = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
-        activeLocalModelId.first()
-    }  // 超时返回 null（无模型），上游 LocalChatProvider 会抛出「未选择模型」
+    suspend fun getActiveLocalModelIdNow(): String? = dataStoreFirstOrNull(activeLocalModelId)
+        // 超时/异常返回 null（无模型），上游 LocalChatProvider 会抛出「未选择模型」
 
-    suspend fun getDeepThinkingNow(): Boolean = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
-        deepThinking.first()
-    } ?: false
+    suspend fun getDeepThinkingNow(): Boolean = dataStoreFirst(deepThinking, false)
 
-    /** 同步获取活跃角色（5s 超时回退默认角色），供 CharacterRepository 使用 */
-    suspend fun getActiveCharacterNow(): String = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
-        activeCharacter.first()
-    } ?: Characters.DEFAULT_CHARACTER_ID
+    /** 同步获取活跃角色（5s 超时/异常回退默认角色），供 CharacterRepository 使用 */
+    suspend fun getActiveCharacterNow(): String =
+        dataStoreFirst(activeCharacter, Characters.DEFAULT_CHARACTER_ID)
 
-    /** 同步获取自定义角色（5s 超时返回空列表，等同无自定义角色） */
-    suspend fun getCustomCharactersNow(): List<Character> = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
-        customCharacters.first()
-    } ?: emptyList()
+    /** 同步获取自定义角色（5s 超时/异常返回空列表，等同无自定义角色） */
+    suspend fun getCustomCharactersNow(): List<Character> = dataStoreFirst(customCharacters, emptyList())
 
     // ===== 角色问候同步读取（供 GreetingWorker 用）=====
-    /** 已开启?（超时返回 null 而非 false——Worker 据此区分「明确关闭」与「暂时读不到」）。 */
-    suspend fun getGreetingEnabledOrNull(): Boolean? = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
-        greetingEnabled.first()
-    }
+    /** 已开启?（读不到/异常返回 null 而非 false——Worker 据此区分「明确关闭」与「暂时读不到」）。 */
+    suspend fun getGreetingEnabledOrNull(): Boolean? = dataStoreFirstOrNull(greetingEnabled)
 
     suspend fun getGreetingEnabledNow(): Boolean = getGreetingEnabledOrNull() ?: false
 
-    /** 已选角色集合?（超时返回 null 而非空集，避免 Worker 误判「未选角色」）。 */
-    suspend fun getGreetingCharacterIdsOrNull(): Set<String>? = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
-        greetingCharacterIds.first()
-    }
+    /** 已选角色集合?（读不到/异常返回 null 而非空集，避免 Worker 误判「未选角色」）。 */
+    suspend fun getGreetingCharacterIdsOrNull(): Set<String>? = dataStoreFirstOrNull(greetingCharacterIds)
 
     suspend fun getGreetingCharacterIdsNow(): Set<String> = getGreetingCharacterIdsOrNull() ?: emptySet()
 
-    suspend fun getGreetingDailyCountNow(): Int = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
-        greetingDailyCount.first()
-    } ?: AppConfig.Greeting.DEFAULT_DAILY_COUNT
+    suspend fun getGreetingDailyCountNow(): Int =
+        dataStoreFirst(greetingDailyCount, AppConfig.Greeting.DEFAULT_DAILY_COUNT)
 
-    suspend fun getGreetingQuotaNow(): Pair<String, Int> = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
-        greetingQuota.first()
-    } ?: "" to 0
+    suspend fun getGreetingQuotaNow(): Pair<String, Int> = dataStoreFirst(greetingQuota, "" to 0)
 
-    /** 上次发问候的角色 id（超时返回 null，Worker 退化为随机起点）。 */
-    suspend fun getLastGreetingCharIdNow(): String? = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
-        greetingLastCharId.first()
-    }
+    /** 上次发问候的角色 id（读不到/异常返回 null，Worker 退化为随机起点）。 */
+    suspend fun getLastGreetingCharIdNow(): String? = dataStoreFirstOrNull(greetingLastCharId)
 
-    /** 下一次问候投递目标时间（epoch ms；0 = 尚未初始化，超时回退 0）。 */
-    suspend fun getGreetingNextFireAtNow(): Long = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
-        greetingNextFireAt.first()
-    } ?: 0L
+    /** 下一次问候投递目标时间（epoch ms；0 = 尚未初始化，超时/异常回退 0）。 */
+    suspend fun getGreetingNextFireAtNow(): Long = dataStoreFirst(greetingNextFireAt, 0L)
 
     // ===== 群聊同步读取（供 GroupChatWorker / GroupChatScheduler 用）=====
-    /** 群聊配置?（超时返回 null 而非默认值，Worker 据此区分「关闭」与「暂时读不到」）。 */
-    suspend fun getGroupChatConfigOrNull(): GroupChatConfig? = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
-        groupChatConfig.first()
-    }
+    /** 群聊配置?（读不到/异常返回 null 而非默认值，Worker 据此区分「关闭」与「暂时读不到」）。 */
+    suspend fun getGroupChatConfigOrNull(): GroupChatConfig? = dataStoreFirstOrNull(groupChatConfig)
 
     suspend fun getGroupChatConfigNow(): GroupChatConfig = getGroupChatConfigOrNull() ?: GroupChatConfig()
 
-    suspend fun getGroupDailyRoundsNow(): Int = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
-        groupDailyRounds.first()
-    } ?: AppConfig.GroupChat.DEFAULT_DAILY_ROUNDS
+    suspend fun getGroupDailyRoundsNow(): Int =
+        dataStoreFirst(groupDailyRounds, AppConfig.GroupChat.DEFAULT_DAILY_ROUNDS)
 
-    suspend fun getGroupQuotaNow(): Pair<String, Int> = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
-        groupQuota.first()
-    } ?: "" to 0
+    suspend fun getGroupQuotaNow(): Pair<String, Int> = dataStoreFirst(groupQuota, "" to 0)
 
-    suspend fun getGroupLastSpeakerIdNow(): String? = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
-        groupLastSpeakerId.first()
-    }
+    suspend fun getGroupLastSpeakerIdNow(): String? = dataStoreFirstOrNull(groupLastSpeakerId)
 
-    suspend fun getGroupRoundCounterNow(): Long = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
-        groupRoundCounter.first()
-    } ?: 0L
+    suspend fun getGroupRoundCounterNow(): Long = dataStoreFirst(groupRoundCounter, 0L)
 
-    suspend fun getGroupLastUserMessageAtNow(): Long = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
-        groupLastUserMessageAt.first()
-    } ?: 0L
+    suspend fun getGroupLastUserMessageAtNow(): Long = dataStoreFirst(groupLastUserMessageAt, 0L)
 
-    suspend fun getGroupNextFireAtNow(): Long = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
-        groupNextFireAt.first()
-    } ?: 0L
+    suspend fun getGroupNextFireAtNow(): Long = dataStoreFirst(groupNextFireAt, 0L)
 
-    /** 博士档案（超时回退默认空档案）。 */
-    suspend fun getUserProfileNow(): UserProfileConfig = withTimeoutOrNull(DATASTORE_TIMEOUT_MS) {
-        userProfile.first()
-    } ?: UserProfileConfig()
+    /** 博士档案（超时/异常回退默认空档案）。 */
+    suspend fun getUserProfileNow(): UserProfileConfig = dataStoreFirst(userProfile, UserProfileConfig())
 
     companion object {
         /** DataStore .first() 超时阈值（ms）。国产 ROM 文件 I/O 被拦截时避免永久挂起。 */
         private const val DATASTORE_TIMEOUT_MS = 5000L
+
+        /**
+         * DataStore 单值读取统一入口（超时 + 异常双兜底）。
+         *
+         * 背景（OPPO/vivo 启动闪退排查）：withTimeoutOrNull 只把「挂起」转 fallback——
+         * DataStore 文件损坏抛 CorruptionException/IOException 会原样穿透，启动协程读到即崩。
+         * runCatching 把「抛异常」（文件损坏等）也归入 fallback；corruptionHandler 已在
+         * store 层兜住大部分损坏场景，此处是第二道防线。
+         */
+        private suspend fun <T> dataStoreFirst(flow: Flow<T>, fallback: T): T =
+            runCatching { withTimeoutOrNull(DATASTORE_TIMEOUT_MS) { flow.first() } }.getOrNull() ?: fallback
+
+        /** 同 [dataStoreFirst]，但读不到/异常都返回 null（供需区分「未设置」的调用方）。 */
+        private suspend fun <T : Any> dataStoreFirstOrNull(flow: Flow<T?>): T? =
+            runCatching { withTimeoutOrNull(DATASTORE_TIMEOUT_MS) { flow.first() } }.getOrNull()
     }
 }
