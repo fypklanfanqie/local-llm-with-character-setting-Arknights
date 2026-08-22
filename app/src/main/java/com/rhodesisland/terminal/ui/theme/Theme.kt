@@ -32,10 +32,16 @@ fun ChatTheme(
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
-            val window = (view.context as Activity).window
-            val controller = WindowCompat.getInsetsController(window, view)
-            controller.isAppearanceLightStatusBars = !darkTheme
-            controller.isAppearanceLightNavigationBars = !darkTheme
+            // 安全取 Activity + 整段 runCatching：个别 ROM/主题包装使 Compose 视图 context
+            // 非 Activity（ContextThemeWrapper 等），首帧强转曾直接 ClassCastException。
+            // 失败仅放弃本次系统栏图标同步，绝不影响首帧渲染。
+            runCatching {
+                val activity = view.context as? Activity ?: return@SideEffect
+                val window = activity.window
+                val controller = WindowCompat.getInsetsController(window, view)
+                controller.isAppearanceLightStatusBars = !darkTheme
+                controller.isAppearanceLightNavigationBars = !darkTheme
+            }
         }
     }
     CompositionLocalProvider(

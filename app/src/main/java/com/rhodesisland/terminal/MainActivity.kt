@@ -44,13 +44,24 @@ class MainActivity : ComponentActivity() {
      * 字体缩放钳制：系统字体放大超过 1.3 倍时截断到 1.3。
      * 聊天气泡/玻璃面板布局按默认字号设计，1.5x+ 的无障碍超大字会挤压溢出；
      * 1.3 以内保留可读性提升。Android 14 的 per-app 字体设置同样经过此处（其值 >1.3 时被钳制）。
+     *
+     * 整段 try/catch：个别 ColorOS/OriginOS 构建对已被语言/字号 override 包裹的 base
+     * 再 createConfigurationContext 可抛 NotFoundException/IllegalArgumentException——
+     * 该调用发生在任何帧渲染前，抛出即「点图标毫无画面就退」。失败时放弃钳制（回退原 base），
+     * 绝不因字体优化崩溃。
      */
     override fun attachBaseContext(newBase: android.content.Context) {
-        val config = android.content.res.Configuration(newBase.resources.configuration)
-        if (config.fontScale > FONT_SCALE_MAX) {
-            config.fontScale = FONT_SCALE_MAX
+        val wrapped = try {
+            val config = android.content.res.Configuration(newBase.resources.configuration)
+            if (config.fontScale > FONT_SCALE_MAX) {
+                config.fontScale = FONT_SCALE_MAX
+            }
+            newBase.createConfigurationContext(config)
+        } catch (t: Throwable) {
+            android.util.Log.w("MainActivity", "fontScale clamp failed: ${t.message}")
+            newBase
         }
-        super.attachBaseContext(newBase.createConfigurationContext(config))
+        super.attachBaseContext(wrapped)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

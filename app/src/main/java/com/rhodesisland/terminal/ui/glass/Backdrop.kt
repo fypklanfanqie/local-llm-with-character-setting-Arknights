@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import android.util.Log
 import com.rhodesisland.terminal.ui.theme.LocalDarkTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -265,11 +266,15 @@ fun GlassBackdrop(
     }
 
     // ~30fps 后台渲染循环：CPU 位图模糊不占主线程，滚动时不抢帧。
+    // renderFrame 包 runCatching：低内存机型 createBitmap/BlurMaskFilter 可能抛 OOM/
+    // IllegalStateException——失败只跳过本帧（玻璃面板回退半透明），绝不让渲染循环带崩进程。
     LaunchedEffect(state, dark, blurRadiusPx) {
         withContext(Dispatchers.Default) {
             while (isActive) {
                 if (isVisible) {
-                    state.renderFrame(phase.value, dark, blurRadiusPx, BACKDROP_SATURATION)
+                    runCatching {
+                        state.renderFrame(phase.value, dark, blurRadiusPx, BACKDROP_SATURATION)
+                    }.onFailure { Log.w("GlassBackdrop", "renderFrame failed: ${it.message}") }
                 }
                 delay(FRAME_INTERVAL_MILLIS)
             }

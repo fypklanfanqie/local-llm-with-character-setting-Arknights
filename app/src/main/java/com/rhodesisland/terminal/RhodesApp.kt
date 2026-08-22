@@ -104,12 +104,17 @@ class RhodesApp : Application(), ImageLoaderFactory {
         // 升级时清一次 Coil 图片缓存：旧版本可能把反热链 HTML 挑战页当成成功响应缓存了，需冲掉。
         clearStaleImageCache()
 
+        // 通知渠道创建：个别 ROM 的 NotificationService 异常曾直接杀死 onCreate——
+        // 失败仅失去该渠道（Worker 发送时再兜底），绝不影响启动。
         // 角色问候：通知 channel + 前后台观察 + 确保后台调度链存活
-        GreetingNotificationManager.createChannel(this)
+        runCatching { GreetingNotificationManager.createChannel(this) }
+            .onFailure { CrashCapture.logEvent(this, "startup", "greeting channel: ${it.message}") }
         // 群聊：通知 channel + 确保后台调度链存活（空闲自动聊天）
-        GroupChatNotificationManager.createChannel(this)
+        runCatching { GroupChatNotificationManager.createChannel(this) }
+            .onFailure { CrashCapture.logEvent(this, "startup", "groupchat channel: ${it.message}") }
         // 本地推理保活：前台服务通知渠道（生成期间常驻通知栏，防国产 ROM 杀进程）
-        InferenceForegroundService.createChannel(this)
+        runCatching { InferenceForegroundService.createChannel(this) }
+            .onFailure { CrashCapture.logEvent(this, "startup", "inference channel: ${it.message}") }
         AppLifecycleObserver.register(this)
         // Task 15/16：前台空闲时只做轻量 OpenCL 探测（绝不自动加载模型/预热）。
         // runCatching：惰性初始化（backendHealthCoordinator/settingsRepository）在个别 ROM 异常时不阻断启动。
