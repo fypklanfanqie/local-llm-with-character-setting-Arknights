@@ -216,11 +216,16 @@ class MainActivity : ComponentActivity() {
         // 消费后清除 extra，避免重复触发
         intent.removeExtra(GreetingNotificationManager.EXTRA_CHARACTER_ID)
         intent.removeExtra(GreetingNotificationManager.EXTRA_CONVERSATION_ID)
+        // runCatching：DataStore 写损坏文件会抛 IOException/CorruptionException——
+        // 通知冷启动路径上未防护曾直接闪退（OPPO/vivo 排查）。写失败仅丢失跳转目标，
+        // ChatViewModel collector 自会回退默认角色。
         lifecycleScope.launch {
-            app.container.settingsRepository.setActiveCharacter(charId)
-            if (convId > 0) {
-                app.container.settingsRepository.setActiveConversation(charId, convId)
-            }
+            runCatching {
+                app.container.settingsRepository.setActiveCharacter(charId)
+                if (convId > 0) {
+                    app.container.settingsRepository.setActiveConversation(charId, convId)
+                }
+            }.onFailure { android.util.Log.w("MainActivity", "greeting jump write failed: ${it.message}") }
         }
         return true
     }

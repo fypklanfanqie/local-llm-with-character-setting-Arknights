@@ -17,6 +17,7 @@ import com.rhodesisland.terminal.util.PrtsImageLoader
 import com.rhodesisland.terminal.work.GreetingScheduler
 import com.rhodesisland.terminal.work.GroupChatScheduler
 import com.rhodesisland.terminal.ui.affinity.DailyCheckinBus
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -32,8 +33,19 @@ class RhodesApp : Application(), ImageLoaderFactory {
     lateinit var container: AppContainer
         private set
 
-    /** 应用级协程作用域：用于启动时触发角色问候后台调度（不阻塞 onCreate）。 */
-    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    /**
+     * 应用级协程作用域：用于启动时触发角色问候后台调度（不阻塞 onCreate）。
+     *
+     * CoroutineExceptionHandler 兜底：SupervisorJob 只隔离兄弟协程取消、不拦截未捕获异常——
+     * 启动链上任何漏网异常（DataStore 损坏/Room 异常/WorkManager 异常）曾直接上传默认
+     * handler 导致「点图标就闪退」（OPPO/vivo 排查）。现在统一降级为落盘事件日志，绝不崩进程。
+     * 各 launch 内仍逐个 runCatching，CEH 是最后防线。
+     */
+    private val appScope = CoroutineScope(
+        SupervisorJob() + Dispatchers.Default + CoroutineExceptionHandler { _, t ->
+            CrashCapture.logEvent(this, "appScope", t.stackTraceToString())
+        },
+    )
 
     /** Coil 图片加载器：PRTS 立绘需要浏览器头 + 反热链 cookie（见 PrtsImageLoader）。
      *  构建失败（个别 ROM 对 Coil 定制 OkHttp 的兼容问题）时回退默认加载器，绝不因图片加载崩。 */
@@ -100,24 +112,31 @@ class RhodesApp : Application(), ImageLoaderFactory {
         InferenceForegroundService.createChannel(this)
         AppLifecycleObserver.register(this)
         // Task 15/16：前台空闲时只做轻量 OpenCL 探测（绝不自动加载模型/预热）。
-        container.startIdleOpenClProbe(appScope)
+        // runCatching：惰性初始化（backendHealthCoordinator/settingsRepository）在个别 ROM 异常时不阻断启动。
+        runCatching { container.startIdleOpenClProbe(appScope) }
+            .onFailure { CrashCapture.logEvent(this, "startup", "startIdleOpenClProbe: ${it.message}") }
         // Task 15/16：内存压力安全网（关键 trim/低内存时释放模型；生成中延迟释放）。
         registerComponentCallbacks(memoryPressureCallbacks)
+        // 以下 4 个启动协程各自 runCatching：DataStore 损坏/Room 迁移异常/WorkManager 异常
+        // 只记事件日志、跳过本轮，等下个周期或下次冷启动自愈——绝不因后台链路崩溃而闪退。
         appScope.launch {
-            GreetingScheduler.ensureScheduled(this@RhodesApp, container.settingsRepository)
+            runCatching { GreetingScheduler.ensureScheduled(this@RhodesApp, container.settingsRepository) }
+                .onFailure { CrashCapture.logEvent(this@RhodesApp, "startup", "greeting schedule: ${it.stackTraceToString()}") }
         }
         // 群聊空闲自动聊天：确保后台调度链存活（关闭/本地时由 ensureScheduled cancel）
         appScope.launch {
-            GroupChatScheduler.ensureScheduled(this@RhodesApp, container.settingsRepository)
+            runCatching { GroupChatScheduler.ensureScheduled(this@RhodesApp, container.settingsRepository) }
+                .onFailure { CrashCapture.logEvent(this@RhodesApp, "startup", "groupchat schedule: ${it.stackTraceToString()}") }
         }
         appScope.launch {
-            if (container.affinityRepository.shouldShowDailyCheckinPrompt()) {
-                DailyCheckinBus.request()
-            }
+            runCatching { container.affinityRepository.shouldShowDailyCheckinPrompt() }
+                .onSuccess { if (it) DailyCheckinBus.request() }
+                .onFailure { CrashCapture.logEvent(this@RhodesApp, "startup", "daily checkin: ${it.stackTraceToString()}") }
         }
         // Task 6：恢复 Seedance 视频流水线（复位进程中断残留的进行中状态 + 重入队可自动认领任务）。幂等，异步。
         appScope.launch {
-            container.seedanceVideoScheduler.recoverPending()
+            runCatching { container.seedanceVideoScheduler.recoverPending() }
+                .onFailure { CrashCapture.logEvent(this@RhodesApp, "startup", "seedance recover: ${it.stackTraceToString()}") }
         }
     }
 
