@@ -47,12 +47,14 @@ import com.rhodesisland.terminal.data.model.TtsLanguage
 import com.rhodesisland.terminal.data.model.validationError
 import com.rhodesisland.terminal.data.repository.ChatBackgroundConfig
 import com.rhodesisland.terminal.data.repository.ChatBackgroundRepository
+import com.rhodesisland.terminal.ui.glass.CollapsibleSection
 import com.rhodesisland.terminal.ui.glass.GlassLargeTitle
 import com.rhodesisland.terminal.ui.glass.GlassListRow
 import com.rhodesisland.terminal.ui.glass.GlassListSection
 import com.rhodesisland.terminal.ui.glass.frostedGlass
 import com.rhodesisland.terminal.ui.theme.GlassShapes
-import com.rhodesisland.terminal.ui.theme.LocalDarkTheme
+import com.rhodesisland.terminal.ui.theme.fieldPlaceholderColor
+import com.rhodesisland.terminal.ui.theme.fieldTextColor
 import com.rhodesisland.terminal.config.Characters
 import com.rhodesisland.terminal.config.ModelProvider
 import com.rhodesisland.terminal.config.PresetModel
@@ -158,7 +160,6 @@ fun SettingsScreen(
     }
     var ttsPreviewBusy by remember { mutableStateOf(false) }
     var ttsPreviewError by remember { mutableStateOf<String?>(null) }
-    var showAdvancedTtsVoices by remember { mutableStateOf(false) }
     var voiceSearch by remember { mutableStateOf("") }
     var ttsPreviewCharacterId by remember { mutableStateOf<String?>(null) }
 
@@ -211,7 +212,10 @@ fun SettingsScreen(
         }
 
         // ===== 本地 AI 引擎 =====
-        GlassListSection(title = "本地 AI 引擎") {
+        CollapsibleSection(
+            title = "本地 AI 引擎",
+            summary = if (liquidGlass) "推理引擎 · 性能浮窗开" else "推理引擎",
+        ) {
             GlassListRow(
                 title = "推理引擎设置",
                 subtitle = "CPU / GPU / NPU 后端与参数",
@@ -232,7 +236,7 @@ fun SettingsScreen(
         }
 
         // ===== LLM API 配置 =====
-        GlassListSection(title = "LLM API 配置") {
+        CollapsibleSection(title = "LLM API 配置", summary = apiConfig.model.ifBlank { "未配置模型" }) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 FieldLabel("模型商")
                 ProviderDropdown(
@@ -368,7 +372,7 @@ fun SettingsScreen(
         }
 
         // ===== 对话 =====
-        GlassListSection(title = "对话") {
+        CollapsibleSection(title = "对话", summary = if (deepThinking) "深度思考开" else "深度思考关") {
             GlassListRow(
                 title = "深度思考模式",
                 subtitle = "展示并折叠模型推理过程",
@@ -384,13 +388,17 @@ fun SettingsScreen(
 
         GreetingSection(container = container, scope = scope)
         GroupChatSection(container = container, scope = scope)
+        WorldviewSection(container = container, scope = scope)
         UserProfileSection(container = container, scope = scope)
         ChatBackgroundSection(container = container, scope = scope)
         StorageSection(container = container, scope = scope)
         SeedanceSettingsSection(container = container, scope = scope)
 
         // ===== 语音合成（朗读）=====
-        GlassListSection(title = "语音合成 (TTS) · 朗读") {
+        CollapsibleSection(
+            title = "语音合成 (TTS) · 朗读",
+            summary = "引擎：${ttsEngineEdit.label}",
+        ) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
                     "手机系统语音：离线、免费、开箱即用；云端（火山豆包）：支持声音复刻音色与中日双语，需配置凭据。",
@@ -468,41 +476,42 @@ fun SettingsScreen(
                     }
                 }
             }
-        }
-        SaveButton(
-            text = "保存 TTS 设置",
-            saved = ttsSaved,
-            onClick = {
-                scope.launch {
-                    container.settingsRepository.setTtsEngine(ttsEngineEdit)
-                    container.settingsRepository.setTtsSystemTemplate(ttsTemplateEdit)
-                    if (ttsEngineEdit == TtsEngine.CLOUD) {
-                        val config = TtsConfig(apiKey = ttsApiKey.trim())
-                        val error = config.validationError()
-                        if (error != null) {
-                            ttsPreviewError = error
-                            return@launch
+            SaveButton(
+                text = "保存 TTS 设置",
+                saved = ttsSaved,
+                onClick = {
+                    scope.launch {
+                        container.settingsRepository.setTtsEngine(ttsEngineEdit)
+                        container.settingsRepository.setTtsSystemTemplate(ttsTemplateEdit)
+                        if (ttsEngineEdit == TtsEngine.CLOUD) {
+                            val config = TtsConfig(apiKey = ttsApiKey.trim())
+                            val error = config.validationError()
+                            if (error != null) {
+                                ttsPreviewError = error
+                                return@launch
+                            }
+                            container.settingsRepository.setTtsConfig(config)
                         }
-                        container.settingsRepository.setTtsConfig(config)
+                        ttsSaved = true
                     }
-                    ttsSaved = true
-                }
-            },
-        )
+                },
+            )
 
-        TtsGuideButton()
+            TtsGuideButton()
+        }
 
         // ===== 角色双语音色 =====
-        GlassListSection(title = "角色双语音色（speaker_id）") {
+        CollapsibleSection(title = "角色双语音色（speaker_id）") {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
                     "每个角色分别填写中文和日文 speaker_id。日语模式只使用日文音色，缺失时会提示配置，不会用中文音色硬读日文。",
                     color = scheme.onSurfaceVariant, fontSize = 11.sp,
                 )
-                TextButton(onClick = { showAdvancedTtsVoices = !showAdvancedTtsVoices }) {
-                    Text(if (showAdvancedTtsVoices) "收起角色音色表" else "展开角色音色表", color = scheme.primary)
-                }
-                if (showAdvancedTtsVoices) {
+                // 角色音色表：嵌套折叠区（默认收起），替代旧 TextButton 裸 if 展开
+                CollapsibleSection(
+                    title = "角色音色表",
+                    summary = "搜索角色后逐个配置中 / 日 speaker_id",
+                ) {
                     // 搜索框：按中文名或英文 ID 快速筛选全量干员（384）与自定义角色。
                     GlassInputField(
                         value = voiceSearch,
@@ -562,32 +571,23 @@ fun SettingsScreen(
                     }
                 }
             }
-        }
-        SaveButton(
-            text = "保存角色双语音色",
-            saved = voiceSaved,
-            onClick = {
-                scope.launch {
-                    val toSave = voiceEdit.mapValues { (_, pair) ->
-                        pair.copy(zh = pair.zh.copy(resourceId = ""), ja = pair.ja.copy(resourceId = ""))
-                    }.filter { (_, pair) -> !pair.zh.isEmpty || !pair.ja.isEmpty }
-                    container.settingsRepository.setTtsVoiceMap(toSave)
-                    voiceSaved = true
-                }
-            },
-        )
-
-        // ===== 主题模式（PRTS 深色，固定） =====
-        GlassListSection {
-            GlassListRow(
-                title = "主题模式",
-                subtitle = "深色主题（PRTS 终端风，固定）",
-                showDivider = false,
+            SaveButton(
+                text = "保存角色双语音色",
+                saved = voiceSaved,
+                onClick = {
+                    scope.launch {
+                        val toSave = voiceEdit.mapValues { (_, pair) ->
+                            pair.copy(zh = pair.zh.copy(resourceId = ""), ja = pair.ja.copy(resourceId = ""))
+                        }.filter { (_, pair) -> !pair.zh.isEmpty || !pair.ja.isEmpty }
+                        container.settingsRepository.setTtsVoiceMap(toSave)
+                        voiceSaved = true
+                    }
+                },
             )
         }
 
-        // ===== 关于 =====
-        GlassListSection(title = "关于") {
+        // ===== 关于（含主题模式静态展示，合并为一组）=====
+        CollapsibleSection(title = "关于", summary = "版本 · 免责声明 · 主题") {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("罗德岛通讯终端", color = scheme.onSurface, fontSize = 16.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                 Text("Android 版 v1.0.0", color = scheme.onSurfaceVariant, fontSize = 12.sp)
@@ -596,6 +596,11 @@ fun SettingsScreen(
                 Text(
                     "内置 384 位罗德岛干员（20 位含语音/本地立绘 + 364 位自动生成）。项目为明日方舟同人作品，所有角色、立绘、音乐版权归 Hypergryph / 鹰角网络所有，仅用于学习交流，不作商业用途。",
                     color = scheme.onSurfaceVariant, fontSize = 10.sp, lineHeight = 15.sp,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "主题模式：深色主题（PRTS 终端风，固定）",
+                    color = scheme.onSurfaceVariant, fontSize = 12.sp,
                 )
             }
         }
@@ -738,14 +743,15 @@ private fun TtsGuideButton() {
 
 private const val TTS_GUIDE_URL = "https://www.bilibili.com/video/BV1uCNA6uETD"
 
+/** 字段标签：小号灰字。 */
 @Composable
-private fun FieldLabel(text: String) {
+internal fun FieldLabel(text: String) {
     Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
 }
 
 /** 玻璃输入框（带占位符）。 */
 @Composable
-private fun GlassInputField(
+internal fun GlassInputField(
     value: String,
     onValueChange: (String) -> Unit,
     placeholder: String,
@@ -753,10 +759,9 @@ private fun GlassInputField(
     singleLine: Boolean = true,
 ) {
     val scheme = MaterialTheme.colorScheme
-    // 文字/占位符颜色按主题自适应（深色→浅字，浅色→深字），不依赖 scheme.onSurface 的解析，避免与背景同色不可见
-    val isDark = LocalDarkTheme.current
-    val textColor = if (isDark) androidx.compose.ui.graphics.Color(0xFFE8E4E0) else androidx.compose.ui.graphics.Color(0xFF161616)
-    val placeholderColor = if (isDark) androidx.compose.ui.graphics.Color(0xFF9A9690) else androidx.compose.ui.graphics.Color(0xFF6E6A64)
+    // 文字/占位符颜色按主题自适应（统一 token，见 Color.kt），不依赖 scheme.onSurface 的解析
+    val textColor = fieldTextColor()
+    val placeholderColor = fieldPlaceholderColor()
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
@@ -787,8 +792,7 @@ private fun PasswordField(
     onToggle: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
-    val isDark = LocalDarkTheme.current
-    val textColor = if (isDark) androidx.compose.ui.graphics.Color(0xFFE8E4E0) else androidx.compose.ui.graphics.Color(0xFF161616)
+    val textColor = fieldTextColor()
     Column {
         FieldLabel(label)
         Spacer(Modifier.height(6.dp))
@@ -860,7 +864,10 @@ private fun ChatBackgroundSection(container: AppContainer, scope: CoroutineScope
         }
     }
 
-    GlassListSection(title = "聊天背景") {
+    CollapsibleSection(
+        title = "聊天背景",
+        summary = if (bgConfig.enabled) "已启用 · ${bgConfig.paths.size} 张" else "未启用",
+    ) {
         GlassListRow(
             title = "自定义背景图片",
             subtitle = "从相册选择图片作为聊天背景轮播（最多 ${ChatBackgroundRepository.MAX_BACKGROUNDS} 张）",
@@ -1017,7 +1024,10 @@ private fun GreetingSection(container: AppContainer, scope: CoroutineScope) {
         notifGranted = it
     }
 
-    GlassListSection(title = "角色问候") {
+    CollapsibleSection(
+        title = "角色问候",
+        summary = if (enabled) "已启用 · 每日 $dailyCount 条" else "未启用",
+    ) {
         GlassListRow(
             title = "角色主动问候",
             subtitle = if (isCloud) "所选角色白天随机时间主动给你发消息。仅云端 AI 可用。"
@@ -1288,7 +1298,10 @@ private fun GroupChatSection(container: AppContainer, scope: CoroutineScope) {
 
     val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
-    GlassListSection(title = "群聊") {
+    CollapsibleSection(
+        title = "群聊",
+        summary = if (config.enabled) "已启用 · ${config.memberIds.size} 名成员" else "未启用",
+    ) {
         GlassListRow(
             title = "多人角色群聊",
             subtitle = if (isCloud) "勾选角色同群聊天；空闲时自动互相聊天并可主动向你提问。仅云端 AI 可用。"
@@ -1414,7 +1427,10 @@ private fun UserProfileSection(container: AppContainer, scope: CoroutineScope) {
         }
     }
 
-    GlassListSection(title = "我的形象（博士 · 选填）") {
+    CollapsibleSection(
+        title = "我的形象（博士 · 选填）",
+        summary = if (persona.isNotBlank() || relationship.isNotBlank()) "已填写" else "未填写",
+    ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(
                 "以下全部为选填：留空则使用默认身份、不注入额外设定；填写后会把设定带进群聊、单聊与角色主动消息。",
@@ -1530,7 +1546,10 @@ private fun StorageSection(container: AppContainer, scope: CoroutineScope) {
     }
     LaunchedEffect(Unit) { refresh() }
 
-    GlassListSection(title = "存储管理") {
+    CollapsibleSection(
+        title = "存储管理",
+        summary = "总占用 ${AppStorageUsage.formatBytes(items.sumOf { it.sizeBytes })}",
+    ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
                 "统计聊天数据 / 图片缓存 / 视频 / 导入图片占用；模型文件请到「模型」页管理。",
@@ -1790,7 +1809,10 @@ private fun SeedanceSettingsSection(container: AppContainer, scope: CoroutineSco
         }
     }
 
-    GlassListSection(title = "Seedance 对话视频") {
+    CollapsibleSection(
+        title = "Seedance 对话视频",
+        summary = if (apiKey.isNotBlank()) "已配置 · ${relayModelId.ifBlank { variantLabel(variant) }}" else "未配置 API Key",
+    ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(
                 "角色回复后自动生成对应短视频（Seedance 2.0），支持火山方舟官方与中转站（如 dm1124 媒体协议），API Key 与对话模型分开配置。",
