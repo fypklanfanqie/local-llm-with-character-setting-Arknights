@@ -32,8 +32,8 @@ class IncrementalScriptDetectorTest {
     @Test
     fun markerCrossingDeltaBoundaryDetected() {
         val d = IncrementalScriptDetector(names)
-        assertNull(d.append("你好，小"))   // "小明：" 尚未闭合（缺冒号）
-        assertNull(d.append("明"))          // 仍无冒号
+        assertNull(d.append("你好，小").cutAbsoluteIndex)   // "小明：" 尚未闭合（缺冒号）
+        assertNull(d.append("明").cutAbsoluteIndex)          // 仍无冒号
         val r = d.append("：走")
         assertEquals(3, r.cutAbsoluteIndex)  // 小=3，跨三个 delta 检测到
     }
@@ -41,7 +41,7 @@ class IncrementalScriptDetectorTest {
     @Test
     fun markerCompletingExactlyAtBoundary() {
         val d = IncrementalScriptDetector(names)
-        assertNull(d.append("你好，小"))
+        assertNull(d.append("你好，小").cutAbsoluteIndex)
         val r = d.append("明：走")
         assertEquals(3, r.cutAbsoluteIndex)
     }
@@ -56,8 +56,8 @@ class IncrementalScriptDetectorTest {
     @Test
     fun maxLengthCjkNameAcrossManyChunks() {
         val d = IncrementalScriptDetector(names)  // maxNameLen=3（苏菲亚），keep=4
-        assertNull(d.append("甲乙丙丁"))
-        assertNull(d.append("苏菲"))
+        assertNull(d.append("甲乙丙丁").cutAbsoluteIndex)
+        assertNull(d.append("苏菲").cutAbsoluteIndex)
         val r = d.append("亚：走了")
         // 绝对流：甲乙丙丁苏菲亚：走了 -> 苏菲亚： 起始于 4
         assertEquals(4, r.cutAbsoluteIndex)

@@ -547,8 +547,9 @@ class DirectLlmClient(
      *  仅对**已知端点**注入：OpenAI（api.openai.com）、DeepSeek（域名含 deepseek）、
      *  Qwen/SiliconFlow（dashscope / siliconflow）。**不再按模型名前缀（gpt / deepseek / qwen）
      *  判断**——自定义端点/中转站即使代理这些模型也不注入，未知参数可能被上游拒收 400；
-     *  生成器对返回内容仍严格解析，不依赖本白名单兜底。 */
-    private fun supportsJsonObjectResponse(baseUrl: String, model: String): Boolean {
+     *  生成器对返回内容仍严格解析，不依赖本白名单兜底。internal 供 JVM 单测直测
+     *  （MockWebServer 地址恒为 localhost，端到端无法覆盖正向白名单路径）。 */
+    internal fun supportsJsonObjectResponse(baseUrl: String, model: String): Boolean {
         val b = baseUrl.lowercase()
         return b.contains("api.openai.com") ||
             b.contains("deepseek") ||

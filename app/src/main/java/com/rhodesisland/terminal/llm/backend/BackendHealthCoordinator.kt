@@ -191,9 +191,10 @@ class BackendHealthCoordinator(
          * internal 供 JVM 单测断言 native 身份不进健康指纹。
          */
         internal fun healthFingerprintParts(): Map<String, String> = buildMap {
-            put("manufacturer", Build.MANUFACTURER)
-            put("model", Build.MODEL)
-            put("osFingerprint", Build.FINGERPRINT)
+            // JVM 单测里 android.jar 桩的 Build 字段为 null——按 KDoc「缺失字段留空不参与哈希」兜底。
+            put("manufacturer", Build.MANUFACTURER ?: "")
+            put("model", Build.MODEL ?: "")
+            put("osFingerprint", Build.FINGERPRINT ?: "")
             put(
                 "soc",
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -202,7 +203,7 @@ class BackendHealthCoordinator(
                     ""
                 },
             )
-            put("abi", Build.SUPPORTED_ABIS.firstOrNull() ?: "")
+            put("abi", Build.SUPPORTED_ABIS?.firstOrNull() ?: "")
             put("policySchema", POLICY_SCHEMA)
         }
 

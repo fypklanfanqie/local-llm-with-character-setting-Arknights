@@ -52,6 +52,14 @@ class DirectLlmClientStructuredTest {
 
     @Test
     fun allowlistedProvider_injectsResponseFormatJsonObject() = runBlocking {
+        // 白名单判定按端点域名（生产语义变更后不再看模型名）；MockWebServer 地址恒为
+        // localhost，端到端正向路径不可达，故谓词直测（internal）+ 负向 e2e 兜底。
+        assertTrue(client.supportsJsonObjectResponse("https://api.openai.com/v1", "gpt-4o"))
+        assertTrue(client.supportsJsonObjectResponse("https://api.deepseek.com/chat/completions", "any"))
+        assertTrue(client.supportsJsonObjectResponse("https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-max"))
+        assertTrue(client.supportsJsonObjectResponse("https://api.siliconflow.cn/v1", "deepseek-chat"))
+        assertFalse("localhost 测试端点不在白名单", client.supportsJsonObjectResponse(baseUrl(), "deepseek-chat"))
+
         server.enqueue(MockResponse().setResponseCode(200).setBody(completionBody("""{"subject":"x"}""")))
         val result = client.chatOnceStructured(
             baseUrl(), "test-key", "deepseek-chat", messages(), responseFormatJson = true,
@@ -60,8 +68,7 @@ class DirectLlmClientStructuredTest {
 
         val recorded = server.takeRequest()
         val body = recorded.body.readUtf8()
-        assertTrue("白名单供应商应注入 response_format", body.contains("\"response_format\""))
-        assertTrue("response_format 应为 json_object", body.contains("\"json_object\""))
+        assertFalse("非白名单端点即使模型名匹配也不注入 response_format", body.contains("\"response_format\""))
         assertEquals("Bearer test-key", recorded.getHeader("Authorization"))
     }
 

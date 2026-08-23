@@ -17,11 +17,11 @@ import org.junit.Test
  */
 class NativeGenerationSummaryTest {
 
-    /** v1 wire 形态样本（Task 4）：v2 新字段缺省，用于验证向后兼容回填。 */
+    /** v1 wire 形态样本（Task 4）：v2 新字段缺省，用于验证向后兼容回填。
+     *  注意：raw string 跨行拼接的段界引号数极易写错（曾致样本 JSON 非法——正例全挂、
+     *  反例因「整体非法」而空过），故样本一律写单个 raw string，不做跨行拼接。 */
     private fun sampleJson(reason: String): String =
-        """{"v":1,"completionReason":"$reason","promptTokens":120,"generatedTokens":45,"""" +
-            """"prefillUs":900000,"decodeUs":450000,"reuseKv":1,"callbackCount":9,"callbackBytes":360,"""" +
-            """"firstDeltaUs":950000,"errorStage":null,"errorMessage":null}"""
+        """{"v":1,"completionReason":"$reason","promptTokens":120,"generatedTokens":45,"prefillUs":900000,"decodeUs":450000,"reuseKv":1,"callbackCount":9,"callbackBytes":360,"firstDeltaUs":950000,"errorStage":null,"errorMessage":null}"""
 
     /** v2 wire 形态样本（Task 1）：含全部 v2 新字段（native mnn_jni.cpp v2 摘要的输出形态）。 */
     private fun sampleJsonV2(
@@ -31,13 +31,10 @@ class NativeGenerationSummaryTest {
         reasoningEndUs: Long? = 123456L,
         firstBodyDeltaUs: Long? = 234567L,
         errorCode: String? = null,
-    ): String = buildString {
-        append("""{"v":2,"completionReason":"$reason","promptTokens":120,"generatedTokens":45,"""")
-        append(""""prefillUs":900000,"decodeUs":450000,"reuseKv":1,"callbackCount":9,"callbackBytes":360,"""")
-        append(""""firstDeltaUs":950000,"errorStage":null,"errorMessage":null,""")
-        append(""""decodeStepTokens":$decodeStepTokens,"thinkingConfigAccepted":$thinkingConfigAccepted,""")
-        append(""""reasoningEndUs":${reasoningEndUs ?: "null"},"firstBodyDeltaUs":${firstBodyDeltaUs ?: "null"},""")
-        append(""""errorCode":${errorCode?.let { "\"$it\"" } ?: "null"}}""")
+    ): String {
+        // raw string 内反斜杠不转义：errorCode 的 JSON 字符串引号须用普通字符串构造。
+        val errorCodeJson = errorCode?.let { "\"" + it + "\"" } ?: "null"
+        return """{"v":2,"completionReason":"$reason","promptTokens":120,"generatedTokens":45,"prefillUs":900000,"decodeUs":450000,"reuseKv":1,"callbackCount":9,"callbackBytes":360,"firstDeltaUs":950000,"errorStage":null,"errorMessage":null,"decodeStepTokens":$decodeStepTokens,"thinkingConfigAccepted":$thinkingConfigAccepted,"reasoningEndUs":$reasoningEndUs,"firstBodyDeltaUs":$firstBodyDeltaUs,"errorCode":$errorCodeJson}"""
     }
 
     @Test
@@ -90,8 +87,8 @@ class NativeGenerationSummaryTest {
 
     @Test
     fun missingOptionalFieldsTolerated() {
-        val json = """{"v":1,"completionReason":"EOS","promptTokens":1,"generatedTokens":1,"""" +
-            """"prefillUs":1,"decodeUs":1,"reuseKv":0,"callbackCount":1,"callbackBytes":4}"""
+        val json =
+            """{"v":1,"completionReason":"EOS","promptTokens":1,"generatedTokens":1,"prefillUs":1,"decodeUs":1,"reuseKv":0,"callbackCount":1,"callbackBytes":4}"""
         val s = NativeGenerationSummary.parse(json)
         assertNotNull(s)
         assertNull(s!!.firstDeltaUs)
