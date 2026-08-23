@@ -45,6 +45,15 @@
 }
 -keep class * implements kotlinx.serialization.KSerializer { *; }
 
+# kotlinx.serialization 官方规则（app 侧补全）：包级 keep 未覆盖的 @Serializable 类
+# （affinity.SpecialEventScript、download、tts、video 等）靠运行时 serializer 反射查找，
+# R8 下 companion/serializer() 被重命名会抛 SerializationException（release 静默失效）。
+-keep,includedescriptorclasses class com.rhodesisland.terminal.**$$serializer { *; }
+-keepclassmembers class com.rhodesisland.terminal.** { *** Companion; }
+-keepclasseswithmembers class com.rhodesisland.terminal.** {
+    kotlinx.serialization.KSerializer serializer(...);
+}
+
 # Compose
 -keepclassmembers class * {
     @androidx.compose.runtime.Composable <methods>;
