@@ -11,6 +11,7 @@ import com.rhodesisland.terminal.data.model.Character
 import com.rhodesisland.terminal.data.model.ChatMessage
 import com.rhodesisland.terminal.data.model.ChatProviderType
 import com.rhodesisland.terminal.data.model.DisplayMessage
+import com.rhodesisland.terminal.data.model.WorldviewTargetType
 import com.rhodesisland.terminal.data.repository.GroupChatRepository
 import com.rhodesisland.terminal.ui.chat.PendingFinal
 import com.rhodesisland.terminal.util.MarkdownParser
@@ -238,6 +239,11 @@ class GroupChatViewModel(
                 var history = container.chatRepository.getHistory(convId)
                 val provider = container.chatProviderManager.getActiveProvider()
                 val mentionIdSet = mentionIds.toSet()
+                // 自定义世界观（绑定到该群聊）注入：一次解析，全部发言共用
+                val worldviewDirective =
+                    container.settingsRepository.worldviewDirectiveFor(
+                        WorldviewTargetType.GROUP, convId.toString(),
+                    )
 
                 speakers.forEach { speaker ->
                     val targeted = speaker.id in mentionIdSet
@@ -249,6 +255,7 @@ class GroupChatViewModel(
                         userPersona = profile.persona,
                         userRelationship = profile.relationship,
                         targeted = targeted,
+                        worldviewDirective = worldviewDirective,
                     )
 
                     var lastStreamRenderMs = 0L

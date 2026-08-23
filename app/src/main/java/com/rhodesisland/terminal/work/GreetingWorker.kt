@@ -13,6 +13,7 @@ import com.rhodesisland.terminal.config.AppConfig
 import com.rhodesisland.terminal.config.isFreeProxyBaseUrl
 import com.rhodesisland.terminal.data.model.ChatMessage
 import com.rhodesisland.terminal.data.model.ChatProviderType
+import com.rhodesisland.terminal.data.model.WorldviewTargetType
 import com.rhodesisland.terminal.data.remote.ChatMessageDto
 import com.rhodesisland.terminal.data.repository.SettingsRepository
 import com.rhodesisland.terminal.notification.AppLifecycleObserver
@@ -264,7 +265,7 @@ class GreetingWorker(
             withTimeout(AppConfig.Greeting.GENERATE_TIMEOUT_MS) {
                 // 博士档案（人设/关系）一并注入主动问候的 system
                 val userDirective = settings.getUserProfileNow().toDirectiveText()
-                generateGreeting(container.directLlmClient, apiConfig, char, history, userDirective)
+                generateGreeting(container.directLlmClient, apiConfig, char, history, userDirective, settings)
             }
         } catch (e: Exception) {
             null
@@ -311,31 +312,19 @@ class GreetingWorker(
         char: com.rhodesisland.terminal.data.model.Character,
         history: List<ChatMessage>,
         userDirective: String,
+        settings: SettingsRepository,
     ): String {
-        val cal = Calendar.getInstance()
-        val hour = cal.get(Calendar.HOUR_OF_DAY)
-        val minute = cal.get(Calendar.MINUTE)
-        val timeStr = "%02d:%02d".format(hour, minute)
-        val period = when (hour) {
-            in 5..7 -> "清晨"
-            in 8..10 -> "上午"
-            in 11..13 -> "中午"
-            in 14..17 -> "下午"
-            in 18..21 -> "傍晚"
-            else -> "晚上"
-        }
-        val instruction = buildString {
-            append("\n\n[系统附加指令] 现在请你主动给用户发一条消息。当前时间 ")
-            append(timeStr).append("（").append(period).append("）。")
-            append("\n要求：")
-            append("\n- 完全符合你的人设、性格与说话风格")
-            append("\n- 可以是打招呼（早安/晚安等）、问候关心、或主动开启一个话题")
-            append("\n- 自然简短，像真人随手发的一条消息（1-3 句）")
-            append("\n- 只输出消息内容本身，不要加角色名前缀、引号或任何解释")
-        }
+        // 时间上下文只注入低基数时段词（不含 HH:mm）：分钟级时间会让 system prompt
+        // 每次不同，云端 prompt 前缀缓存无法复用；时段词同时段内字节稳定（见 GreetingPromptBuilder）。
+        val instruction = GreetingPromptBuilder.buildTimeDirective(
+            Calendar.getInstance().get(Calendar.HOUR_OF_DAY),
+        )
+
+        // 自定义世界观（绑定到该角色的私聊）注入
+        val worldviewDirective = settings.worldviewDirectiveFor(WorldviewTargetType.CHARACTER, char.id)
 
         val messages = buildList {
-            add(ChatMessageDto(role = "system", content = JsonPrimitive(char.systemPrompt + userDirective + instruction)))
+            add(ChatMessageDto(role = "system", content = JsonPrimitive(char.systemPrompt + worldviewDirective + userDirective + instruction)))
             history.forEach { m ->
                 if (m.content.isBlank()) return@forEach
                 // 剥离 <think> 段（深度思考模式下云端回复会带），避免把推理过程当历史喂回

@@ -45,6 +45,8 @@ import coil.compose.AsyncImage
 import com.rhodesisland.terminal.AppContainer
 import com.rhodesisland.terminal.data.model.Conversation
 import com.rhodesisland.terminal.ui.theme.GlassShapes
+import com.rhodesisland.terminal.ui.theme.fieldTextColor
+import com.rhodesisland.terminal.data.model.WorldviewTargetType
 import com.rhodesisland.terminal.ui.glass.frostedGlass
 import com.rhodesisland.terminal.util.GroupCoverStore
 import kotlinx.coroutines.Dispatchers
@@ -83,8 +85,7 @@ fun GroupInfoDialog(
         }
     }
 
-    val isDark = com.rhodesisland.terminal.ui.theme.LocalDarkTheme.current
-    val textColor = if (isDark) androidx.compose.ui.graphics.Color(0xFFE8E4E0) else androidx.compose.ui.graphics.Color(0xFF161616)
+    val textColor = fieldTextColor()
 
     Dialog(onDismissRequest = onDismiss) {
         Column(
@@ -204,6 +205,10 @@ fun GroupInfoDialog(
                     deleteConfirm = false
                     scope.launch {
                         container.groupChatRepository.deleteGroup(group.id)
+                        // 级联清理：移除绑定到该群聊的世界观
+                        container.settingsRepository.removeWorldviewsForTarget(
+                            WorldviewTargetType.GROUP, group.id.toString(),
+                        )
                         onDeleted?.invoke()
                         onDismiss()
                     }

@@ -14,6 +14,7 @@ import com.rhodesisland.terminal.data.model.TtsConfig
 import com.rhodesisland.terminal.data.model.TtsEngine
 import com.rhodesisland.terminal.data.model.TtsLanguage
 import com.rhodesisland.terminal.data.model.VoicePair
+import com.rhodesisland.terminal.data.model.Worldview
 import com.rhodesisland.terminal.config.AppConfig
 import com.rhodesisland.terminal.config.Characters
 import com.rhodesisland.terminal.llm.backend.BackendPreference
@@ -48,6 +49,8 @@ class SettingsRepository(private val store: SettingsStore) {
     val ttsAutoRead: Flow<Boolean> = store.ttsAutoRead
     val activeCharacter: Flow<String> = store.activeCharacter
     val customCharacters: Flow<List<Character>> = store.customCharacters
+    /** 自定义世界观列表（一条绑定一个目标）。 */
+    val worldviews: Flow<List<Worldview>> = store.worldviews
     val volume: Flow<Int> = store.volume
     val musicFavorites: Flow<Set<String>> = store.musicFavorites
     val musicRepeatMode: Flow<Int> = store.musicRepeatMode
@@ -74,6 +77,8 @@ class SettingsRepository(private val store: SettingsStore) {
     val localThinkingLevel: Flow<LocalThinkingLevel> = store.localThinkingLevel
     /** 性能浮窗液态玻璃开关（默认开）。 */
     val liquidGlass: Flow<Boolean> = store.liquidGlass
+    /** 聊天顶栏第二行控件（云端/本地 + 快捷开关）是否展开（默认开）。 */
+    val chatTopBarExpanded: Flow<Boolean> = store.chatTopBarExpanded
     /** 推理参数是否相对上次成功加载已变更（供设置页展示"将自动重载"横幅）*/
     val llmConfigChanged: Flow<Boolean> = store.llmConfigChanged
 
@@ -138,6 +143,53 @@ class SettingsRepository(private val store: SettingsStore) {
     suspend fun setCustomCharacters(list: List<Character>) = store.setCustomCharacters(list)
     suspend fun updateCustomCharacters(transform: (List<Character>) -> List<Character>) =
         store.updateCustomCharacters(transform)
+
+    /** 同步获取世界观（超时/异常返回空列表）。 */
+    suspend fun getWorldviewsNow(): List<Worldview> = dataStoreFirst(worldviews, emptyList())
+
+    /** 原子更新世界观（同目标 upsert 由 transform 内实现）。 */
+    suspend fun updateWorldviews(transform: (List<Worldview>) -> List<Worldview>) =
+        store.updateWorldviews(transform)
+
+    /**
+     * 保存世界观（一一对应 upsert）：移除同一目标上的旧绑定后写入。
+     * 返回被替换掉的旧条目（无则 null），供 UI 提示「已替换」。
+     */
+    suspend fun upsertWorldview(worldview: Worldview): Worldview? {
+        var replaced: Worldview? = null
+        updateWorldviews { current ->
+            replaced = current.firstOrNull {
+                it.targetType == worldview.targetType && it.targetId == worldview.targetId && it.id != worldview.id
+            }
+            val result = current.toMutableList()
+            result.removeAll {
+                it.targetType == worldview.targetType && it.targetId == worldview.targetId ||
+                    it.id == worldview.id  // 编辑改名等场景：同 id 也视为同一条
+            }
+            result.add(worldview)
+            result
+        }
+        return replaced
+    }
+
+    /** 删除指定 id 的世界观。 */
+    suspend fun removeWorldview(id: String) {
+        updateWorldviews { current -> current.filterNot { it.id == id } }
+    }
+
+    /** 级联清理：删除角色/群聊时移除其绑定的世界观。 */
+    suspend fun removeWorldviewsForTarget(targetType: String, targetId: String) {
+        updateWorldviews { current ->
+            current.filterNot { it.targetType == targetType && it.targetId == targetId }
+        }
+    }
+
+    /** 查找绑定到指定目标的 worldview 指令文本（无绑定返回空串）。 */
+    suspend fun worldviewDirectiveFor(targetType: String, targetId: String): String =
+        getWorldviewsNow()
+            .firstOrNull { it.targetType == targetType && it.targetId == targetId }
+            ?.directiveText()
+            .orEmpty()
     suspend fun setVolume(vol: Int) = store.setVolume(vol)
     suspend fun toggleMusicFavorite(key: String) = store.toggleMusicFavorite(key)
     suspend fun setMusicRepeatMode(mode: Int) = store.setMusicRepeatMode(mode)
@@ -170,6 +222,8 @@ class SettingsRepository(private val store: SettingsStore) {
     suspend fun setLocalThinkingLevel(level: LocalThinkingLevel) = store.setLocalThinkingLevel(level)
 
     suspend fun setLiquidGlass(enabled: Boolean) = store.setLiquidGlass(enabled)
+
+    suspend fun setChatTopBarExpanded(expanded: Boolean) = store.setChatTopBarExpanded(expanded)
 
     suspend fun setGreetingEnabled(enabled: Boolean) = store.setGreetingEnabled(enabled)
     suspend fun setGreetingCharacterIds(ids: Set<String>) = store.setGreetingCharacterIds(ids)

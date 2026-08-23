@@ -12,6 +12,7 @@ import com.rhodesisland.terminal.data.model.ChatProviderType
 import com.rhodesisland.terminal.data.model.GroupChatConfig
 import com.rhodesisland.terminal.data.model.SeedanceConfig
 import com.rhodesisland.terminal.data.model.UserProfileConfig
+import com.rhodesisland.terminal.data.model.Worldview
 import com.rhodesisland.terminal.data.model.SeedanceModelVariant
 import com.rhodesisland.terminal.data.model.SeedanceRatio
 import com.rhodesisland.terminal.data.model.SeedanceResolution
@@ -78,6 +79,8 @@ class SettingsStore(
         // 角色
         val ACTIVE_CHARACTER = stringPreferencesKey("active_character")
         val CUSTOM_CHARACTERS = stringPreferencesKey("custom_characters")  // JSON: List<Character>
+        // 自定义世界观（JSON: List<Worldview>，一条绑定一个目标）
+        val WORLDVIEWS = stringPreferencesKey("worldviews")
 
         // 会话：角色 -> 当前活跃会话 id
         val ACTIVE_CONVERSATIONS = stringPreferencesKey("active_conversations")  // JSON: Map<String, Long>
@@ -112,6 +115,8 @@ class SettingsStore(
         val THINKING_LEVEL = stringPreferencesKey(LocalInferenceSettings.THINKING_LEVEL_KEY)
         // 性能监控浮窗液态玻璃效果开关（默认开）：backdrop blur + 镜面高光 + 旋转虹彩光晕；关闭则用普通深色面板
         val LIQUID_GLASS = booleanPreferencesKey("liquid_glass_perf_overlay")
+        // 聊天顶栏第二行控件（云端/本地 + 快捷开关）是否展开（默认开）
+        val CHAT_TOPBAR_CONTROLS_EXPANDED = booleanPreferencesKey("chat_topbar_controls_expanded")
 
         // 通讯界面自定义背景：是否启用 + 内部存储图片绝对路径列表（JSON List<String>，有序）。
         // 所选相册图复制到 filesDir/chat_backgrounds/，仅存路径，不依赖 SAF 持久权限。
@@ -431,6 +436,35 @@ class SettingsStore(
         }
     }
 
+    // ===== 自定义世界观 =====
+    /** 世界观列表（JSON: List<Worldview>，容错空列表）。 */
+    val worldviews: Flow<List<Worldview>> = dataStore.data.map { p ->
+        val raw = p[Keys.WORLDVIEWS] ?: ""
+        if (raw.isBlank()) emptyList()
+        else try {
+            voiceJson.decodeFromString<List<Worldview>>(raw)
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    suspend fun setWorldviews(list: List<Worldview>) {
+        dataStore.edit { it[Keys.WORLDVIEWS] = voiceJson.encodeToString(list) }
+    }
+
+    /**
+     * 原子地更新世界观：读-改-写在单个 DataStore edit 事务内完成（仿 [updateCustomCharacters]）。
+     * 一一对应约束由调用方在 transform 内保证（同目标 upsert）。
+     */
+    suspend fun updateWorldviews(transform: (List<Worldview>) -> List<Worldview>) {
+        dataStore.edit { p ->
+            val raw = p[Keys.WORLDVIEWS] ?: ""
+            val current: List<Worldview> = if (raw.isBlank()) emptyList()
+            else runCatching { voiceJson.decodeFromString<List<Worldview>>(raw) }.getOrDefault(emptyList())
+            p[Keys.WORLDVIEWS] = voiceJson.encodeToString(transform(current))
+        }
+    }
+
     // ===== 音量 =====
     val volume: Flow<Int> = dataStore.data.map { p ->
         p[Keys.VOLUME] ?: 60
@@ -618,6 +652,16 @@ class SettingsStore(
 
     suspend fun setLiquidGlass(enabled: Boolean) {
         dataStore.edit { it[Keys.LIQUID_GLASS] = enabled }
+    }
+
+    // ===== 聊天顶栏第二行控件折叠 =====
+    /** 聊天顶栏第二行（云端/本地 + 快捷开关）是否展开（默认开）。 */
+    val chatTopBarExpanded: Flow<Boolean> = dataStore.data.map { p ->
+        p[Keys.CHAT_TOPBAR_CONTROLS_EXPANDED] ?: true
+    }
+
+    suspend fun setChatTopBarExpanded(expanded: Boolean) {
+        dataStore.edit { it[Keys.CHAT_TOPBAR_CONTROLS_EXPANDED] = expanded }
     }
 
     // ===== 通讯界面自定义背景 =====

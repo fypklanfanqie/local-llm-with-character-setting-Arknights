@@ -3,6 +3,8 @@ package com.rhodesisland.terminal.ui.groupchat
 import com.rhodesisland.terminal.config.AppConfig
 import com.rhodesisland.terminal.data.model.Character
 import com.rhodesisland.terminal.data.model.ChatMessage
+import com.rhodesisland.terminal.data.model.Worldview
+import com.rhodesisland.terminal.data.model.WorldviewTargetType
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -176,5 +178,39 @@ class GroupChatPromptBuilderTest {
         assertEquals(emptyList<String>(), GroupChatPromptBuilder.extractMentions("@路人甲 你好", names))
         // 名字后紧跟文字（无边界）不误匹配
         assertEquals(emptyList<String>(), GroupChatPromptBuilder.extractMentions("@阿米娅酱 你好", names))
+    }
+
+    // ===== 自定义世界观注入 =====
+
+    @Test
+    fun buildSystemPrompt_worldviewInjectedNearTopWhenPresent() {
+        val a = char("a", "阿米娅")
+        val directive = Worldview("id", "末日", "故事发生在末日废土。", WorldviewTargetType.GROUP, "1")
+            .directiveText()
+        val with = GroupChatPromptBuilder.buildSystemPrompt(
+            listOf(a), a, askUser = false, worldviewDirective = directive,
+        )
+        assertTrue(with.contains("[世界观设定]"))
+        assertTrue(with.contains("故事发生在末日废土。"))
+        assertTrue(with.contains("请严格遵循以上世界观的设定进行对话"))
+        // 世界观在群聊开场白之后、成员人设之前（靠近顶部，权重高）
+        val openingEnd = with.indexOf("」。\n") + "」。\n".length
+        val personaStart = with.indexOf("以下是群成员人设")
+        val worldviewIdx = with.indexOf("[世界观设定]")
+        assertTrue(worldviewIdx in openingEnd until personaStart)
+
+        val without = GroupChatPromptBuilder.buildSystemPrompt(listOf(a), a, askUser = false)
+        assertFalse(without.contains("[世界观设定]"))
+    }
+
+    @Test
+    fun buildApiMessages_worldviewFlowsThroughToSystemMessage() {
+        val a = char("a", "阿米娅")
+        val messages = GroupChatPromptBuilder.buildApiMessages(
+            members = listOf(a), speaker = a, history = emptyList(), askUser = false,
+            worldviewDirective = "\n[世界观设定]\nW\n请严格遵循以上世界观的设定进行对话。",
+        )
+        assertEquals("system", messages.first().role)
+        assertTrue(messages.first().content.contains("[世界观设定]"))
     }
 }

@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.rhodesisland.terminal.AppContainer
 import com.rhodesisland.terminal.data.model.Conversation
+import com.rhodesisland.terminal.data.model.WorldviewTargetType
 import com.rhodesisland.terminal.util.MarkdownParser
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -69,6 +70,10 @@ class GroupListViewModel(
     fun deleteGroup(id: Long) {
         viewModelScope.launch {
             container.groupChatRepository.deleteGroup(id)
+            // 级联清理：移除绑定到该群聊的世界观
+            container.settingsRepository.removeWorldviewsForTarget(
+                WorldviewTargetType.GROUP, id.toString(),
+            )
         }
     }
 

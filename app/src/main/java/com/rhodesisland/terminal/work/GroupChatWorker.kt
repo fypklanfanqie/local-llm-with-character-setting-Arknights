@@ -16,6 +16,7 @@ import com.rhodesisland.terminal.data.model.Character
 import com.rhodesisland.terminal.data.model.ChatMessage
 import com.rhodesisland.terminal.data.model.ChatProviderType
 import com.rhodesisland.terminal.data.model.GroupChatConfig
+import com.rhodesisland.terminal.data.model.WorldviewTargetType
 import com.rhodesisland.terminal.data.remote.ChatMessageDto
 import com.rhodesisland.terminal.data.remote.DirectLlmClient
 import com.rhodesisland.terminal.data.repository.SettingsRepository
@@ -208,6 +209,9 @@ class GroupChatWorker(
 
         // 博士档案（人设/关系）注入每一条自动发言的 system
         val profile = settings.getUserProfileNow()
+        // 自定义世界观（绑定到该群聊）注入：一次解析，本轮全部发言共用
+        val worldviewDirective =
+            settings.worldviewDirectiveFor(WorldviewTargetType.GROUP, convId.toString())
 
         val wakeLock = acquireGroupWakeLock(context)
         try {
@@ -228,6 +232,7 @@ class GroupChatWorker(
                     val content = generateGroupMessage(
                         container.directLlmClient, apiConfig, members, char, history0,
                         askUser = true, userPersona = profile.persona, userRelationship = profile.relationship,
+                        worldviewDirective = worldviewDirective,
                     )
                     if (!content.isNullOrBlank()) {
                         container.groupChatRepository.sendMemberMessage(convId, char.id, content)
@@ -252,6 +257,7 @@ class GroupChatWorker(
                     val content = generateGroupMessage(
                         container.directLlmClient, apiConfig, members, char, history,
                         askUser = false, userPersona = profile.persona, userRelationship = profile.relationship,
+                        worldviewDirective = worldviewDirective,
                     )
                     if (content.isNullOrBlank()) return@repeat
                     container.groupChatRepository.sendMemberMessage(convId, char.id, content)
@@ -287,11 +293,13 @@ class GroupChatWorker(
         askUser: Boolean,
         userPersona: String?,
         userRelationship: String?,
+        worldviewDirective: String = "",
     ): String? {
         val messages = GroupChatPromptBuilder.buildApiMessages(
             members, speaker, history, askUser,
             userPersona = userPersona,
             userRelationship = userRelationship,
+            worldviewDirective = worldviewDirective,
         ).map { ChatMessageDto(it.role, JsonPrimitive(it.content)) }
         return try {
             withTimeout(AppConfig.GroupChat.GENERATE_TIMEOUT_MS) {

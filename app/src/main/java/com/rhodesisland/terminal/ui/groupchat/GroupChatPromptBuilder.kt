@@ -30,6 +30,7 @@ object GroupChatPromptBuilder {
         userPersona: String? = null,
         userRelationship: String? = null,
         targeted: Boolean = false,
+        worldviewDirective: String = "",
     ): List<ChatMessage> {
         val nameById = members.associate { it.id to it.name }
         val mappedHistory = history.takeLast(AppConfig.GroupChat.MAX_CONTEXT_MESSAGES).mapNotNull { m ->
@@ -45,7 +46,7 @@ object GroupChatPromptBuilder {
             }
         }
         return buildList {
-            add(ChatMessage(role = "system", content = buildSystemPrompt(members, speaker, askUser, userPersona, userRelationship, targeted)))
+            add(ChatMessage(role = "system", content = buildSystemPrompt(members, speaker, askUser, userPersona, userRelationship, targeted, worldviewDirective)))
             addAll(mappedHistory)
         }
     }
@@ -57,8 +58,12 @@ object GroupChatPromptBuilder {
         userPersona: String? = null,
         userRelationship: String? = null,
         targeted: Boolean = false,
+        worldviewDirective: String = "",
     ): String = buildString {
         append("这是一个罗德岛干员群聊。你在群里扮演「", speaker.name, "」。\n")
+        if (worldviewDirective.isNotBlank()) {
+            append(worldviewDirective.trim(), "\n")
+        }
         append("以下是群成员人设：\n")
         members.forEach { m ->
             append("- ", m.name, "（", m.role, "）：", m.systemPrompt.take(AppConfig.GroupChat.PERSONA_MAX_CHARS), "\n")
