@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Redeem
@@ -43,12 +44,13 @@ import androidx.compose.ui.unit.sp
 import com.rhodesisland.terminal.AppContainer
 import com.rhodesisland.terminal.config.Characters
 import com.rhodesisland.terminal.data.model.Character
+import com.rhodesisland.terminal.data.model.WorldviewTargetType
 import com.rhodesisland.terminal.ui.glass.GlassLargeTitle
 import com.rhodesisland.terminal.ui.glass.GlassSheet
 import com.rhodesisland.terminal.ui.glass.frostedGlass
 import com.rhodesisland.terminal.ui.glass.monogramGradient
 import com.rhodesisland.terminal.ui.theme.GlassShapes
-import com.rhodesisland.terminal.ui.theme.LocalDarkTheme
+import com.rhodesisland.terminal.ui.theme.fieldTextColor
 import com.rhodesisland.terminal.util.CharacterImageStore
 import com.rhodesisland.terminal.util.PrtsImageLoader
 import com.rhodesisland.terminal.ui.affinity.AffinityScreen
@@ -79,8 +81,11 @@ fun CharactersScreen(
     val context = LocalContext.current
 
     var showCreate by remember { mutableStateOf(false) }
+    var editTarget by remember { mutableStateOf<Character?>(null) }
     var showImport by remember { mutableStateOf(false) }
     var showPersona by remember { mutableStateOf<Character?>(null) }
+    /** 待确认删除的自定义角色（非空时显示确认弹窗）。 */
+    var deleteTarget by remember { mutableStateOf<Character?>(null) }
     var toast by remember { mutableStateOf<String?>(null) }
 
     // 干员搜索：按名称 / 代号过滤（全量 384 位干员）
@@ -212,12 +217,10 @@ fun CharactersScreen(
                             }
                         },
                         onDelete = if (char.isCustom) {
-                            {
-                                scope.launch {
-                                    CharacterImageStore.delete(context, char.image)
-                                    container.characterRepository.removeCustom(char.id)
-                                }
-                            }
+                            { deleteTarget = char }
+                        } else null,
+                        onEdit = if (char.isCustom) {
+                            { editTarget = char }
                         } else null,
                         onViewPersona = { showPersona = char },
                         onViewAffinity = { onOpenAffinity(char.id) },
@@ -242,6 +245,49 @@ fun CharactersScreen(
             onConfirm = { c ->
                 scope.launch { container.characterRepository.addCustom(c) }
                 showCreate = false
+            },
+        )
+    }
+    editTarget?.let { existing ->
+        CustomCharacterDialog(
+            existing = existing,
+            onDismiss = { editTarget = null },
+            onConfirm = { c ->
+                // 编辑保留原 id（改名不换 id，否则会话/音色映射/活跃角色引用全断）
+                scope.launch { container.characterRepository.addCustom(c.copy(id = existing.id)) }
+                editTarget = null
+            },
+        )
+    }
+    deleteTarget?.let { char ->
+        val deleteScheme = MaterialTheme.colorScheme
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+            title = { Text("删除角色", color = deleteScheme.onSurface) },
+            text = {
+                Text(
+                    "确定删除自定义角色「${char.name}」？将同时删除其立绘，不可恢复。",
+                    color = deleteScheme.onSurface,
+                    fontSize = 14.sp,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    deleteTarget = null
+                    scope.launch {
+                        CharacterImageStore.delete(context, char.image)
+                        container.characterRepository.removeCustom(char.id)
+                        // 级联清理：移除绑定到该角色的世界观
+                        container.settingsRepository.removeWorldviewsForTarget(
+                            WorldviewTargetType.CHARACTER, char.id,
+                        )
+                    }
+                }) { Text("删除", color = deleteScheme.error, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteTarget = null }) { Text("取消", color = deleteScheme.onSurfaceVariant) }
             },
         )
     }
@@ -283,6 +329,7 @@ private fun CharacterCard(
     onSelect: () -> Unit,
     onVoiceClick: () -> Unit,
     onDelete: (() -> Unit)?,
+    onEdit: (() -> Unit)? = null,
     onViewPersona: () -> Unit,
     onViewAffinity: () -> Unit,
     hasUnreadAffinityEvent: Boolean,
@@ -349,6 +396,19 @@ private fun CharacterCard(
                     Spacer(Modifier.width(4.dp))
                     Text("查看人设", color = scheme.onSurfaceVariant, fontSize = 11.5.sp)
                 }
+                if (onEdit != null) {
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .clickable(onClick = onEdit)
+                            .padding(horizontal = 8.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Filled.Edit, contentDescription = null, tint = scheme.primary, modifier = Modifier.size(12.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("编辑", color = scheme.primary, fontSize = 11.5.sp)
+                    }
+                }
                 Box {
                     Row(
                         modifier = Modifier
@@ -385,11 +445,17 @@ private fun CharacterCard(
             }
         }
         if (onDelete != null) {
-            IconButton(
-                onClick = onDelete,
-                modifier = Modifier.align(Alignment.TopStart).size(26.dp),
+            // 删除按钮加大 + 深色半透明圆形底衬，避免小图标看不清；点击仅弹确认，不直接删除
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f)),
             ) {
-                Icon(Icons.Filled.Delete, contentDescription = "删除", tint = scheme.error, modifier = Modifier.size(15.dp))
+                IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Filled.Delete, contentDescription = "删除", tint = scheme.error, modifier = Modifier.size(18.dp))
+                }
             }
         }
     }
@@ -504,47 +570,71 @@ fun CharacterPortrait(
 }
 
 /**
- * 新建自定义角色弹窗
+ * 新建 / 编辑自定义角色弹窗。
+ *
+ * [existing] 非空时为编辑模式：各字段预填、确认按钮显示「保存」；
+ * 返回的 Character 由调用方负责保留原 id（本弹窗不派生 id）。
  */
 @Composable
 fun CustomCharacterDialog(
     onDismiss: () -> Unit,
     onConfirm: (Character) -> Unit,
+    existing: Character? = null,
 ) {
     val scheme = MaterialTheme.colorScheme
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var name by remember { mutableStateOf("") }
-    var code by remember { mutableStateOf("") }
-    var role by remember { mutableStateOf("") }
-    var race by remember { mutableStateOf("") }
-    var image by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf(existing?.name ?: "") }
+    var code by remember { mutableStateOf(existing?.code ?: "") }
+    var role by remember { mutableStateOf(existing?.role ?: "") }
+    var race by remember { mutableStateOf(existing?.race ?: "") }
+    var image by remember { mutableStateOf(existing?.image ?: "") }
+    val originalImage = existing?.image.orEmpty()
+    // 选择新立绘后先保留旧文件，只有保存成功才替换；取消编辑时清理本次新建文件。
+    var pendingImagePaths by remember { mutableStateOf<Set<String>>(emptySet()) }
     var savingImage by remember { mutableStateOf(false) }
     var saveError by remember { mutableStateOf(false) }
-    var systemPrompt by remember { mutableStateOf("") }
+    var systemPrompt by remember { mutableStateOf(existing?.systemPrompt ?: "") }
 
     val imagePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
     ) { uri ->
         if (uri != null) {
+            val currentImage = image
+            val previousPending = pendingImagePaths
             savingImage = true
             saveError = false
             scope.launch(Dispatchers.IO) {
-                CharacterImageStore.delete(context, image)
                 val saved = CharacterImageStore.save(context, uri)
                 withContext(Dispatchers.Main) {
-                    if (saved != null) image = saved else saveError = true
+                    if (saved != null) {
+                        // 之前选过但尚未确认的图片已失效，清理其内部文件。
+                        previousPending.forEach { CharacterImageStore.delete(context, it) }
+                        if (currentImage.isNotBlank() && currentImage != originalImage && currentImage !in previousPending) {
+                            CharacterImageStore.delete(context, currentImage)
+                        }
+                        pendingImagePaths = setOf(saved)
+                        image = saved
+                    } else {
+                        saveError = true
+                    }
                     savingImage = false
                 }
             }
         }
     }
 
+    fun discardPendingImages() {
+        pendingImagePaths.forEach { CharacterImageStore.delete(context, it) }
+        pendingImagePaths = emptySet()
+        onDismiss()
+    }
+
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = ::discardPendingImages,
         containerColor = scheme.surfaceContainerHigh,
         titleContentColor = scheme.onSurface,
-        title = { Text("新建自定义角色", color = scheme.onSurface) },
+        title = { Text(if (existing == null) "新建自定义角色" else "编辑角色", color = scheme.onSurface) },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -564,7 +654,10 @@ fun CustomCharacterDialog(
                         )
                     },
                     onClear = {
-                        CharacterImageStore.delete(context, image)
+                        if (image in pendingImagePaths) {
+                            CharacterImageStore.delete(context, image)
+                            pendingImagePaths = pendingImagePaths - image
+                        }
                         image = ""
                         saveError = false
                     },
@@ -588,10 +681,24 @@ fun CustomCharacterDialog(
                 enabled = !savingImage,
                 onClick = {
                     if (name.isBlank() || systemPrompt.isBlank()) return@TextButton
-                    val id = "custom-" + name.trim().replace(" ", "_")
-                    onConfirm(
+                    val character = if (existing != null) {
+                        // 编辑：保留原 id，仅更新字段
+                        val updated = existing.copy(
+                            name = name.trim(),
+                            code = code.trim(),
+                            role = role.trim(),
+                            race = race.trim(),
+                            systemPrompt = systemPrompt.trim(),
+                            image = image.trim(),
+                        )
+                        // 换了立绘：清理被替换的旧内部文件（新图已由 pendingImagePaths 接管）
+                        if (originalImage.isNotBlank() && image.trim() != originalImage) {
+                            CharacterImageStore.delete(context, originalImage)
+                        }
+                        updated
+                    } else {
                         Character(
-                            id = id,
+                            id = "custom-" + name.trim().replace(" ", "_"),
                             name = name.trim(),
                             code = code.trim(),
                             role = role.trim(),
@@ -599,13 +706,20 @@ fun CustomCharacterDialog(
                             systemPrompt = systemPrompt.trim(),
                             image = image.trim(),
                             isCustom = true,
-                        ),
-                    )
+                        )
+                    }
+                    onConfirm(character)
+                    pendingImagePaths = emptySet()
                 },
-            ) { Text("创建", color = if (savingImage) scheme.onSurfaceVariant else scheme.primary) }
+            ) {
+                Text(
+                    if (existing == null) "创建" else "保存",
+                    color = if (savingImage) scheme.onSurfaceVariant else scheme.primary,
+                )
+            }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消", color = scheme.onSurfaceVariant) }
+            TextButton(onClick = ::discardPendingImages) { Text("取消", color = scheme.onSurfaceVariant) }
         },
     )
 }
@@ -712,8 +826,6 @@ private fun GlassField(
     singleLine: Boolean = false,
 ) {
     val scheme = MaterialTheme.colorScheme
-    val isDark = LocalDarkTheme.current
-    val textColor = if (isDark) androidx.compose.ui.graphics.Color(0xFFE8E4E0) else androidx.compose.ui.graphics.Color(0xFF161616)
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
@@ -721,7 +833,7 @@ private fun GlassField(
             .clip(RoundedCornerShape(12.dp))
             .background(scheme.surface.copy(alpha = 0.6f))
             .padding(10.dp),
-        textStyle = TextStyle(color = textColor, fontSize = 13.sp),
+        textStyle = TextStyle(color = fieldTextColor(), fontSize = 13.sp),
         singleLine = singleLine,
         cursorBrush = androidx.compose.ui.graphics.SolidColor(scheme.primary),
     )

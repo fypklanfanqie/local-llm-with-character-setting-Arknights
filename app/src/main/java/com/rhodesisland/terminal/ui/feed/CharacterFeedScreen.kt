@@ -47,6 +47,7 @@ import androidx.compose.foundation.pager.VerticalPager
 import com.rhodesisland.terminal.AppContainer
 import com.rhodesisland.terminal.config.Characters
 import com.rhodesisland.terminal.data.model.Character
+import com.rhodesisland.terminal.data.model.WorldviewTargetType
 import com.rhodesisland.terminal.ui.characters.CustomCharacterDialog
 import com.rhodesisland.terminal.ui.characters.PersonaSheet
 import com.rhodesisland.terminal.ui.applySystemBarIcons
@@ -316,6 +317,10 @@ fun CharacterFeedScreen(
                     scope.launch {
                         CharacterImageStore.delete(context, char.image)
                         container.characterRepository.removeCustom(char.id)
+                        // 级联清理：移除绑定到该角色的世界观
+                        container.settingsRepository.removeWorldviewsForTarget(
+                            WorldviewTargetType.CHARACTER, char.id,
+                        )
                         if (activeCharacter == char.id) {
                             container.settingsRepository.setActiveCharacter(Characters.DEFAULT_CHARACTER_ID)
                         }

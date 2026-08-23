@@ -11,12 +11,12 @@ import kotlinx.coroutines.flow.map
  */
 class CharacterRepository(private val settings: SettingsRepository) {
 
-    /** 预设 + 自定义角色（预设顺序在前，自定义追加在后） */
+    /** 预设 + 自定义角色（自定义在前，用户自建的角色优先展示） */
     val characters: Flow<List<Character>> = settings.customCharacters.map { custom ->
         // getOrderedList() 已返回按展示顺序排好的 List<Character>，无需再用 ALL 重新索引
         // （旧写法 mapNotNull { Characters.ALL[it] } 中 it 是 Character，而 ALL 的 key 是 String，
         //  类型不匹配会导致编译错误）
-        Characters.getOrderedList() + custom
+        custom + Characters.getOrderedList()
     }
 
     suspend fun getNow(id: String): Character? {
