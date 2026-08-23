@@ -3,6 +3,7 @@ package com.rhodesisland.terminal.ui.theme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
@@ -45,8 +46,9 @@ val IrisDarkColors: ColorScheme = darkColorScheme(
     inverseOnSurface = Color(0xFF14161C),
     outline = Color(0xFF3A352E),
     outlineVariant = Color(0xFF26221C),
-    error = Color(0xFFB55A5A),
-    onError = Color.White,
+    // error 提亮至深底 ≥5:1（WCAG AA）；旧 #B55A5A 在 10-11sp 小字场景 ≈4.2:1 不达标
+    error = Color(0xFFE08A8A),
+    onError = Color(0xFF3A1515),
     errorContainer = Color(0xFF3A1F1F),
     onErrorContainer = Color(0xFFFFD8D0),
     scrim = Color.Black,
@@ -60,16 +62,18 @@ val IrisDarkColors: ColorScheme = darkColorScheme(
 )
 
 val IrisLightColors: ColorScheme = lightColorScheme(
+    // 亮金 #D4B88C 底配白字仅 ≈1.9:1；onPrimary/onSecondary/onTertiary 统一深色保证可读
+    // （当前应用强制深色，本调色板为死代码，此处修正防未来恢复亮色主题时爆雷）
     primary = IrisPrimaryLight,
-    onPrimary = Color.White,
+    onPrimary = Color(0xFF1A1510),
     primaryContainer = Color(0xFFE6DEFF),
     onPrimaryContainer = Color(0xFF1E104F),
     secondary = IrisViolet,
-    onSecondary = Color.White,
+    onSecondary = Color(0xFF0D1B1A),
     secondaryContainer = Color(0xFFE6DEFF),
     onSecondaryContainer = Color(0xFF1E104F),
     tertiary = IrisMint,
-    onTertiary = Color.White,
+    onTertiary = Color(0xFF0B1D1C),
     tertiaryContainer = Color(0xFFCDF3EC),
     onTertiaryContainer = Color(0xFF00201E),
     background = Color(0xFFF2F3F8),
@@ -132,3 +136,19 @@ val LightGlassTokens = GlassTokens(
 )
 
 val LocalGlassTokens = staticCompositionLocalOf { DarkGlassTokens }
+
+// ---------- 输入框文字色（统一 token） ----------
+// 历史上 5 处输入框各自硬编码同一对颜色值；收敛到此处，改主题只动一个文件。
+val FieldTextDark = Color(0xFFE8E4E0)      // 深色主题输入文字
+val FieldTextLight = Color(0xFF161616)     // 浅色主题输入文字
+val FieldPlaceholderDark = Color(0xFF9A9690)  // 深色主题占位符
+val FieldPlaceholderLight = Color(0xFF6E6A64) // 浅色主题占位符
+
+/** 输入框文字色统一入口（按主题自适应；历史上散布 5 处的硬编码收敛于此）。 */
+@Composable
+fun fieldTextColor(): Color = if (LocalDarkTheme.current) FieldTextDark else FieldTextLight
+
+/** 输入框占位符色统一入口。 */
+@Composable
+fun fieldPlaceholderColor(): Color =
+    if (LocalDarkTheme.current) FieldPlaceholderDark else FieldPlaceholderLight

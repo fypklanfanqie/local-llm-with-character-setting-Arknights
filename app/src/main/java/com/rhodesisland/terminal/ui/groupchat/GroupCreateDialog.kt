@@ -52,7 +52,7 @@ import com.rhodesisland.terminal.AppContainer
 import com.rhodesisland.terminal.config.AppConfig
 import com.rhodesisland.terminal.ui.glass.frostedGlass
 import com.rhodesisland.terminal.ui.theme.GlassShapes
-import com.rhodesisland.terminal.ui.theme.LocalDarkTheme
+import com.rhodesisland.terminal.ui.theme.fieldTextColor
 import com.rhodesisland.terminal.util.GroupCoverStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -89,8 +89,7 @@ fun GroupCreateDialog(
         }
     }
 
-    val isDark = LocalDarkTheme.current
-    val textColor = if (isDark) androidx.compose.ui.graphics.Color(0xFFE8E4E0) else androidx.compose.ui.graphics.Color(0xFF161616)
+    val textColor = fieldTextColor()
 
     Dialog(onDismissRequest = onDismiss) {
         Column(

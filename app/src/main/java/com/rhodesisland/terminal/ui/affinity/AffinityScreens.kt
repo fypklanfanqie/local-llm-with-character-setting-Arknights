@@ -220,8 +220,8 @@ private fun EventArchiveNode(threshold: Int, event: SpecialEvent?, enabled: Bool
     Surface(color = archiveSurfaceColor(), shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(48.dp)) {
-                Text("$threshold", color = if (enabled) archivePrimaryColor() else Color(0xFF77808C), fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Text("AFF", color = Color(0xFF77808C), fontSize = 8.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                Text("$threshold", color = if (enabled) archivePrimaryColor() else Color(0xFFAAB4C1), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text("AFF", color = Color(0xFFAAB4C1), fontSize = 8.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
