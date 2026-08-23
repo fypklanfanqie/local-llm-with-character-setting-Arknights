@@ -2,13 +2,19 @@ package com.rhodesisland.terminal.ui.chat
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -29,6 +35,7 @@ import androidx.compose.material.icons.automirrored.outlined.VolumeUp
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.filled.CardGiftcard
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
@@ -45,6 +52,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -210,6 +218,9 @@ fun ChatScreen(
 
     val isLocal = state.activeProvider == ChatProviderType.LOCAL
     val exportScope = rememberCoroutineScope()
+    // 顶栏第二行控件展开态（DataStore 持久，跨进程重启保留）
+    val topBarControlsExpanded by container.settingsRepository.chatTopBarExpanded
+        .collectAsState(initial = true)
     val conversationExportWriter = remember { ConversationExportWriter(context.applicationContext) }
     var pendingConversationExport by remember { mutableStateOf<ConversationExportDocument?>(null) }
     var pendingImageMode by remember { mutableStateOf<ConversationImageMode?>(null) }
@@ -442,6 +453,12 @@ fun ChatScreen(
                 deepThinkingEnabled = state.deepThinkingEnabled,
                 videoAutoEnabled = state.activeConversationAutoVideoEnabled,
                 videoToggleDisabled = isLocal,
+                controlsExpanded = topBarControlsExpanded,
+                onToggleControlsExpanded = {
+                    exportScope.launch {
+                        container.settingsRepository.setChatTopBarExpanded(!topBarControlsExpanded)
+                    }
+                },
                 onBack = onBack,
                 onClickCharacter = onNavigateToCharacters,
                 onSwitchProvider = { viewModel.switchProvider(it) },
@@ -806,6 +823,8 @@ private fun ChatTopBar(
     deepThinkingEnabled: Boolean,
     videoAutoEnabled: Boolean,
     videoToggleDisabled: Boolean,
+    controlsExpanded: Boolean,
+    onToggleControlsExpanded: () -> Unit,
     onBack: () -> Unit,
     onClickCharacter: () -> Unit,
     onSwitchProvider: (ChatProviderType) -> Unit,
@@ -825,7 +844,7 @@ private fun ChatTopBar(
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        // 第一行：返回 + 头像/角色名（角色信息占满剩余空间）。
+        // 第一行：返回 + 头像/角色名（角色信息占满剩余空间）+ 折叠箭头。
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -877,17 +896,35 @@ private fun ChatTopBar(
                     )
                 }
             }
+
+            // 第二行控件折叠开关：箭头随展开态旋转（展开朝上 / 收起朝下）
+            val chevronRotation by animateFloatAsState(
+                targetValue = if (controlsExpanded) 0f else 180f,
+                animationSpec = tween(durationMillis = 250),
+                label = "topBarChevron",
+            )
+            IconBubble(
+                icon = Icons.Filled.KeyboardArrowUp,
+                contentDescription = if (controlsExpanded) "收起操作栏" else "展开操作栏",
+                onClick = onToggleControlsExpanded,
+                modifier = Modifier.graphicsLayer { rotationZ = chevronRotation },
+            )
         }
 
         // 第二行：云端/本地 + 深度思考 + 视频 + 会话记录 + 中英文切换。
-        // 整组横向居中（竖屏下居中对齐）；内容超宽时横向滑动兜底。
-        Row(
-            modifier = Modifier
-                .align(Alignment.CenterHorizontally)
-                .horizontalScroll(rememberScrollState()),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        // 整组横向居中（竖屏下居中对齐）；内容超宽时横向滑动兜底。可整体折叠。
+        AnimatedVisibility(
+            visible = controlsExpanded,
+            enter = expandVertically(animationSpec = tween(250)) + fadeIn(animationSpec = tween(250)),
+            exit = shrinkVertically(animationSpec = tween(250)) + fadeOut(animationSpec = tween(250)),
         ) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
             GlassSegmented(
                 options = if (specialEventActive) {
                     listOf(ChatProviderType.CLOUD to "☁ 云端")
@@ -939,6 +976,7 @@ private fun ChatTopBar(
                     Toast.makeText(context, "语音语言已切换至${next.label}", Toast.LENGTH_SHORT).show()
                 },
             )
+            }
         }
     }
 }
