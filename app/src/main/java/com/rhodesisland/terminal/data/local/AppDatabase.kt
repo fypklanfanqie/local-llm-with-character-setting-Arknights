@@ -82,13 +82,15 @@ interface ChatDao {
     // 取最新 N 条（DESC）再由 Repository 反转为 ASC 显示。
     // 旧实现用 ASC LIMIT N 取的是「最旧 N 条」：当 DB 临时多于 N 条（trim 未完成/失败）
     // 时会漏掉刚发送的最新消息，且进程被杀后可能永久不可见。改用 DESC 始终保留最新 N 条。
-    @Query("SELECT * FROM chat_history WHERE conversationId = :conversationId ORDER BY timestamp DESC LIMIT ${AppConfig.MAX_HISTORY_PER_CONVERSATION}")
+    // id 作为第二排序键（tie-break）：并发写入撞同一毫秒时行序仍确定，
+    // 保证喂给 LLM 的 history 前缀字节稳定，不破坏云端 prompt 前缀缓存。
+    @Query("SELECT * FROM chat_history WHERE conversationId = :conversationId ORDER BY timestamp DESC, id DESC LIMIT ${AppConfig.MAX_HISTORY_PER_CONVERSATION}")
     fun getHistory(conversationId: Long): Flow<List<ChatHistoryEntity>>
 
-    @Query("SELECT * FROM chat_history WHERE conversationId = :conversationId ORDER BY timestamp DESC LIMIT ${AppConfig.MAX_HISTORY_PER_CONVERSATION}")
+    @Query("SELECT * FROM chat_history WHERE conversationId = :conversationId ORDER BY timestamp DESC, id DESC LIMIT ${AppConfig.MAX_HISTORY_PER_CONVERSATION}")
     suspend fun getHistoryList(conversationId: Long): List<ChatHistoryEntity>
 
-    @Query("SELECT * FROM chat_history WHERE conversationId = :conversationId ORDER BY timestamp ASC")
+    @Query("SELECT * FROM chat_history WHERE conversationId = :conversationId ORDER BY timestamp ASC, id ASC")
     suspend fun getAllHistoryList(conversationId: Long): List<ChatHistoryEntity>
 
     @Insert
@@ -103,8 +105,8 @@ interface ChatDao {
     @Query("SELECT COUNT(*) FROM chat_history WHERE conversationId = :conversationId")
     suspend fun count(conversationId: Long): Int
 
-    /** 删除最旧的记录，保留最新 N 条 */
-    @Query("DELETE FROM chat_history WHERE conversationId = :conversationId AND id IN (SELECT id FROM chat_history WHERE conversationId = :conversationId ORDER BY timestamp ASC LIMIT :limit)")
+    /** 删除最旧的记录，保留最新 N 条（id tie-break：同毫秒下修剪哪条是确定的） */
+    @Query("DELETE FROM chat_history WHERE conversationId = :conversationId AND id IN (SELECT id FROM chat_history WHERE conversationId = :conversationId ORDER BY timestamp ASC, id ASC LIMIT :limit)")
     suspend fun trimOldest(conversationId: Long, limit: Int)
 
     /**
