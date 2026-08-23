@@ -2,18 +2,15 @@
 <!--
     Android 12+ (API 31+) 数据提取规则：云备份（cloud-backup）与设备迁移（device-transfer）共用。
 
-    - 排除 datastore/：DataStore preferences 以明文存储用户 API Key（SettingsStore.apiConfig），
-      绝不能随系统备份上云或经「换机克隆」落到他人设备。
-    - 保留 databases/：Room 聊天记录随备份/换机迁移是产品期望（换机后聊天记录不丢）。
-    - 其余文件（图片缓存、模型目录等可再生成内容）走默认排除策略——未 include 即不备份。
+    - 只包含 databases/：Room 聊天记录随备份/换机迁移是产品期望。有 <include> 时仅备份所列
+      条目，datastore/（明文 API Key，绝不外带）与图片缓存等其余文件天然不被备份——显式
+      <exclude domain="file"> 会触发 lint FullBackupContent 错误「not in an included path」，故不写。
 -->
 <data-extraction-rules>
     <cloud-backup>
-        <exclude domain="file" path="datastore/" />
         <include domain="database" path="." />
     </cloud-backup>
     <device-transfer>
-        <exclude domain="file" path="datastore/" />
         <include domain="database" path="." />
     </device-transfer>
 </data-extraction-rules>
