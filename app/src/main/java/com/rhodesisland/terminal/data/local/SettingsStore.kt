@@ -10,6 +10,8 @@ import com.rhodesisland.terminal.data.model.ApiConfig
 import com.rhodesisland.terminal.data.model.Character
 import com.rhodesisland.terminal.data.model.ChatProviderType
 import com.rhodesisland.terminal.data.model.GroupChatConfig
+import com.rhodesisland.terminal.data.model.Lorebook
+import com.rhodesisland.terminal.data.model.LorebookGlobalConfig
 import com.rhodesisland.terminal.data.model.SeedanceConfig
 import com.rhodesisland.terminal.data.model.UserProfileConfig
 import com.rhodesisland.terminal.data.model.Worldview
@@ -81,6 +83,9 @@ class SettingsStore(
         val CUSTOM_CHARACTERS = stringPreferencesKey("custom_characters")  // JSON: List<Character>
         // 自定义世界观（JSON: List<Worldview>，一条绑定一个目标）
         val WORLDVIEWS = stringPreferencesKey("worldviews")
+        // 世界书（JSON: List<Lorebook>，作用域路由全局/多选角色/多选群聊）+ 全局参数快照
+        val LOREBOOKS = stringPreferencesKey("lorebooks")
+        val LOREBOOK_CONFIG = stringPreferencesKey("lorebook_config")
 
         // 会话：角色 -> 当前活跃会话 id
         val ACTIVE_CONVERSATIONS = stringPreferencesKey("active_conversations")  // JSON: Map<String, Long>
@@ -182,6 +187,12 @@ class SettingsStore(
         val LLM_LAST_TEMPERATURE = floatPreferencesKey("llm_last_temperature")
         // Task 7：最近一次成功加载实际应用的 plan loadConfigHash（唯一重载指纹）。
         val LLM_LAST_CONFIG_HASH = stringPreferencesKey("llm_last_config_hash")
+
+        // ===== 使用指南 =====
+        // 是否已完成首次阅读水平选择；true 后指南初始页不再弹水平选择。
+        val GUIDE_SETUP_DONE = booleanPreferencesKey("guide_setup_done")
+        // 当前阅读水平："BEGINNER" / "EXPERIENCED"；"" = 未选择（仅 setup_done=false 时合法）。
+        val GUIDE_LEVEL = stringPreferencesKey("guide_level")
     }
 
     // ===== Theme Mode =====
@@ -465,6 +476,54 @@ class SettingsStore(
         }
     }
 
+    // ===== 世界书 =====
+    /** 世界书列表（JSON: List<Lorebook>，容错空列表）。 */
+    val lorebooks: Flow<List<Lorebook>> = dataStore.data.map { p ->
+        val raw = p[Keys.LOREBOOKS] ?: ""
+        if (raw.isBlank()) emptyList()
+        else try {
+            voiceJson.decodeFromString<List<Lorebook>>(raw)
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    suspend fun setLorebooks(list: List<Lorebook>) {
+        dataStore.edit { it[Keys.LOREBOOKS] = voiceJson.encodeToString(list) }
+    }
+
+    /**
+     * 原子地更新世界书：读-改-写在单个 DataStore edit 事务内完成（仿 [updateWorldviews]）。
+     * 多本书可绑同一目标、同 id upsert 语义由调用方在 transform 内保证。
+     */
+    suspend fun updateLorebooks(transform: (List<Lorebook>) -> List<Lorebook>) {
+        dataStore.edit { p ->
+            val raw = p[Keys.LOREBOOKS] ?: ""
+            val current: List<Lorebook> = if (raw.isBlank()) emptyList()
+            else runCatching { voiceJson.decodeFromString<List<Lorebook>>(raw) }.getOrDefault(emptyList())
+            p[Keys.LOREBOOKS] = voiceJson.encodeToString(transform(current))
+        }
+    }
+
+    /** 世界书全局参数快照（总开关/扫描深度/递归/token 预算；解析失败回落默认）。 */
+    val lorebookConfig: Flow<LorebookGlobalConfig> = dataStore.data.map { p ->
+        val raw = p[Keys.LOREBOOK_CONFIG] ?: ""
+        if (raw.isBlank()) LorebookGlobalConfig()
+        else runCatching { voiceJson.decodeFromString<LorebookGlobalConfig>(raw) }.getOrDefault(LorebookGlobalConfig())
+    }
+
+    /**
+     * 原子更新世界书全局参数：读-改-写在单个 DataStore edit 事务内完成（仿 [updateLorebooks]）。
+     */
+    suspend fun updateLorebookConfig(transform: (LorebookGlobalConfig) -> LorebookGlobalConfig) {
+        dataStore.edit { p ->
+            val raw = p[Keys.LOREBOOK_CONFIG] ?: ""
+            val current: LorebookGlobalConfig = if (raw.isBlank()) LorebookGlobalConfig()
+            else runCatching { voiceJson.decodeFromString<LorebookGlobalConfig>(raw) }.getOrDefault(LorebookGlobalConfig())
+            p[Keys.LOREBOOK_CONFIG] = voiceJson.encodeToString(transform(current))
+        }
+    }
+
     // ===== 音量 =====
     val volume: Flow<Int> = dataStore.data.map { p ->
         p[Keys.VOLUME] ?: 60
@@ -648,6 +707,25 @@ class SettingsStore(
     /** 性能浮窗液态玻璃开关（默认开）。开启：背景模糊 + 镜面高光 + 旋转虹彩光晕；关闭：普通深色面板。背景模糊需 Android 12+。 */
     val liquidGlass: Flow<Boolean> = dataStore.data.map { p ->
         p[Keys.LIQUID_GLASS] ?: true
+    }
+
+    // ===== 使用指南 =====
+    /** 是否已完成首次阅读水平选择（一旦 true 不再重置）。 */
+    val guideSetupDone: Flow<Boolean> = dataStore.data.map { p ->
+        p[Keys.GUIDE_SETUP_DONE] ?: false
+    }
+
+    suspend fun setGuideSetupDone(done: Boolean) {
+        dataStore.edit { it[Keys.GUIDE_SETUP_DONE] = done }
+    }
+
+    /** 阅读水平原始串："BEGINNER" / "EXPERIENCED"；未选择时为空串（UI 侧映射枚举并兜底 BEGINNER）。 */
+    val guideLevel: Flow<String> = dataStore.data.map { p ->
+        p[Keys.GUIDE_LEVEL] ?: ""
+    }
+
+    suspend fun setGuideLevel(level: String) {
+        dataStore.edit { it[Keys.GUIDE_LEVEL] = level }
     }
 
     suspend fun setLiquidGlass(enabled: Boolean) {

@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.sp
 import com.rhodesisland.terminal.AppContainer
 import com.rhodesisland.terminal.config.Characters
 import com.rhodesisland.terminal.data.model.Character
+import com.rhodesisland.terminal.data.model.LorebookScopeType
 import com.rhodesisland.terminal.data.model.WorldviewTargetType
 import com.rhodesisland.terminal.ui.glass.GlassLargeTitle
 import com.rhodesisland.terminal.ui.glass.GlassSheet
@@ -279,9 +280,12 @@ fun CharactersScreen(
                     scope.launch {
                         CharacterImageStore.delete(context, char.image)
                         container.characterRepository.removeCustom(char.id)
-                        // 级联清理：移除绑定到该角色的世界观
+                        // 级联清理：移除绑定到该角色的世界观与世界书
                         container.settingsRepository.removeWorldviewsForTarget(
                             WorldviewTargetType.CHARACTER, char.id,
+                        )
+                        container.settingsRepository.removeLorebooksForTarget(
+                            LorebookScopeType.CHARACTER, char.id,
                         )
                     }
                 }) { Text("删除", color = deleteScheme.error, fontWeight = FontWeight.Bold) }
@@ -378,7 +382,14 @@ private fun CharacterCard(
                 fontWeight = FontWeight.SemiBold,
             )
             if (character.role.isNotBlank()) {
-                Text(character.role, color = scheme.onSurfaceVariant, fontSize = 11.5.sp)
+                Text(
+                    character.role,
+                    color = scheme.onSurfaceVariant,
+                    fontSize = 11.5.sp,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 4.dp),
+                )
             }
             Spacer(Modifier.height(4.dp))
             Row(
@@ -389,25 +400,17 @@ private fun CharacterCard(
                     modifier = Modifier
                         .clip(RoundedCornerShape(50))
                         .clickable(onClick = onViewPersona)
-                        .padding(horizontal = 8.dp, vertical = 5.dp),
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(Icons.Filled.Info, contentDescription = null, tint = scheme.onSurfaceVariant, modifier = Modifier.size(12.dp))
+                    Icon(
+                        Icons.Filled.Info,
+                        contentDescription = null,
+                        tint = scheme.onSurfaceVariant,
+                        modifier = Modifier.size(12.dp),
+                    )
                     Spacer(Modifier.width(4.dp))
                     Text("查看人设", color = scheme.onSurfaceVariant, fontSize = 11.5.sp)
-                }
-                if (onEdit != null) {
-                    Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(50))
-                            .clickable(onClick = onEdit)
-                            .padding(horizontal = 8.dp, vertical = 5.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(Icons.Filled.Edit, contentDescription = null, tint = scheme.primary, modifier = Modifier.size(12.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("编辑", color = scheme.primary, fontSize = 11.5.sp)
-                    }
                 }
                 Box {
                     Row(
@@ -444,17 +447,38 @@ private fun CharacterCard(
                 Text("使用中", color = scheme.onPrimary, fontSize = 9.5.sp, fontWeight = FontWeight.SemiBold)
             }
         }
-        if (onDelete != null) {
-            // 删除按钮加大 + 深色半透明圆形底衬，避免小图标看不清；点击仅弹确认，不直接删除
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .size(32.dp)
-                    .clip(CircleShape)
-                    .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f)),
+        if (onEdit != null || onDelete != null) {
+            // 编辑/删除收进左上角覆盖图标（大众版样式）：底行只留 查看人设+好感，
+            // 自定义与内置卡片结构一致，不再因动作行超宽把好感挤裁/挤换行。
+            Row(
+                modifier = Modifier.align(Alignment.TopStart),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.Filled.Delete, contentDescription = "删除", tint = scheme.error, modifier = Modifier.size(18.dp))
+                if (onEdit != null) {
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f)),
+                    ) {
+                        IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Filled.Edit, contentDescription = "编辑", tint = scheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+                if (onDelete != null) {
+                    Spacer(Modifier.width(4.dp))
+                    // 删除按钮加大 + 深色半透明圆形底衬，避免小图标看不清；点击仅弹确认，不直接删除
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f)),
+                    ) {
+                        IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Filled.Delete, contentDescription = "删除", tint = scheme.error, modifier = Modifier.size(18.dp))
+                        }
+                    }
                 }
             }
         }

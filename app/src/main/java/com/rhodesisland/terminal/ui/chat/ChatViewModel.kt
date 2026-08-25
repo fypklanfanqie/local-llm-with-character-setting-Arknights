@@ -18,6 +18,8 @@ import com.rhodesisland.terminal.conversationexport.ConversationExportDocument
 import com.rhodesisland.terminal.data.model.GiftHistory
 import com.rhodesisland.terminal.provider.local.LocalChatProvider
 import com.rhodesisland.terminal.util.MarkdownParser
+import com.rhodesisland.terminal.util.PromptWindowAnchor
+import com.rhodesisland.terminal.llm.LorebookEngine
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -86,14 +88,19 @@ class ChatViewModel(
     init {
         // 监听活跃角色变化：加载角色信息。
         // 只绑定 activeCharacter（不绑会话映射），避免 setActiveConversation 触发重复 loadCharacter / 重播语音。
+        // distinctUntilChanged 必须保留：底层 dataStore.data 在**任意键**写入时都整体重发（本地生成
+        // 完成时 acknowledgeLlmConfig/setLlmLastConfigHash 写回就会触发），不去重会让下面的
+        // pendingFinal=null / cancelAll 在每次本地回复完成后误执行——刚乐观显示的完成消息随即消失。
         viewModelScope.launch {
             try {
-                container.settingsRepository.activeCharacter.collect { charId ->
-                    streamingJob?.cancel()
-                    container.chatProviderManager.cancelAll()
-                    pendingFinal = null
-                    loadCharacter(charId)
-                }
+                container.settingsRepository.activeCharacter
+                    .distinctUntilChanged()
+                    .collect { charId ->
+                        streamingJob?.cancel()
+                        container.chatProviderManager.cancelAll()
+                        pendingFinal = null
+                        loadCharacter(charId)
+                    }
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {
                 Log.e(TAG, "activeCharacter flow 异常", e)
@@ -694,8 +701,12 @@ class ChatViewModel(
                     }
                 }
 
-                // 构建 API 消息（含图片多模态 / 文档文本提取）
-                val history = container.chatRepository.getHistory(convId).takeLast(AppConfig.MAX_CONTEXT_MESSAGES)
+                // 构建 API 消息（含图片多模态 / 文档文本提取）。
+                // 锚定截断（step=20）：溢出量在一个量子块内增长时窗口起点不动，
+                // 云端 prompt 前缀缓存可持续复用（逐条 takeLast 会让长对话命中率归零）。
+                val history = PromptWindowAnchor.anchoredWindow(
+                    container.chatRepository.getHistory(convId), AppConfig.MAX_CONTEXT_MESSAGES,
+                )
                 val resolvedHistory = history.map { msg ->
                     if (msg.role == "user" && (msg.images.isNotEmpty() || msg.files.isNotEmpty())) {
                         // 仅本次发送的消息严格解析（可操作错误照常上抛让用户看到）；
@@ -727,11 +738,27 @@ class ChatViewModel(
                     val script = container.specialEventCatalog.eventFor(char.id, event.threshold)
                     "\n\n【特殊邂逅背景】\n${script.scene}\n${script.systemPrompt}\n请延续这个场景，不要跳出场景或提及好感度、事件机制。"
                 }.orEmpty()
+// 世界书激活（全局 + 绑定该角色，按作用域过滤；移植大众版）：
+                // - staticHead（常驻条目）拼进 system 最前，内容只随条目编辑变化 → 头部逐字节稳定
+                // - tailInjection（关键词命中，每轮不同）绝不进 system：云端插尾部 system 消息，
+                //   本地并入最新 user 消息（动态前缀破坏 KV 前缀，需清 modelContent）
+                val lorebookActivation = run {
+                    val cfg = container.settingsRepository.getLorebookConfigNow()
+                    if (!cfg.masterEnabled) null else LorebookEngine.activate(
+                        books = container.settingsRepository.getLorebooksNow().filter {
+                            it.enabled && it.matchesScope(characterId = char.id, groupConversationId = null)
+                        },
+                        config = cfg,
+                        scanMessages = resolvedHistory,
+                    )
+                }
+                val lorebookStaticHead = lorebookActivation?.staticHead.orEmpty()
+                val lorebookTailText = lorebookActivation?.tailInjection.orEmpty()
                 val apiMessages = buildList {
-                    add(ChatMessage(role = "system", content = char.systemPrompt + worldviewDirective + eventDirective + userDirective))
+                    add(ChatMessage(role = "system", content = lorebookStaticHead + char.systemPrompt + worldviewDirective + eventDirective + userDirective))
                     addAll(resolvedHistory.map {
                         if (isCloudProvider) {
-                            // 云端历史含 <think>（注入的推理），回传前剥离（reasoning 不应回传给对话商）。
+                            // 云端历史含  thinking（注入的推理），回传前剥离（reasoning 不应回传给对话商）。
                             ChatMessage(
                                 role = it.role,
                                 content = MarkdownParser.stripThink(it.content),
@@ -744,8 +771,22 @@ class ChatViewModel(
                             it
                         }
                     })
+                }.toMutableList()
+                if (lorebookTailText.isNotEmpty()) {
+                    // 云端：尾部 system 消息插在最后一条附近（贴近对话、不触碰长头部缓存）；
+                    // 本地：并入最新 user 消息头部，modelContent 置 null 让 Planner 回退 content 重算长度。
+                    if (container.chatProviderManager.getActiveProvider() !is LocalChatProvider) {
+                        apiMessages.add(apiMessages.size - 1, ChatMessage(role = "system", content = lorebookTailText))
+                    } else {
+                        val lastIdx = apiMessages.indexOfLast { it.role == "user" }
+                        if (lastIdx > 0) {
+                            apiMessages[lastIdx] = apiMessages[lastIdx].copy(
+                                content = "$lorebookTailText\n\n" + apiMessages[lastIdx].content,
+                                modelContent = null,
+                            )
+                        }
+                    }
                 }
-
                 // 性能浮窗：重置速率与日志。实时 Token 速率由浮窗读 MnnBackend 原子快照（native tps），
                 // 不再按流式 chunk 近似计数（Task 4：批处理后 chunk 数≠token 数）。
                 container.performanceCollector.updateTokenRate(0f)
@@ -1165,19 +1206,55 @@ class ChatViewModel(
                 )
             val prompt = """博士刚刚赠送了你一件礼物：${gift.giftName}${gift.giftDescription.takeIf { it.isNotBlank() }?.let { "（$it）" } ?: ""}。
 请以角色身份自然、真诚地感谢博士，保持简短，不提及好感度、价格、龙门币、系统或游戏机制。"""
+// 世界书激活（全局 + 绑定该角色）：常驻头进 system；动态命中经尾部注入
+            // （末条是 user 礼物提示）——云端插尾部 system，本地并入末条 user 正文。
+            val lorebookActivation = run {
+                val cfg = container.settingsRepository.getLorebookConfigNow()
+                if (!cfg.masterEnabled) null else LorebookEngine.activate(
+                    books = container.settingsRepository.getLorebooksNow().filter {
+                        it.enabled && it.matchesScope(characterId = char.id, groupConversationId = null)
+                    },
+                    config = cfg,
+                    scanMessages = history,
+                )
+            }
+            val lorebookStaticHead = lorebookActivation?.staticHead.orEmpty()
+            val lorebookTailText = lorebookActivation?.tailInjection.orEmpty()
+            val isCloudProvider = container.settingsRepository.getActiveProviderNow() == ChatProviderType.CLOUD
             val messages = buildList {
-                add(ChatMessage(role = "system", content = char.systemPrompt + worldviewDirective + userDirective))
-                addAll(history.takeLast(AppConfig.MAX_CONTEXT_MESSAGES).map { ChatMessage(role = it.role, content = it.content) })
+                add(ChatMessage(role = "system", content = lorebookStaticHead + char.systemPrompt + worldviewDirective + userDirective))
+                addAll(
+                    PromptWindowAnchor.anchoredWindow(history, AppConfig.MAX_CONTEXT_MESSAGES)
+                        .map {
+                            // 历史含  thinking（深度思考注入的推理），回传前剥离——reasoning 不应回传给对话商
+                            ChatMessage(role = it.role, content = MarkdownParser.stripThink(it.content))
+                        },
+                )
                 add(ChatMessage(role = "user", content = prompt))
+            }.toMutableList()
+            if (lorebookTailText.isNotEmpty()) {
+                if (container.chatProviderManager.getActiveProvider() !is LocalChatProvider) {
+                    messages.add(messages.size - 1, ChatMessage(role = "system", content = lorebookTailText))
+                } else {
+                    val lastIdx = messages.indexOfLast { it.role == "user" }
+                    if (lastIdx > 0) {
+                        messages[lastIdx] = messages[lastIdx].copy(
+                            content = "$lorebookTailText\n\n" + messages[lastIdx].content,
+                            modelContent = null,
+                        )
+                    }
+                }
             }
-            runCatching { provider.chat(messages) {} }.onSuccess { response ->
-                container.affinityRepository.saveGiftThankYouText(gift.id, response)
-                val rowId = container.chatRepository.addMessage(char.id, convId, ChatMessage(role = "assistant", content = response))
-                container.conversationRepository.touch(convId)
-                // Room Flow 会回填该消息。不要再手动 append 同一 databaseId，否则 LazyColumn key 重复并崩溃。
-            }.onFailure { error ->
-                _uiState.update { it.copy(errorMessage = "礼物已送出，感谢回复生成失败：${error.message ?: "请稍后重试"}") }
-            }
+            runCatching { provider.chat(messages) {} }
+                .onSuccess { response ->
+                    container.affinityRepository.saveGiftThankYouText(gift.id, response)
+                    val rowId = container.chatRepository.addMessage(char.id, convId, ChatMessage(role = "assistant", content = response))
+                    container.conversationRepository.touch(convId)
+                    // Room Flow 会回填该消息。不要再手动 append 同一 databaseId，否则 LazyColumn key 重复并崩溃。
+                }
+                .onFailure { error ->
+                    _uiState.update { it.copy(errorMessage = "礼物已送出，感谢回复生成失败：${error.message ?: "请稍后重试"}") }
+                }
         }
     }
 

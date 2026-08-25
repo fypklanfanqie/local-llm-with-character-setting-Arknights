@@ -4,6 +4,7 @@ import com.rhodesisland.terminal.data.model.AutoBackendModelClass
 import com.rhodesisland.terminal.llm.backend.BackendPreference
 import com.rhodesisland.terminal.llm.backend.BackendType
 import com.rhodesisland.terminal.llm.benchmark.CertifiedInferenceOptions
+import com.rhodesisland.terminal.util.MnnTmpDirJanitor
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -34,10 +35,21 @@ import java.security.MessageDigest
  * @param cacheDir 应用私有缓存目录（Context.cacheDir）；运行时缓存按模型指纹命名写入，
  *                 不再写入下载模型目录。
  * @param modelPath MNN 模型 `config.json` 绝对路径；用于 cache 命名空间与负载指纹。
+ * @param tmpPathEligible 磁盘资格判定（生产由 [MnnTmpDirJanitor] 包 StatFs 空闲额度实现）；
+ *       false 时**省略** `tmp_path` 键（回到全内存驻留现状，安全降级）。默认恒 true 保持
+ *       既有调用点（基准 Runner / 测试）JVM 可测。tmp_path 激活 use_mmap 权重落盘 +
+ *       use_cached_mmap 二次加载免重排（见 [MnnTmpDirJanitor]）。
+ * @param samplerHotUpdateCapable native 是否具备采样热重建能力（MnnBridge.hasSamplerHotUpdateCapability，
+ *       Wave 2 能力门禁）。true 时 load 配置**省略** temperature/topP/repetition_penalty 标量
+ *       （经每轮 session_prefill 的 set_config 生效；调参不再改变 loadConfigHash → 不再整模重载）；
+ *       false 时标量照旧进 load 配置（legacy 行为逐位不变——老 .so 的采样器烤死在 load()，省略
+ *       会把参数静默冻结在引擎默认）。mixed_samplers 结构键两种模式都保留。
  */
 class InferenceProfileResolver(
     private val cacheDir: File,
     private val modelPath: String,
+    private val tmpPathEligible: (File) -> Boolean = { true },
+    private val samplerHotUpdateCapable: Boolean = false,
 ) {
 
     /**
@@ -85,11 +97,40 @@ class InferenceProfileResolver(
             cert.matchesCpuVariant()
         ) cert.decodeStepTokens.coerceIn(1, 4) else 1
 
+        // Wave 3：KV 量化 / 动态量化门禁——仅 CPU_OPTIMIZED 认证组合生效；白名单 + 防御钳制。
+        // - attention_mode 白名单 {8,9,14}（8=基线 flash 无量化、9=K-int8、14=KV-TQ4 官方推荐 4B+）；
+        //   12（KV-TQ3）仅当调用方声明大模型资格时放行（<1B 精度损失大，见 MNN 官方文档）。
+        // - dynamic_option 仅放行 {0,8}（8=在线权重重排，仅 SME2 机器实测有收益；其他机器 no-op，
+        //   基准过不了 ≥10% 门禁自然不会被认证）。
+        // CPU_COMPATIBILITY 恒 8/0（保守兜底变体）；OPENCL 恒 8/0（GPU 路径 KV 语义未验证）——
+        // 见 buildAttemptNativeConfig 的既有注释。无认证/白名单外 -> 回落 8/0 基线（不记降级原因：
+        // 未认证即基线，与 lookahead 语义一致）。
+        val effectiveAttention = if (cert != null && cert.matchesCpuVariant() &&
+            cert.attentionMode in ATTENTION_MODE_WHITELIST
+        ) {
+            cert.attentionMode
+        } else {
+            DEFAULT_ATTENTION_MODE
+        }
+        val effectiveDynamic = if (cert != null && cert.matchesCpuVariant() &&
+            cert.dynamicOption in DYNAMIC_OPTION_WHITELIST
+        ) {
+            cert.dynamicOption
+        } else {
+            DEFAULT_DYNAMIC_OPTION
+        }
+
         // 尝试链：QNN 永不进 AUTO；标准版显式选 NPU 也解析为 CPU（保留已存设置但标不支持）。
         val openclEligible = openclHealth == OpenClHealthState.PROBE_OK ||
             openclHealth == OpenClHealthState.MODEL_OK
         val attempts = buildList {
             val cpu = thermalAdmittedThreads.coerceAtLeast(1)
+            // Wave 3：attention/dynamic 只作用于 CPU_OPTIMIZED（认证变体）；COMPATIBILITY/OpenCL
+            // 恒基线 8/0——见 buildAttemptNativeConfig 注释与上方门禁说明。
+            fun attentionFor(variant: RuntimeVariant): Int =
+                if (variant == RuntimeVariant.CPU_OPTIMIZED) effectiveAttention else DEFAULT_ATTENTION_MODE
+            fun dynamicFor(variant: RuntimeVariant): Int =
+                if (variant == RuntimeVariant.CPU_OPTIMIZED) effectiveDynamic else DEFAULT_DYNAMIC_OPTION
             when (backendPreference) {
                 // AUTO：仅对「总参数量严格 >7B」（[modelClass] == GPU_ELIGIBLE）在 OpenCL 健康时
                 // 加入 GPU attempt；<=7B 或参数未知一律 CPU，并记类型化原因。显式 MNN_GPU 不受门槛
@@ -104,7 +145,7 @@ class InferenceProfileResolver(
                         modelClass == AutoBackendModelClass.CPU_UNKNOWN_PARAMETERS ->
                             downgrades += DowngradeReason.AUTO_MODEL_PARAMETERS_UNKNOWN_CPU
                     }
-                    add(attempt(BackendType.MNN_CPU, RuntimeVariant.CPU_OPTIMIZED, cpu, contextTokens, effectiveLookahead, temperature, topP, repeatPenalty))
+                    add(attempt(BackendType.MNN_CPU, RuntimeVariant.CPU_OPTIMIZED, cpu, contextTokens, effectiveLookahead, temperature, topP, repeatPenalty, attentionFor(RuntimeVariant.CPU_OPTIMIZED), dynamicFor(RuntimeVariant.CPU_OPTIMIZED)))
                     add(attempt(BackendType.MNN_CPU, RuntimeVariant.CPU_COMPATIBILITY, cpu, contextTokens, effectiveLookahead, temperature, topP, repeatPenalty))
                 }
                 // 显式 MNN_GPU：任何模型都可在 OpenCL 健康时尝试 GPU；失败由 BackendManager 回退 CPU。
@@ -117,17 +158,17 @@ class InferenceProfileResolver(
                     // Task 6：CPU 两个变体统一使用门禁后的 effectiveLookahead——认证记录于
                     // CPU_OPTIMIZED（基准变体），CPU_COMPATIBILITY 是极少运行的兜底 attempt，
                     // 沿用同一认证配置（与既有「用户 lookahead 同时作用于两个 CPU 变体」一致）。
-                    add(attempt(BackendType.MNN_CPU, RuntimeVariant.CPU_OPTIMIZED, cpu, contextTokens, effectiveLookahead, temperature, topP, repeatPenalty))
+                    add(attempt(BackendType.MNN_CPU, RuntimeVariant.CPU_OPTIMIZED, cpu, contextTokens, effectiveLookahead, temperature, topP, repeatPenalty, attentionFor(RuntimeVariant.CPU_OPTIMIZED), dynamicFor(RuntimeVariant.CPU_OPTIMIZED)))
                     add(attempt(BackendType.MNN_CPU, RuntimeVariant.CPU_COMPATIBILITY, cpu, contextTokens, effectiveLookahead, temperature, topP, repeatPenalty))
                 }
                 BackendPreference.MNN_CPU -> {
-                    add(attempt(BackendType.MNN_CPU, RuntimeVariant.CPU_OPTIMIZED, cpu, contextTokens, effectiveLookahead, temperature, topP, repeatPenalty))
+                    add(attempt(BackendType.MNN_CPU, RuntimeVariant.CPU_OPTIMIZED, cpu, contextTokens, effectiveLookahead, temperature, topP, repeatPenalty, attentionFor(RuntimeVariant.CPU_OPTIMIZED), dynamicFor(RuntimeVariant.CPU_OPTIMIZED)))
                     add(attempt(BackendType.MNN_CPU, RuntimeVariant.CPU_COMPATIBILITY, cpu, contextTokens, effectiveLookahead, temperature, topP, repeatPenalty))
                 }
                 BackendPreference.MNN_NPU -> {
                     // 标准构建不含 QNN 运行时：保留设置但解析为 CPU，显式降级原因（Task 11）。
                     downgrades += DowngradeReason.QNN_UNAVAILABLE_IN_STANDARD_BUILD
-                    add(attempt(BackendType.MNN_CPU, RuntimeVariant.CPU_OPTIMIZED, cpu, contextTokens, effectiveLookahead, temperature, topP, repeatPenalty))
+                    add(attempt(BackendType.MNN_CPU, RuntimeVariant.CPU_OPTIMIZED, cpu, contextTokens, effectiveLookahead, temperature, topP, repeatPenalty, attentionFor(RuntimeVariant.CPU_OPTIMIZED), dynamicFor(RuntimeVariant.CPU_OPTIMIZED)))
                     add(attempt(BackendType.MNN_CPU, RuntimeVariant.CPU_COMPATIBILITY, cpu, contextTokens, effectiveLookahead, temperature, topP, repeatPenalty))
                 }
             }
@@ -186,6 +227,8 @@ class InferenceProfileResolver(
         temperature: Float,
         topP: Float,
         repeatPenalty: Float,
+        attentionMode: Int = DEFAULT_ATTENTION_MODE,
+        dynamicOption: Int = DEFAULT_DYNAMIC_OPTION,
     ): BackendAttempt {
         val backendType = when (backend) {
             BackendType.MNN_CPU -> "cpu"
@@ -196,12 +239,15 @@ class InferenceProfileResolver(
             variant = variant,
             backendType = backendType,
             threadNum = threadNum,
-            cachePath = runtimeCacheFile.absolutePath,
+            tmpPath = resolvedTmpPath(),
             contextTokens = contextTokens,
             lookahead = lookahead,
             temperature = temperature,
             topP = topP,
             repeatPenalty = repeatPenalty,
+            attentionMode = attentionMode,
+            dynamicOption = dynamicOption,
+            omitSamplingScalars = samplerHotUpdateCapable,
         )
         return BackendAttempt(
             backend = backend,
@@ -212,18 +258,50 @@ class InferenceProfileResolver(
         )
     }
 
-    private val runtimeCacheFile: File by lazy {
-        File(cacheDir, "mnn_cache_${sha256(modelPath).take(8)}.bin")
+    /**
+     * 本模型的 `tmp_path`（磁盘资格通过时）；否则 null -> 配置里**不带**该键。
+     * 目录由 [MnnTmpDirJanitor.tmpDirFor] 统一命名，加载与删除/清扫共用一把尺子；
+     * mkdirs 失败不阻断加载（只是 mmap 缓存不生效，回到全内存驻留）。
+     */
+    private fun resolvedTmpPath(): String? {
+        val dir = runtimeTmpDir
+        if (!tmpPathEligible(dir)) return null
+        runCatching { dir.mkdirs() }
+        return dir.absolutePath
+    }
+
+    /** `tmp_path` 按模型 config 路径哈希归属，跨实例稳定（与删除路径同源）。 */
+    private val runtimeTmpDir: File by lazy {
+        MnnTmpDirJanitor.tmpDirFor(cacheDir, modelPath)
     }
 
     companion object {
         const val SCHEMA_VERSION = 1
         private const val HASH_HEX_LENGTH = 16
 
+        /** attention_mode 基线（flash，无 KV 量化）。 */
+        const val DEFAULT_ATTENTION_MODE = 8
+
+        /** dynamic_option 基线（per-channel 动态量化）。 */
+        const val DEFAULT_DYNAMIC_OPTION = 0
+
+        /**
+         * 认证可放行的 attention_mode 白名单（Wave 3）：9=K-int8（精度几乎无损）、
+         * 14=KV-TQ4（官方推荐 4B+）、12=KV-TQ3（仅大模型，调用方经白名单外钳制兜底——
+         * 12 在此白名单内放行，但认证编排只对 ≥4B 模型生成 12 候选）。
+         * 8 恒在（基线）；10 有意缺席：reuse_kv=true 时引擎静默降级为 9（llm.cpp:169-171），无意义。
+         */
+        val ATTENTION_MODE_WHITELIST = setOf(8, 9, 12, 14)
+
+        /** 认证可放行的 dynamic_option 白名单：0=基线；8=在线权重重排（SME2 机器 decode 收益候选）。 */
+        val DYNAMIC_OPTION_WHITELIST = setOf(0, 8)
+
         /**
          * 生成规范化 native set_config JSON（键排序，供 JNI 原样透传给 Llm::set_config）。
          *
-         * 安全通用键固定：use_mmap/reuse_kv/attention_mode=8/dynamic_option=0/mixed_samplers(penalty)。
+         * 安全通用键固定：use_mmap/reuse_kv/mixed_samplers(penalty)。
+         * attention_mode/dynamic_option 由调用方传入：resolver 门禁按认证+白名单+变体作用域钳制
+         * （CPU_OPTIMIZED 可带认证档位；COMPATIBILITY/OpenCL 恒基线 8/0）。
          * CPU_OPTIMIZED 用 low precision/memory + Power_High；CPU_COMPATIBILITY 用保守
          * normal/normal + Power_Normal（不依赖省略字段继承未知模型默认）；OPENCL 保持 68 编码。
          */
@@ -231,12 +309,15 @@ class InferenceProfileResolver(
             variant: RuntimeVariant,
             backendType: String,
             threadNum: Int,
-            cachePath: String,
+            tmpPath: String?,
             contextTokens: Int,
             lookahead: Boolean,
             temperature: Float,
             topP: Float,
             repeatPenalty: Float,
+            attentionMode: Int = DEFAULT_ATTENTION_MODE,
+            dynamicOption: Int = DEFAULT_DYNAMIC_OPTION,
+            omitSamplingScalars: Boolean = false,
         ): String {
             val optimized = variant == RuntimeVariant.CPU_OPTIMIZED
             val isOpenCl = variant == RuntimeVariant.OPENCL
@@ -244,17 +325,27 @@ class InferenceProfileResolver(
                 put("schemaVersion", SCHEMA_VERSION)
                 put("backend_type", backendType)
                 put("thread_num", threadNum)
-                put("cache_path", cachePath)
+                // tmp_path：非空时输出——激活 use_mmap 权重落盘 + use_cached_mmap 二次加载免重排
+                // + OpenCL kernel 缓存可写位置（llm.cpp setRuntimeHint）。磁盘资格不过时整个
+                // 键省略，回到全内存驻留（安全降级）。键排序见 canonicalJsonString。
+                if (tmpPath != null) put("tmp_path", tmpPath)
                 // precision/memory：CPU_OPTIMIZED=low/low；CPU_COMPATIBILITY=normal/normal；OpenCL=low/low。
                 put("precision", if (optimized || isOpenCl) "low" else "normal")
                 put("memory", if (optimized || isOpenCl) "low" else "normal")
                 put("use_mmap", true)
                 put("reuse_kv", true)
-                put("attention_mode", 8)
-                put("dynamic_option", 0)
-                put("temperature", temperature)
-                put("topP", topP)
-                put("repetition_penalty", repeatPenalty)
+                // attention/dynamic：调用方（resolver 门禁）已按认证/白名单/变体作用域钳制；
+                // 此处原样落键。基线 8/0（安全对，见下方 KDoc 注释）。
+                put("attention_mode", attentionMode)
+                put("dynamic_option", dynamicOption)
+                // Wave 2 采样热重建：native 具备能力时标量不进 load 配置（经每轮 set_config 生效，
+                // 调参不再触发整模重载）；legacy 时照旧写入（老 .so 采样器烤死在 load()，省略即冻结）。
+                // mixed_samplers 结构键两种模式都保留（管线构成仍属 load 期）。
+                if (!omitSamplingScalars) {
+                    put("temperature", temperature)
+                    put("topP", topP)
+                    put("repetition_penalty", repeatPenalty)
+                }
                 put(
                     "mixed_samplers",
                     buildJsonArray {

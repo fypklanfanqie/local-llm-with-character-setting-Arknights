@@ -60,6 +60,8 @@ import com.rhodesisland.terminal.ui.groupchat.GroupListScreen
 import com.rhodesisland.terminal.ui.groupchat.GroupNavigationBus
 import com.rhodesisland.terminal.ui.models.ModelManagerScreen
 import com.rhodesisland.terminal.ui.music.MusicScreen
+import com.rhodesisland.terminal.ui.lorebook.LorebookDetailScreen
+import com.rhodesisland.terminal.ui.lorebook.LorebookEntryEditScreen
 import com.rhodesisland.terminal.ui.settings.BackendSettingsScreen
 import com.rhodesisland.terminal.ui.settings.SettingsScreen
 import com.rhodesisland.terminal.ui.theme.LocalDynamicAccent
@@ -94,6 +96,13 @@ private const val AFFINITY_EVENTS_ROUTE = "affinity_events/{characterId}"
 private fun affinityRoute(characterId: String): String = "affinity/${android.net.Uri.encode(characterId)}"
 private fun affinityGiftsRoute(characterId: String): String = "affinity_gifts/${android.net.Uri.encode(characterId)}"
 private fun affinityEventsRoute(characterId: String): String = "affinity_events/${android.net.Uri.encode(characterId)}"
+
+// 世界书两级路由：书详情（条目列表/作用域绑定）→ 条目编辑（entryId="new" 表新建）
+private const val LOREBOOK_DETAIL_ROUTE = "lorebook/{bookId}"
+private const val LOREBOOK_ENTRY_ROUTE = "lorebook/{bookId}/entry/{entryId}"
+private fun lorebookDetailRoute(bookId: String): String = "lorebook/${android.net.Uri.encode(bookId)}"
+private fun lorebookEntryRoute(bookId: String, entryId: String): String =
+    "lorebook/${android.net.Uri.encode(bookId)}/entry/${android.net.Uri.encode(entryId)}"
 
 @Composable
 fun AppNavGraph(container: AppContainer, initialChatOpen: Boolean = false) {
@@ -391,6 +400,9 @@ fun AppNavGraph(container: AppContainer, initialChatOpen: Boolean = false) {
                             onNavigateToBackendSettings = {
                                 navController.navigate("backend_settings") { launchSingleTop = true }
                             },
+                            onNavigateToLorebook = { bookId ->
+                                navController.navigate(lorebookDetailRoute(bookId)) { launchSingleTop = true }
+                            },
                         )
                     }
                 }
@@ -400,6 +412,42 @@ fun AppNavGraph(container: AppContainer, initialChatOpen: Boolean = false) {
                     Box(Modifier.widthIn(max = 640.dp)) {
                         BackendSettingsScreen(
                             container = container,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                }
+            }
+            composable(
+                route = LOREBOOK_DETAIL_ROUTE,
+                arguments = listOf(navArgument("bookId") { type = NavType.StringType }),
+            ) { entry ->
+                Box(tabBottomPadding) {
+                    Box(Modifier.widthIn(max = 640.dp)) {
+                        LorebookDetailScreen(
+                            container = container,
+                            bookId = entry.arguments?.getString("bookId").orEmpty(),
+                            onBack = { navController.popBackStack() },
+                            onOpenEntry = { entryId ->
+                                val bookId = entry.arguments?.getString("bookId").orEmpty()
+                                navController.navigate(lorebookEntryRoute(bookId, entryId)) { launchSingleTop = true }
+                            },
+                        )
+                    }
+                }
+            }
+            composable(
+                route = LOREBOOK_ENTRY_ROUTE,
+                arguments = listOf(
+                    navArgument("bookId") { type = NavType.StringType },
+                    navArgument("entryId") { type = NavType.StringType },
+                ),
+            ) { entry ->
+                Box(tabBottomPadding) {
+                    Box(Modifier.widthIn(max = 640.dp)) {
+                        LorebookEntryEditScreen(
+                            container = container,
+                            bookId = entry.arguments?.getString("bookId").orEmpty(),
+                            entryId = entry.arguments?.getString("entryId").orEmpty(),
                             onBack = { navController.popBackStack() },
                         )
                     }

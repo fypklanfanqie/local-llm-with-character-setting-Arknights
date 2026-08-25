@@ -17,8 +17,10 @@ data class ThinkingPolicyTelemetry(
     val requestedLevel: String,
     /** 实际执行档位（AUTO 解析后的受限子集，否则与请求档位一致）。 */
     val effectiveLevel: String,
-    /** AUTO 复杂度分类（SIMPLE/STANDARD/COMPLEX）；手动档为 null。 */
+    /** AUTO 复杂度分类（TRIVIAL/SIMPLE/STANDARD/COMPLEX）；手动档为 null。 */
     val complexity: String?,
+    /** 本轮是否整体跳过思考（仅 AUTO→TRIVIAL 为 true）。 */
+    val skipThinking: Boolean = false,
     /** 控制方式（PROMPT_FALLBACK / NATIVE_BUDGET）。 */
     val controlMode: String,
     /** 思考软目标时长范围（ms）。 */
@@ -52,6 +54,7 @@ data class ThinkingPolicyTelemetry(
                 requestedLevel = it.requestedLevel.storageKey,
                 effectiveLevel = it.effectiveLevel.storageKey,
                 complexity = it.complexity?.name,
+                skipThinking = it.skipThinking,
                 controlMode = it.controlMode.name,
                 targetMinMs = it.targetMinMs,
                 targetMaxMs = it.targetMaxMs,

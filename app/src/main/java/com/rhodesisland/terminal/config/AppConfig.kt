@@ -47,6 +47,7 @@ object AppConfig {
     const val MAX_HISTORY_PER_CONVERSATION = 100
     // 单次请求交给 provider 规划的历史候选上限。云端发送最近 N 条；本地由 PromptWindowPlanner
     // 在候选中保留 system + 最近完整 user/assistant 轮次，预留输出/模板空间，不再依赖模型静默左截断。
+    // 云端历史经 PromptWindowAnchor.anchoredWindow 按块锚定截断（step=20），避免逐条滑动破坏前缀缓存。
     const val MAX_CONTEXT_MESSAGES = 100
 
     // ===== 角色问候（角色主动消息）=====
@@ -102,5 +103,11 @@ object AppConfig {
         const val GENERATE_TIMEOUT_MS = 60_000L
         // 云 API 失败后重排的间隔（毫秒）
         const val RETRY_DELAY_MS = 45 * 60 * 1000L
+    }
+
+    // ===== 世界书（SillyTavern 风格 Lorebook）=====
+    object Lorebook {
+        /** 绿灯触发条目折入请求尾部时的参考块标题（GroupChatPromptBuilder 尾块 / 本地 user 并入共用）。 */
+        const val REFERENCE_HEADER = "[设定参考]"
     }
 }

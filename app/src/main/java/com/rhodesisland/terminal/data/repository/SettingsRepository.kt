@@ -6,6 +6,10 @@ import com.rhodesisland.terminal.data.model.ApiConfig
 import com.rhodesisland.terminal.data.model.Character
 import com.rhodesisland.terminal.data.model.ChatProviderType
 import com.rhodesisland.terminal.data.model.GroupChatConfig
+import com.rhodesisland.terminal.data.model.Lorebook
+import com.rhodesisland.terminal.data.model.LorebookGlobalConfig
+import com.rhodesisland.terminal.data.model.LorebookScopeType
+import com.rhodesisland.terminal.data.model.LorebookTargetType
 import com.rhodesisland.terminal.data.model.SeedanceConfig
 import com.rhodesisland.terminal.data.model.UserProfileConfig
 import com.rhodesisland.terminal.data.model.SystemVoiceTemplate
@@ -51,6 +55,10 @@ class SettingsRepository(private val store: SettingsStore) {
     val customCharacters: Flow<List<Character>> = store.customCharacters
     /** 自定义世界观列表（一条绑定一个目标）。 */
     val worldviews: Flow<List<Worldview>> = store.worldviews
+    /** 世界书列表（作用域路由全局/多选角色/多选群聊）。 */
+    val lorebooks: Flow<List<Lorebook>> = store.lorebooks
+    /** 世界书全局参数快照。 */
+    val lorebookConfig: Flow<LorebookGlobalConfig> = store.lorebookConfig
     val volume: Flow<Int> = store.volume
     val musicFavorites: Flow<Set<String>> = store.musicFavorites
     val musicRepeatMode: Flow<Int> = store.musicRepeatMode
@@ -77,6 +85,12 @@ class SettingsRepository(private val store: SettingsStore) {
     val localThinkingLevel: Flow<LocalThinkingLevel> = store.localThinkingLevel
     /** 性能浮窗液态玻璃开关（默认开）。 */
     val liquidGlass: Flow<Boolean> = store.liquidGlass
+
+    // ===== 使用指南 =====
+    /** 是否已完成首次阅读水平选择。 */
+    val guideSetupDone: Flow<Boolean> = store.guideSetupDone
+    /** 阅读水平原始串（"BEGINNER"/"EXPERIENCED"/"" 未选）。 */
+    val guideLevel: Flow<String> = store.guideLevel
     /** 聊天顶栏第二行控件（云端/本地 + 快捷开关）是否展开（默认开）。 */
     val chatTopBarExpanded: Flow<Boolean> = store.chatTopBarExpanded
     /** 推理参数是否相对上次成功加载已变更（供设置页展示"将自动重载"横幅）*/
@@ -190,6 +204,53 @@ class SettingsRepository(private val store: SettingsStore) {
             .firstOrNull { it.targetType == targetType && it.targetId == targetId }
             ?.directiveText()
             .orEmpty()
+
+    // ===== 世界书 =====
+
+    /** 同步获取全部世界书（超时/异常返回空列表）。 */
+    suspend fun getLorebooksNow(): List<Lorebook> = dataStoreFirst(lorebooks, emptyList())
+
+    /** 同步获取世界书全局参数（超时/异常回落默认快照）。 */
+    suspend fun getLorebookConfigNow(): LorebookGlobalConfig =
+        dataStoreFirst(lorebookConfig, LorebookGlobalConfig())
+
+    /** 原子更新世界书列表。 */
+    suspend fun updateLorebooks(transform: (List<Lorebook>) -> List<Lorebook>) =
+        store.updateLorebooks(transform)
+
+    /** 原子更新世界书全局参数。 */
+    suspend fun updateLorebookConfig(transform: (LorebookGlobalConfig) -> LorebookGlobalConfig) =
+        store.updateLorebookConfig(transform)
+
+    /** 保存世界书（同 id upsert；多本书可绑同一目标，无一一对应约束）。 */
+    suspend fun upsertLorebook(book: Lorebook) {
+        updateLorebooks { current ->
+            val result = current.toMutableList()
+            result.removeAll { it.id == book.id }
+            result.add(book)
+            result
+        }
+    }
+
+    /**
+     * 级联清理：删除角色/群聊时从绑定书的多选列表摘除该目标；列表空了整本删除，
+     * 非空则原地收窄——不误删仍绑着其它目标的书。
+     */
+    suspend fun removeLorebooksForTarget(scope: LorebookScopeType, scopeId: String) {
+        updateLorebooks { current ->
+            current.mapNotNull { book ->
+                when {
+                    book.scopeType != scope -> book
+                    scopeId in book.scopeIds -> {
+                        val rest = book.scopeIds - scopeId
+                        if (rest.isEmpty()) null else book.copy(scopeIds = rest)
+                    }
+                    else -> book
+                }
+            }
+        }
+    }
+
     suspend fun setVolume(vol: Int) = store.setVolume(vol)
     suspend fun toggleMusicFavorite(key: String) = store.toggleMusicFavorite(key)
     suspend fun setMusicRepeatMode(mode: Int) = store.setMusicRepeatMode(mode)
@@ -222,6 +283,9 @@ class SettingsRepository(private val store: SettingsStore) {
     suspend fun setLocalThinkingLevel(level: LocalThinkingLevel) = store.setLocalThinkingLevel(level)
 
     suspend fun setLiquidGlass(enabled: Boolean) = store.setLiquidGlass(enabled)
+
+    suspend fun setGuideSetupDone(done: Boolean) = store.setGuideSetupDone(done)
+    suspend fun setGuideLevel(level: String) = store.setGuideLevel(level)
 
     suspend fun setChatTopBarExpanded(expanded: Boolean) = store.setChatTopBarExpanded(expanded)
 

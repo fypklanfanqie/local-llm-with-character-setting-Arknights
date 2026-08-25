@@ -156,6 +156,18 @@ class MnnBridge {
         val hasSummaryV2Capability: Boolean
             get() = runtimeInfo?.capabilities?.contains(CAPABILITY_SUMMARY_V2) ?: false
 
+        /**
+         * 能力集标记：采样热重建（Wave 2）。native 宣告该能力后，load 配置可省略
+         * temperature/topP/repetition_penalty 标量（经每轮 session_prefill 的 set_config 生效），
+         * 调参不再改变 loadConfigHash → 不再触发整模重载。旧 .so 无此能力时 Kotlin 保持
+         * legacy 行为（标量进 load 配置，调参=重载，逐位不变）。
+         */
+        const val CAPABILITY_SAMPLER_HOT_UPDATE = "sampler_hot_update"
+
+        /** 是否具备采样热重建能力（native 能力集含 [CAPABILITY_SAMPLER_HOT_UPDATE]；无握手视为不具备）。 */
+        val hasSamplerHotUpdateCapability: Boolean
+            get() = runtimeInfo?.capabilities?.contains(CAPABILITY_SAMPLER_HOT_UPDATE) ?: false
+
         /** libMNN.so 是否加载成功 */
         val mnnAvailable: Boolean
             get() = mnnLibLoaded

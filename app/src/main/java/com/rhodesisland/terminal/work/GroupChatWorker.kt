@@ -17,14 +17,17 @@ import com.rhodesisland.terminal.data.model.ChatMessage
 import com.rhodesisland.terminal.data.model.ChatProviderType
 import com.rhodesisland.terminal.data.model.GroupChatConfig
 import com.rhodesisland.terminal.data.model.WorldviewTargetType
+import com.rhodesisland.terminal.data.model.matchesScope
 import com.rhodesisland.terminal.data.remote.ChatMessageDto
 import com.rhodesisland.terminal.data.remote.DirectLlmClient
 import com.rhodesisland.terminal.data.repository.SettingsRepository
+import com.rhodesisland.terminal.llm.LorebookEngine
 import com.rhodesisland.terminal.notification.AppLifecycleObserver
 import com.rhodesisland.terminal.notification.GroupChatNotificationManager
 import com.rhodesisland.terminal.ui.groupchat.GroupChatPromptBuilder
 import com.rhodesisland.terminal.ui.groupchat.GroupScreenTracker
 import com.rhodesisland.terminal.ui.groupchat.GroupSpeakerPicker
+import com.rhodesisland.terminal.util.MarkdownParser
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
@@ -212,6 +215,23 @@ class GroupChatWorker(
         // 自定义世界观（绑定到该群聊）注入：一次解析，本轮全部发言共用
         val worldviewDirective =
             settings.worldviewDirectiveFor(WorldviewTargetType.GROUP, convId.toString())
+        // 世界书激活：按作用域过滤（ALL 或 GROUP 绑定本群）。Worker 恒云端（上方门禁）；
+        // 静态头进 system，动态命中走尾部 system 消息。一轮内复用同一激活结果
+        // （discuss 轮内 history 增量不回扫，与世界观同口径）
+        val lorebookActivation = run {
+            val cfg = settings.getLorebookConfigNow()
+            if (!cfg.masterEnabled) null else LorebookEngine.activate(
+                books = settings.getLorebooksNow().filter {
+                    it.enabled && it.matchesScope(characterId = null, groupConversationId = convId.toString())
+                },
+                config = cfg,
+                scanMessages = history0.takeLast(50),
+            )
+        }
+        val lorebookStaticHead = lorebookActivation?.staticHead.orEmpty()
+        val lorebookTailMessages = lorebookActivation?.takeIf { it.tailInjection.isNotEmpty() }
+            ?.let { listOf(ChatMessage(role = "system", content = it.tailInjection)) }
+            ?: emptyList()
 
         val wakeLock = acquireGroupWakeLock(context)
         try {
@@ -233,6 +253,8 @@ class GroupChatWorker(
                         container.directLlmClient, apiConfig, members, char, history0,
                         askUser = true, userPersona = profile.persona, userRelationship = profile.relationship,
                         worldviewDirective = worldviewDirective,
+                        lorebookStaticHead = lorebookStaticHead,
+                        lorebookTailMessages = lorebookTailMessages,
                     )
                     if (!content.isNullOrBlank()) {
                         container.groupChatRepository.sendMemberMessage(convId, char.id, content)
@@ -258,6 +280,8 @@ class GroupChatWorker(
                         container.directLlmClient, apiConfig, members, char, history,
                         askUser = false, userPersona = profile.persona, userRelationship = profile.relationship,
                         worldviewDirective = worldviewDirective,
+                        lorebookStaticHead = lorebookStaticHead,
+                        lorebookTailMessages = lorebookTailMessages,
                     )
                     if (content.isNullOrBlank()) return@repeat
                     container.groupChatRepository.sendMemberMessage(convId, char.id, content)
@@ -294,12 +318,16 @@ class GroupChatWorker(
         userPersona: String?,
         userRelationship: String?,
         worldviewDirective: String = "",
+        lorebookStaticHead: String = "",
+        lorebookTailMessages: List<ChatMessage> = emptyList(),
     ): String? {
         val messages = GroupChatPromptBuilder.buildApiMessages(
             members, speaker, history, askUser,
             userPersona = userPersona,
             userRelationship = userRelationship,
             worldviewDirective = worldviewDirective,
+            lorebookStaticHead = lorebookStaticHead,
+            lorebookTailMessages = lorebookTailMessages,
         ).map { ChatMessageDto(it.role, JsonPrimitive(it.content)) }
         return try {
             withTimeout(AppConfig.GroupChat.GENERATE_TIMEOUT_MS) {

@@ -90,6 +90,7 @@ import java.io.File
 fun SettingsScreen(
     container: AppContainer,
     onNavigateToBackendSettings: () -> Unit,
+    onNavigateToLorebook: (String) -> Unit = {},
 ) {
     val scheme = MaterialTheme.colorScheme
     val apiConfig by container.settingsRepository.apiConfig.collectAsState(initial = ApiConfig())
@@ -214,6 +215,7 @@ fun SettingsScreen(
         // ===== 本地 AI 引擎 =====
         CollapsibleSection(
             title = "本地 AI 引擎",
+            key = "local_ai",
             summary = if (liquidGlass) "推理引擎 · 性能浮窗开" else "推理引擎",
         ) {
             GlassListRow(
@@ -236,7 +238,13 @@ fun SettingsScreen(
         }
 
         // ===== LLM API 配置 =====
-        CollapsibleSection(title = "LLM API 配置", summary = apiConfig.model.ifBlank { "未配置模型" }) {
+        CollapsibleSection(
+            title = "LLM API 配置",
+            key = "llm_api",
+            initiallyExpanded = true,
+            keepContent = true,
+            summary = apiConfig.model.ifBlank { "未配置模型" },
+        ) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 FieldLabel("模型商")
                 ProviderDropdown(
@@ -389,6 +397,7 @@ fun SettingsScreen(
         GreetingSection(container = container, scope = scope)
         GroupChatSection(container = container, scope = scope)
         WorldviewSection(container = container, scope = scope)
+        LorebookSection(container = container, onNavigateToLorebook = onNavigateToLorebook)
         UserProfileSection(container = container, scope = scope)
         ChatBackgroundSection(container = container, scope = scope)
         StorageSection(container = container, scope = scope)
@@ -397,6 +406,8 @@ fun SettingsScreen(
         // ===== 语音合成（朗读）=====
         CollapsibleSection(
             title = "语音合成 (TTS) · 朗读",
+            key = "tts",
+            keepContent = true,
             summary = "引擎：${ttsEngineEdit.label}",
         ) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -501,7 +512,7 @@ fun SettingsScreen(
         }
 
         // ===== 角色双语音色 =====
-        CollapsibleSection(title = "角色双语音色（speaker_id）") {
+        CollapsibleSection(title = "角色双语音色（speaker_id）", key = "tts_voices", keepContent = true) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
                     "每个角色分别填写中文和日文 speaker_id。日语模式只使用日文音色，缺失时会提示配置，不会用中文音色硬读日文。",
@@ -510,6 +521,7 @@ fun SettingsScreen(
                 // 角色音色表：嵌套折叠区（默认收起），替代旧 TextButton 裸 if 展开
                 CollapsibleSection(
                     title = "角色音色表",
+                    key = "tts_voice_table",
                     summary = "搜索角色后逐个配置中 / 日 speaker_id",
                 ) {
                     // 搜索框：按中文名或英文 ID 快速筛选全量干员（384）与自定义角色。
@@ -587,7 +599,7 @@ fun SettingsScreen(
         }
 
         // ===== 关于（含主题模式静态展示，合并为一组）=====
-        CollapsibleSection(title = "关于", summary = "版本 · 免责声明 · 主题") {
+        CollapsibleSection(title = "关于", key = "about", summary = "版本 · 免责声明 · 主题") {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("罗德岛通讯终端", color = scheme.onSurface, fontSize = 16.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                 Text("Android 版 v1.0.0", color = scheme.onSurfaceVariant, fontSize = 12.sp)
@@ -607,7 +619,7 @@ fun SettingsScreen(
     }
 
     if (showGuide) {
-        GuideDialog(onDismiss = { showGuide = false })
+        GuideDialog(container = container, onDismiss = { showGuide = false })
     }
 
     if (showCrashLogs) {
@@ -866,6 +878,7 @@ private fun ChatBackgroundSection(container: AppContainer, scope: CoroutineScope
 
     CollapsibleSection(
         title = "聊天背景",
+        key = "chat_background",
         summary = if (bgConfig.enabled) "已启用 · ${bgConfig.paths.size} 张" else "未启用",
     ) {
         GlassListRow(
@@ -1026,6 +1039,7 @@ private fun GreetingSection(container: AppContainer, scope: CoroutineScope) {
 
     CollapsibleSection(
         title = "角色问候",
+        key = "greeting",
         summary = if (enabled) "已启用 · 每日 $dailyCount 条" else "未启用",
     ) {
         GlassListRow(
@@ -1300,6 +1314,7 @@ private fun GroupChatSection(container: AppContainer, scope: CoroutineScope) {
 
     CollapsibleSection(
         title = "群聊",
+        key = "group_chat",
         summary = if (config.enabled) "已启用 · ${config.memberIds.size} 名成员" else "未启用",
     ) {
         GlassListRow(
@@ -1429,6 +1444,8 @@ private fun UserProfileSection(container: AppContainer, scope: CoroutineScope) {
 
     CollapsibleSection(
         title = "我的形象（博士 · 选填）",
+        key = "user_profile",
+        keepContent = true,
         summary = if (persona.isNotBlank() || relationship.isNotBlank()) "已填写" else "未填写",
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1548,6 +1565,7 @@ private fun StorageSection(container: AppContainer, scope: CoroutineScope) {
 
     CollapsibleSection(
         title = "存储管理",
+        key = "storage",
         summary = "总占用 ${AppStorageUsage.formatBytes(items.sumOf { it.sizeBytes })}",
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -1811,6 +1829,8 @@ private fun SeedanceSettingsSection(container: AppContainer, scope: CoroutineSco
 
     CollapsibleSection(
         title = "Seedance 对话视频",
+        key = "seedance",
+        keepContent = true,
         summary = if (apiKey.isNotBlank()) "已配置 · ${relayModelId.ifBlank { variantLabel(variant) }}" else "未配置 API Key",
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {

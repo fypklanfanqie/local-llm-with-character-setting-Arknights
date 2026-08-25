@@ -16,7 +16,9 @@ set(CHAT_16K_PAGE_LINKER_FLAG "-Wl,-z,max-page-size=16384")
 # CHAT_MNN_BUILD_ID 由 scripts/native/build_mnn_android.sh 生成并传入；本地/开发构建回退 "dev-unpinned"。
 set(CHAT_MNN_COMMIT "af0142bcc7b76b7a5128373e285683dc04f55f69" CACHE STRING "钉定的 MNN commit")
 set(CHAT_MNN_JNI_ABI 1 CACHE STRING "MNN JNI ABI 版本（与 Kotlin MnnRuntimeInfo.abiVersion 对齐）")
-set(CHAT_MNN_BUILD_ID "dev-unpinned" CACHE STRING "native build ID（由 build_mnn_android.sh 设置）")
+# Wave 2：采样热重建补丁版构建 ID（build_mnn_android.sh 同步生成）。行为变更即 bump——
+# 认证记录键含 nativeBuildId，同 ID 重编会让旧基准证据静默延续到新二进制。
+set(CHAT_MNN_BUILD_ID "pinned-af0142b-samplerhot-20260824" CACHE STRING "native build ID（由 build_mnn_android.sh 设置）")
 
 # ===== CPU 系统 JNI 包装（libcpu_sys_jni.so）=====
 # 只读 CPU 探测：大核 ID / 拓扑 / 频率（cpp/cpu_affinity_jni.cpp + cpu_affinity.h）。

@@ -149,6 +149,9 @@ data class InferenceTurnRecord(
     val thinkingEffective: String? = null,
     /** 空响应分类枚举名（[com.rhodesisland.terminal.llm.template.EmptyResponseClass]）。 */
     val emptyResponseClass: String? = null,
+    /** 输出健全性分类枚举名（[com.rhodesisland.terminal.llm.template.OutputSanityDetector.SanityClass]）；
+     *  null=未检测/旧记录。认证门禁据此拒绝乱码/复读样本（correctnessOk 的真实证据源）。 */
+    val sanityClass: String? = null,
     // ---- Task 5：本地思考档位策略快照（由 provider 解析计划后一次构造透传；思考关闭/云端为 null）----
     /** 本地思考档位/复杂度/软目标/控制方式快照；不包含用户正文。 */
     val thinkingPolicy: ThinkingPolicyTelemetry? = null,
@@ -167,6 +170,8 @@ data class BenchmarkSummary(
     val maxThermalStatus: Int? = null,
     /** KV 复用率：kvReuse==true 的样本占比（0..1）。 */
     val kvReuseRate: Float? = null,
+    /** 健全样本率：sanityClass==SANE 的占比（仅统计有检测值的样本；null=无任何检测证据）。 */
+    val saneSampleRate: Float? = null,
     // ---- Task 5：P95 尾延迟/尾吞吐（>0 过滤口径与 median 一致）----
     /** P95 首字延迟（ms）。 */
     val p95TtftMs: Float? = null,
@@ -177,6 +182,9 @@ data class BenchmarkSummary(
 // ----------------------------------------------------------------------------------
 // 统计工具（纯函数，无 Android 依赖，便于 JVM 单测）
 // ----------------------------------------------------------------------------------
+
+/** [OutputSanityDetector.SanityClass.SANE] 的枚举名字符串（summarize 用；避免反向依赖 template 包）。 */
+private const val SANE_CLASS_NAME = "SANE"
 
 /** 算术平均；空列表返回 null。 */
 fun mean(values: List<Float>): Float? {
@@ -235,6 +243,8 @@ fun summarize(records: List<InferenceTurnRecord>): BenchmarkSummary {
     val thermal = records.mapNotNull { it.thermalMax }
     val reuse = records.mapNotNull { it.kvReuse }
     val reuseRate = if (reuse.isEmpty()) null else reuse.count { it }.toFloat() / reuse.size
+    val sanity = records.mapNotNull { it.sanityClass }
+    val saneRate = if (sanity.isEmpty()) null else sanity.count { it == SANE_CLASS_NAME }.toFloat() / sanity.size
     return BenchmarkSummary(
         medianTtftMs = median(ttfts),
         medianPrefillTps = median(prefillTps),
@@ -245,6 +255,7 @@ fun summarize(records: List<InferenceTurnRecord>): BenchmarkSummary {
         peakPssMb = pss.maxOrNull(),
         maxThermalStatus = thermal.maxOrNull(),
         kvReuseRate = reuseRate,
+        saneSampleRate = saneRate,
     )
 }
 
@@ -381,6 +392,8 @@ class InferenceTelemetry {
         templateCapability: String? = null,
         thinkingEffective: String? = null,
         emptyResponseClass: String? = null,
+        // Wave 2：输出健全性分类（基准/生成旁路检测器产出；null=未检测）。
+        sanityClass: String? = null,
         // Task 5：本地思考档位策略快照（单次透传；思考关闭/云端为 null）。
         thinkingPolicy: ThinkingPolicyTelemetry? = null,
         // Task 15：内存准入的上下文降级（配置值 -> 实际值；未降级传 null/等值）。
@@ -433,6 +446,7 @@ class InferenceTelemetry {
             templateCapability = templateCapability,
             thinkingEffective = thinkingEffective,
             emptyResponseClass = emptyResponseClass,
+            sanityClass = sanityClass,
             thinkingPolicy = thinkingPolicy,
         )
         active = null

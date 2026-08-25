@@ -47,6 +47,7 @@ import com.rhodesisland.terminal.llm.benchmark.BenchmarkScenarioResult
 import com.rhodesisland.terminal.llm.benchmark.BenchmarkTarget
 import com.rhodesisland.terminal.llm.benchmark.CandidateOverrides
 import com.rhodesisland.terminal.llm.benchmark.CertifiedInferenceOptions
+import com.rhodesisland.terminal.llm.benchmark.DecodeOptionCertification
 import com.rhodesisland.terminal.llm.benchmark.ExperimentalPromotionPolicy
 import com.rhodesisland.terminal.llm.benchmark.InferenceBackendQuadrant
 import com.rhodesisland.terminal.llm.benchmark.InferenceBenchmarkCase
@@ -190,6 +191,8 @@ fun BackendSettingsScreen(
     // 基准认证入口状态（运行中禁用按钮；完成后在诊断区展示最近一次判定原因）。
     var benchmarkRunning by remember { mutableStateOf(false) }
     var benchmarkOutcome by remember { mutableStateOf<LookaheadCertificationDecision?>(null) }
+    // Wave 3：解码档位（KV 量化/动态量化）认证结果展示。
+    var decodeOutcome by remember { mutableStateOf<DecodeOptionCertificationOutcome?>(null) }
     // Task 15/16：CPU vs GPU prefill 对比基准状态（确认框 + 运行中 + 结果）。
     var prefillBenchConfirm by remember { mutableStateOf(false) }
     var prefillBenchRunning by remember { mutableStateOf(false) }
@@ -568,7 +571,57 @@ fun BackendSettingsScreen(
                 },
                 showDivider = true,
             )
-            // Task 15/16：CPU vs GPU prefill 对比基准（正式版高级诊断；确认后运行，不改设置）。
+            // Wave 3：KV 量化 / 动态量化档位认证入口（同 Lookahead 模式：防双击 + IO + Toast）。
+            GlassListRow(
+                title = "运行基准并认证（解码档位）",
+                subtitle = "逐个实测 KV 量化（TQ4/Int8/TQ3，按模型大小）与动态量化候选 vs 基线：收益 ≥10% 且可靠性满分才认证（约 3–6 分钟，发热耗电明显）",
+                onClick = {
+                    if (benchmarkRunning) return@GlassListRow
+                    benchmarkRunning = true
+                    scope.launch {
+                        val result = withContext(Dispatchers.IO) {
+                            try {
+                                runDecodeOptionCertification(context, container, container.benchmarkRunner)
+                            } catch (ce: CancellationException) {
+                                throw ce
+                            } catch (e: Exception) {
+                                DecodeOptionCertificationOutcome.NotCertified(listOf("基准异常：${e.message}"))
+                            }
+                        }
+                        decodeOutcome = result
+                        benchmarkRunning = false
+                        when (result) {
+                            is DecodeOptionCertificationOutcome.Certified ->
+                                Toast.makeText(context, "基准通过：${result.text}", Toast.LENGTH_LONG).show()
+                            is DecodeOptionCertificationOutcome.NotCertified ->
+                                Toast.makeText(
+                                    context,
+                                    "未认证：${result.reasons.firstOrNull() ?: "未知原因"}",
+                                    Toast.LENGTH_LONG,
+                                ).show()
+                        }
+                    }
+                },
+                trailing = {
+                    if (benchmarkRunning) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    } else {
+                        Text("运行", color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
+                    }
+                },
+                showDivider = true,
+            )
+            decodeOutcome?.let { outcome ->
+                GlassListRow(
+                    title = "最近一次解码档位认证",
+                    subtitle = when (outcome) {
+                        is DecodeOptionCertificationOutcome.Certified -> outcome.text
+                        is DecodeOptionCertificationOutcome.NotCertified ->
+                            outcome.reasons.joinToString("；").take(160)
+                    },
+                    showDivider = true,
+                )
+            }
             GlassListRow(
                 title = "CPU vs GPU prefill 基准",
                 subtitle = "同模型同参数分别测 CPU 与 GPU 的 LONG_PREFILL（各 1 预热 + 5 记录轮）：对照 prefill 吞吐与首字延迟（约数分钟，明显发热耗电，请保持前台；不改动已保存的后端设置）",
@@ -1091,7 +1144,9 @@ fun diagnosticRows(
     return rows
 }
 
-/** 由一轮基准结果构造 [BenchmarkSample]（认证闭环的 evaluate 输入）。 */
+/** 由一轮基准结果构造 [BenchmarkSample]（认证闭环的 evaluate 输入）。
+ *  Wave 2：correctnessOk 映射真实健全性证据——null（无检测证据，旧档）时保持默认 true
+ *  不构成指控；false（任一样本乱码/复读/退化）时 evaluate 必拒。 */
 fun benchmarkSampleFrom(result: BenchmarkScenarioResult): BenchmarkSample = BenchmarkSample(
     decodeTpsMedian = result.summary.medianDecodeTps ?: 0f,
     ttftMsMedian = result.summary.medianTtftMs,
@@ -1099,6 +1154,7 @@ fun benchmarkSampleFrom(result: BenchmarkScenarioResult): BenchmarkSample = Benc
     peakPssMb = result.summary.peakPssMb?.toFloat(),
     sampleCount = result.recordedSampleCount,
     hotStart = !result.coolRun,
+    correctnessOk = result.correctnessOk ?: true,
 )
 
 /** 认证闭环判定结果（evaluate → toCertifiedOptions 的纯映射；落盘由调用方执行）。 */
@@ -1250,6 +1306,156 @@ private suspend fun runLookaheadCertification(
         container.inferenceCertificationStore.save(it.options)
     }
     return decision
+}
+
+// ==========================================================================
+// Wave 3：KV 量化 / 动态量化档位认证（DecodeOptionCertification 编排）
+// ==========================================================================
+
+/** 解码档位认证结果（Done=已认证档位描述；NotCertified=拒绝原因列表）。 */
+sealed interface DecodeOptionCertificationOutcome {
+    data class Certified(val text: String, val options: CertifiedInferenceOptions) : DecodeOptionCertificationOutcome
+    data class NotCertified(val reasons: List<String>) : DecodeOptionCertificationOutcome
+}
+
+/**
+ * 运行解码档位认证闭环（Wave 3 编排；UI 入口在 IO 线程调用）。
+ *
+ * 流程：前置检查（生成中/过热/模型/native 握手）→ 基线 (8,0) FIXED_DECODE → 逐候选跑
+ * [DecodeOptionCertification.candidatesFor]（按模型参数量决定是否含 TQ3）→ 决策核选胜者 →
+ * 胜者可靠性复核（[DecodeOptionCertification.RELIABILITY_ROUNDS] 轮空响应探针，零乱码/复读）
+ * → 落盘认证记录（resolver 下轮起按 CPU_OPTIMIZED 变体生效）。全灭返回原因，不落盘。
+ *
+ * 模型参数量：内置清单 size 字段（字节）按 ~2bit/参数估算 B 数；未知模型不测 TQ3（保守）。
+ */
+private suspend fun runDecodeOptionCertification(
+    context: Context,
+    container: AppContainer,
+    runner: LocalInferenceBenchmarkRunner,
+): DecodeOptionCertificationOutcome {
+    if (container.backendManager.isGenerating()) {
+        return DecodeOptionCertificationOutcome.NotCertified(listOf("当前有生成任务进行中，请稍后再试"))
+    }
+    if (runner.isThermallyHot()) {
+        return DecodeOptionCertificationOutcome.NotCertified(listOf("设备过热，基准未执行（请降温后重试）"))
+    }
+    val settings = container.settingsRepository
+    val snapshot = settings.getLocalInferenceSettingsNow()
+    val activeModelId = settings.getActiveLocalModelIdNow()
+    val modelPath = if (activeModelId.isNullOrBlank()) null else ModelPathResolver.getLoadPath(context, activeModelId)
+    if (activeModelId.isNullOrBlank() || modelPath == null) {
+        return DecodeOptionCertificationOutcome.NotCertified(listOf("未选择本地模型或模型文件缺失"))
+    }
+    val runtime = MnnBridge.runtimeInfo ?: return DecodeOptionCertificationOutcome.NotCertified(
+        listOf("native 构建身份缺失（握手缺席），无法认证"),
+    )
+    val deviceFingerprint = BackendHealthCoordinator.deviceFingerprintOf()
+    val modelFingerprint = modelConfigFingerprint(modelPath)
+    val configHash = DeviceRuntimeFingerprint.compute(
+        buildMap {
+            put("threads", snapshot.threads.toString())
+            put("contextLen", snapshot.contextLen.toString())
+            put("maxTokens", snapshot.maxTokens.toString())
+            put("mode", snapshot.performanceMode.storageKey)
+            put("deepThinking", snapshot.deepThinking.toString())
+        },
+    )
+    val quadrant = if (snapshot.deepThinking) {
+        InferenceBackendQuadrant.CPU_THINKING_ON
+    } else {
+        InferenceBackendQuadrant.CPU_THINKING_OFF
+    }
+
+    suspend fun fixedDecode(overrides: CandidateOverrides): BenchmarkScenarioResult = runner.run(
+        scenario = InferenceBenchmarkScenario.FIXED_DECODE,
+        configFingerprint = configHash,
+        deviceFingerprint = deviceFingerprint,
+        warmupRounds = DecodeOptionCertification.WARMUP_ROUNDS,
+        recordedRounds = DecodeOptionCertification.RECORDED_ROUNDS,
+        candidateOverrides = overrides,
+    )
+
+    // 基线 (8,0)：现状安全对。
+    val baselineResult = fixedDecode(CandidateOverrides(lookahead = false))
+    val baselineSample = benchmarkSampleFrom(baselineResult)
+
+    // 模型参数量（B）：内置清单 size（字节）≈ 参数量×2bit（TQ 系量化典型密度）；未知 -> null 不测 TQ3。
+    val paramsB = com.rhodesisland.terminal.data.model.DEFAULT_MNN_MODELS
+        .firstOrNull { it.id == activeModelId }
+        ?.size?.takeIf { it > 0 }?.let { it / (0.25f * 1_000_000_000f) }
+
+    val candidates = DecodeOptionCertification.candidatesFor(paramsB).filter { DecodeOptionCertification.whitelisted(it) }
+    if (candidates.isEmpty()) {
+        return DecodeOptionCertificationOutcome.NotCertified(listOf("无可用候选档位"))
+    }
+
+    val candidateSamples = mutableMapOf<DecodeOptionCertification.Candidate, BenchmarkSample>()
+    for (candidate in candidates) {
+        val result = fixedDecode(
+            CandidateOverrides(
+                lookahead = false,
+                attentionMode = candidate.attentionMode,
+                dynamicOption = candidate.dynamicOption,
+            ),
+        )
+        candidateSamples[candidate] = benchmarkSampleFrom(result)
+        // 任一候选出现正确性失败即中止该候选后续评估（保留样本供决策核拒绝；继续跑只会更糟）。
+    }
+
+    val (winner, rejectReasons) = DecodeOptionCertification.selectWinner(baselineSample, candidateSamples)
+    val chosen = winner
+        ?: return DecodeOptionCertificationOutcome.NotCertified(
+            rejectReasons.flatMap { (label, reasons) -> listOf("[$label] " + reasons.joinToString("；")) }
+                .ifEmpty { listOf("所有候选均未达标") },
+        )
+
+    // 胜者可靠性复核：零空响应/乱码/复读/回退才允许落盘。
+    val case = InferenceBenchmarkCase(
+        scenario = InferenceBenchmarkScenario.EMPTY_RESPONSE_CHECK,
+        quadrant = quadrant,
+        modelFingerprint = modelFingerprint,
+        deviceFingerprint = deviceFingerprint,
+        configHash = configHash,
+    )
+    val reliability = runner.runReliability(case, rounds = DecodeOptionCertification.RELIABILITY_ROUNDS)
+    val veto = DecodeOptionCertification.reliabilityVeto(reliability)
+    if (veto.isNotEmpty()) {
+        return DecodeOptionCertificationOutcome.NotCertified(listOf("[${chosen.label} 可靠性否决] " + veto.joinToString("；")))
+    }
+
+    val certCase = InferenceBenchmarkCase(
+        scenario = InferenceBenchmarkScenario.FIXED_DECODE,
+        quadrant = quadrant,
+        modelFingerprint = modelFingerprint,
+        deviceFingerprint = deviceFingerprint,
+        configHash = configHash,
+    )
+    val options = InferenceCertificationStore.toCertifiedOptions(
+        case = certCase,
+        decision = PromotionDecision.Promote,
+        nativeBuildId = runtime.nativeBuildId,
+        mnnCommit = runtime.mnnCommit,
+        decodeStepTokens = 1,
+        lookaheadEvidence = false, // KV 量化认证不得误留 lookahead=true
+        attentionMode = chosen.attentionMode,
+        dynamicOption = chosen.dynamicOption,
+        configHash = configHash,
+        nowElapsedMs = SystemClock.elapsedRealtime(),
+    ) ?: return DecodeOptionCertificationOutcome.NotCertified(listOf("native 构建身份缺失，无法认证"))
+
+    container.inferenceCertificationStore.save(options)
+    val gain = if (baselineSample.decodeTpsMedian > 0) {
+        String.format(
+            java.util.Locale.US, "%.0f%%",
+            (candidateSamples[chosen]!!.decodeTpsMedian / baselineSample.decodeTpsMedian - 1) * 100,
+        )
+    } else {
+        "?"
+    }
+    return DecodeOptionCertificationOutcome.Certified(
+        text = "${chosen.label}（decode +$gain，可靠性 ${reliability.totalRounds} 轮满分）",
+        options = options,
+    )
 }
 
 // ==========================================================================

@@ -77,6 +77,9 @@ data class BenchmarkScenarioResult(
     val actualBackendCounts: Map<String, Int>? = null,
     val nativeBuildId: String? = null,
     val mnnCommit: String? = null,
+    /** 正确性证据（Wave 2）：null=未知/旧记录（不构成指控也不构成豁免）；
+     *  true=全部样本 sanityClass==SANE；false=任一样本检出乱码/复读/退化。 */
+    val correctnessOk: Boolean? = null,
 )
 
 /**
@@ -129,6 +132,10 @@ data class CandidateOverrides(
     val lookahead: Boolean,
     /** 候选 decode 步长（1=逐 token；2..4=多 token 步进候选，native clamp 到 [1,4]）。 */
     val decodeStepTokens: Int = 1,
+    /** 候选 attention_mode（Wave 3：8=基线；9/14/12=KV 量化候选；白名单钳制在 resolver）。 */
+    val attentionMode: Int = 8,
+    /** 候选 dynamic_option（Wave 3：0=基线；8=SME2 在线重排候选）。 */
+    val dynamicOption: Int = 0,
 )
 
 /**

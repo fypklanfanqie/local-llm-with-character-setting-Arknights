@@ -14,10 +14,13 @@ import com.rhodesisland.terminal.config.isFreeProxyBaseUrl
 import com.rhodesisland.terminal.data.model.ChatMessage
 import com.rhodesisland.terminal.data.model.ChatProviderType
 import com.rhodesisland.terminal.data.model.WorldviewTargetType
+import com.rhodesisland.terminal.data.model.matchesScope
 import com.rhodesisland.terminal.data.remote.ChatMessageDto
 import com.rhodesisland.terminal.data.repository.SettingsRepository
+import com.rhodesisland.terminal.llm.LorebookEngine
 import com.rhodesisland.terminal.notification.AppLifecycleObserver
 import com.rhodesisland.terminal.notification.GreetingNotificationManager
+import com.rhodesisland.terminal.util.PromptWindowAnchor
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
@@ -243,8 +246,11 @@ class GreetingWorker(
     ): Boolean {
         val char = container.characterRepository.getNow(charId) ?: return false
         val convId = resolveActiveConversation(settings, container, charId)
-        val history = container.chatRepository.getHistory(convId)
-            .takeLast(AppConfig.Greeting.CONTEXT_MESSAGES)
+        // 锚定截断：cap=6 须显式小步长（默认 20 会被 coerce 到 6 造成保留数震荡）；
+        // 统一走锚定是为防未来调大 CONTEXT_MESSAGES 后退化回逐条滑动窗口、破坏前缀缓存。
+        val history = PromptWindowAnchor.anchoredWindow(
+            container.chatRepository.getHistory(convId), AppConfig.Greeting.CONTEXT_MESSAGES, step = 2,
+        )
 
         val apiConfig = settings.getApiConfigNow()
         // 内置免费服务商（Cloudflare 代理）无需客户端 key；其余服务商必须配置
@@ -323,8 +329,31 @@ class GreetingWorker(
         // 自定义世界观（绑定到该角色的私聊）注入
         val worldviewDirective = settings.worldviewDirectiveFor(WorldviewTargetType.CHARACTER, char.id)
 
+        // 世界书激活：按作用域过滤（ALL 或 CHARACTER 绑定本角色）。问候没有「最新用户消息紧跟」
+        // 的对话语境，动态尾直接拼在同一 system 末尾（单次生成，无缓存连续性诉求）
+        val lorebookDirective = run {
+            val cfg = settings.getLorebookConfigNow()
+            if (!cfg.masterEnabled) ""
+            else {
+                val act = LorebookEngine.activate(
+                    books = settings.getLorebooksNow().filter {
+                        it.enabled && it.matchesScope(characterId = char.id, groupConversationId = null)
+                    },
+                    config = cfg,
+                    scanMessages = history.takeLast(50),
+                )
+                if (act.isEmpty) "" else act.staticHead + act.tailInjection
+            }
+        }
+        val systemContent = buildString {
+            append(char.systemPrompt)
+            append(worldviewDirective)
+            append(lorebookDirective)
+            append(userDirective)
+            append(instruction)
+        }
         val messages = buildList {
-            add(ChatMessageDto(role = "system", content = JsonPrimitive(char.systemPrompt + worldviewDirective + userDirective + instruction)))
+            add(ChatMessageDto(role = "system", content = JsonPrimitive(systemContent)))
             history.forEach { m ->
                 if (m.content.isBlank()) return@forEach
                 // 剥离 <think> 段（深度思考模式下云端回复会带），避免把推理过程当历史喂回

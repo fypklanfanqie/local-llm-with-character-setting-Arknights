@@ -943,6 +943,9 @@ Java_com_chatbyyourside_llm_backend_MnnBridge_nativeGetLastError(
 // 能力集反映本 libMNN.so 钉定构建的编译期特性（LLM/低内存/OpenCL/ARM82 开启，QNN 关闭）；
 // summary_v2 在 v2 生成契约（Task 1）落地后追加（Kotlin MnnBridge.hasSummaryV2Capability 查询，
 // Task 8 发布门禁据此拒绝旧 native；v1 兼容路径继续可用）。
+// sampler_hot_update：Wave 2 引擎补丁——set_config 携带采样标量时热重建采样管线
+// （Kotlin resolver 据此在 load 配置里省略温度等标量，调参不再触发整模重载；
+// 旧 .so 无此能力时 Kotlin 保持 legacy 行为逐位不变）。
 // JSON 形如 {"abiVersion":1,"mnnCommit":"af0142...","nativeBuildId":"...","capabilities":["mmap",...]}
 JNIEXPORT jstring JNICALL
 Java_com_chatbyyourside_llm_backend_MnnBridge_nativeGetRuntimeInfo(
@@ -952,7 +955,7 @@ Java_com_chatbyyourside_llm_backend_MnnBridge_nativeGetRuntimeInfo(
         "{\"abiVersion\":%d,"
         "\"mnnCommit\":\"%s\","
         "\"nativeBuildId\":\"%s\","
-        "\"capabilities\":[\"mmap\",\"cached_mmap\",\"reuse_kv\",\"opencl\",\"arm82\",\"summary_v2\"]}";
+        "\"capabilities\":[\"mmap\",\"cached_mmap\",\"reuse_kv\",\"opencl\",\"arm82\",\"summary_v2\",\"sampler_hot_update\"]}";
     char buf[512];
     snprintf(buf, sizeof(buf), kFmt,
              (int)CHAT_MNN_JNI_ABI, CHAT_MNN_COMMIT, CHAT_MNN_BUILD_ID);

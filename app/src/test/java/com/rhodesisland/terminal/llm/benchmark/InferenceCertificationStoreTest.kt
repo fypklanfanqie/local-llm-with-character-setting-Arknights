@@ -96,6 +96,58 @@ class InferenceCertificationStoreTest {
         assertEquals("缺字段应取默认 certifiedAtElapsedMs=0", 0L, restored.certifiedAtElapsedMs)
     }
 
+    @Test
+    fun wave3FieldsRoundTripAndOldRecordsDefaultToBaseline() {
+        // Wave 3 新字段（attentionMode/dynamicOption）：显式值 round-trip 逐字段一致。
+        val certified = CertifiedInferenceOptions(
+            deviceFingerprint = "d", modelFingerprint = "m",
+            variant = "CPU_OPTIMIZED", nativeBuildId = "b", mnnCommit = "c",
+            lookahead = false, decodeStepTokens = 1,
+            attentionMode = 14, dynamicOption = 0,
+        )
+        val json = Json { ignoreUnknownKeys = true }
+        val restored = json.decodeFromString(
+            CertifiedInferenceOptions.serializer(),
+            json.encodeToString(CertifiedInferenceOptions.serializer(), certified),
+        )
+        assertEquals(certified, restored)
+
+        // 旧记录（无 Wave 3 字段）解析到基线默认：8/0——语义与历史行为完全一致。
+        val oldShape = """{"deviceFingerprint":"d","modelFingerprint":"m","variant":"CPU_OPTIMIZED",
+            "nativeBuildId":"b","mnnCommit":"c","lookahead":true,"decodeStepTokens":2}"""
+        val legacy = Json { ignoreUnknownKeys = true }
+            .decodeFromString(CertifiedInferenceOptions.serializer(), oldShape)
+        assertEquals(8, legacy.attentionMode)
+        assertEquals(0, legacy.dynamicOption)
+    }
+
+    @Test
+    fun toCertifiedOptionsCarriesWave3Fields() {
+        val case = InferenceBenchmarkCase(
+            scenario = com.rhodesisland.terminal.llm.benchmark.InferenceBenchmarkScenario.FIXED_DECODE,
+            quadrant = InferenceBackendQuadrant.CPU_THINKING_OFF,
+            deviceFingerprint = "d",
+            modelFingerprint = "m",
+            configHash = "cfg",
+        )
+        val cert = InferenceCertificationStore.toCertifiedOptions(
+            case = case,
+            decision = PromotionDecision.Promote,
+            nativeBuildId = "b",
+            mnnCommit = "c",
+            decodeStepTokens = 1,
+            lookaheadEvidence = false,
+            attentionMode = 14,
+            dynamicOption = 0,
+            configHash = null,
+            nowElapsedMs = 42L,
+        )
+        assertTrue(cert != null)
+        assertEquals(14, cert!!.attentionMode)
+        assertEquals(0, cert.dynamicOption)
+        assertEquals(false, cert.lookahead) // KV 量化认证不得误留 lookahead=true
+    }
+
     // ===== map 存取语义（纯逻辑；DataStore edit 仅做 decode -> put -> encode，见类实现）=====
 
     @Test

@@ -34,6 +34,10 @@ private val Context.certificationDataStore by preferencesDataStore(
  *
  * @param lookahead 该组合是否认证了 lookahead 投机解码收益（仅 CPU_OPTIMIZED 组合有意义）。
  * @param decodeStepTokens 认证的多 token 步进（1=仅认证了逐 token，无步进证据）。
+ * @param attentionMode 认证的 attention_mode（Wave 3：8=基线无 KV 量化证据；9=K-int8；14=KV-TQ4；
+ *        12=KV-TQ3 仅大模型。白名单钳制见 resolver；默认 8=旧记录语义不变）。
+ * @param dynamicOption 认证的 dynamic_option（Wave 3：0=基线；8=在线权重重排候选，仅 SME2 机器有
+ *        实测收益——非 SME2 自然过不了 ≥10% 门禁不会被认证）。默认 0=旧记录语义不变。
  * @param certifiedConfigHash 认证时的候选配置哈希（诊断用途，不做门禁匹配）。
  * @param certifiedAtElapsedMs 认证时刻（SystemClock.elapsedRealtime 语义；诊断/过期策略用）。
  */
@@ -46,6 +50,8 @@ data class CertifiedInferenceOptions(
     val mnnCommit: String = "",
     val lookahead: Boolean = false,
     val decodeStepTokens: Int = 1,
+    val attentionMode: Int = 8,
+    val dynamicOption: Int = 0,
     val certifiedConfigHash: String? = null,
     val certifiedAtElapsedMs: Long = 0L,
 )
@@ -151,6 +157,8 @@ class InferenceCertificationStore(private val context: Context) {
          *        纯步进基准（step=2 vs 1）-> false）。认证记录按此字段落 lookahead——纯步进认证不得
          *        留下 lookahead=true 的记录，否则用户请求 lookahead 时 resolver 无 lookahead 基准证据
          *        仍启用 speculative_type（证据错配启用）。
+         * @param attentionMode 被认证候选的 attention_mode（Wave 3；默认 8=无 KV 量化证据）。
+         * @param dynamicOption 被认证候选的 dynamic_option（Wave 3；默认 0=基线）。
          * @param configHash 认证时的候选配置哈希（诊断用途）。
          * @param nowElapsedMs 认证时刻（SystemClock.elapsedRealtime 语义）。
          */
@@ -161,6 +169,8 @@ class InferenceCertificationStore(private val context: Context) {
             mnnCommit: String,
             decodeStepTokens: Int,
             lookaheadEvidence: Boolean,
+            attentionMode: Int = 8,
+            dynamicOption: Int = 0,
             configHash: String?,
             nowElapsedMs: Long,
         ): CertifiedInferenceOptions? {
@@ -182,6 +192,8 @@ class InferenceCertificationStore(private val context: Context) {
                 // （step=2 vs 1）不产生 lookahead 证据，record.lookahead=false 防止门禁误启用。
                 lookahead = lookaheadEvidence,
                 decodeStepTokens = decodeStepTokens,
+                attentionMode = attentionMode,
+                dynamicOption = dynamicOption,
                 certifiedConfigHash = configHash,
                 certifiedAtElapsedMs = nowElapsedMs,
             )

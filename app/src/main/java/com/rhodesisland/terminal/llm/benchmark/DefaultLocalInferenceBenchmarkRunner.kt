@@ -23,6 +23,7 @@ import com.rhodesisland.terminal.llm.profile.OpenClHealthState
 import com.rhodesisland.terminal.llm.profile.ResolvedInferencePlan
 import com.rhodesisland.terminal.llm.profile.RuntimeVariant
 import com.rhodesisland.terminal.llm.template.EmptyResponseClass
+import com.rhodesisland.terminal.llm.template.OutputSanityDetector
 import com.rhodesisland.terminal.llm.template.ThinkingOutputClassifier
 import com.rhodesisland.terminal.llm.template.ThinkingTemplateCapability
 import com.rhodesisland.terminal.llm.template.ThinkingTemplateCapabilityResolver
@@ -198,6 +199,13 @@ open class DefaultLocalInferenceBenchmarkRunner(
             .groupingBy { it }
             .eachCount()
         val coolRun = samples.isNotEmpty() && discardedReasons.none { it.startsWith(REASON_THERMALLY_HOT) }
+        // Wave 2：正确性聚合——有健全性检测值的样本全部 SANE 才算通过；无任何检测证据为 null。
+        val sanityClasses = samples.mapNotNull { it.sanityClass }
+        val correctnessOk = if (sanityClasses.isEmpty()) {
+            null
+        } else {
+            sanityClasses.all { it == OutputSanityDetector.SanityClass.SANE.name }
+        }
         return BenchmarkScenarioResult(
             scenario = scenario,
             deviceFingerprint = deviceFingerprint,
@@ -213,6 +221,7 @@ open class DefaultLocalInferenceBenchmarkRunner(
             actualBackendCounts = actualBackendCounts,
             nativeBuildId = MnnBridge.runtimeInfo?.nativeBuildId,
             mnnCommit = MnnBridge.runtimeInfo?.mnnCommit,
+            correctnessOk = correctnessOk,
         )
     }
 
@@ -236,14 +245,23 @@ open class DefaultLocalInferenceBenchmarkRunner(
             for (round in 0 until rounds) {
                 // 失败样本如实记录，绝不用重试替换（每轮只执行一次）。
                 // Task 4 Step 6：可靠性轮次固定用 EMPTY_RESPONSE_CHECK 探针。
+                val sanityDetector = OutputSanityDetector()
                 val record = runOneRound(
                     modelPath, snapshot, plan, case.quadrant, templateCapability,
                     messages = emptyResponseProbe(),
                     allowCpuFallback = true,
+                    sanityDetector = sanityDetector,
                 )
                 val cls = record?.emptyResponseClass ?: NO_RECORD_CLASS
                 classes[cls] = (classes[cls] ?: 0) + 1
-                if (cls == EmptyResponseClass.NONE.name) nonEmptyCount++
+                if (cls == EmptyResponseClass.NONE.name && record != null) {
+                    // 有正文还不够：乱码/复读轮不算成功（Wave 2 正确性口径并入可靠性成功率）。
+                    if (record.sanityClass == null ||
+                        record.sanityClass == OutputSanityDetector.SanityClass.SANE.name
+                    ) {
+                        nonEmptyCount++
+                    }
+                }
                 if (record?.downgradeReasons?.contains(BackendManager.EMPTY_GPU_OUTPUT_FALLBACK) == true) fallbackCount++
             }
         } else if (rounds > 0) {
@@ -261,7 +279,8 @@ open class DefaultLocalInferenceBenchmarkRunner(
     // 内部
     // ------------------------------------------------------------------
 
-    /** 一次探针生成：场景专用 prompt + 固定采样参数，返回本轮的最终遥测记录（异常返回 null）。 */
+    /** 一次探针生成：场景专用 prompt + 固定采样参数，返回本轮的最终遥测记录（异常返回 null）。
+     *  @param sanityDetector 调用方持有的健全性检测器（可靠性路径需在生成后读分类）；null 时内部自建。 */
     private suspend fun runOneRound(
         modelPath: String,
         snapshot: LocalInferenceSettings,
@@ -271,11 +290,15 @@ open class DefaultLocalInferenceBenchmarkRunner(
         messages: List<ChatMessage>,
         maxTokensOverride: Int? = null,
         allowCpuFallback: Boolean = false,
+        sanityDetector: OutputSanityDetector? = null,
     ): InferenceTurnRecord? {
         val classifier = ThinkingOutputClassifier(
             thinkingRequested = quadrant.thinkingEnabled,
             templateCapability = templateCapability,
         )
+        // Wave 2：输出健全性旁路检测——onToken 增量喂入原始流文本，收口进记录（sanityClass）。
+        // 认证门禁据此拒绝 FFFF/复读/退化样本，不再恒 correctnessOk=true。
+        val detector = sanityDetector ?: OutputSanityDetector()
         // 性能基准用默认策略（DISABLED，不引入回退偏置）；可靠性基准在 GPU 象限开启
         // CPU_BEFORE_FIRST_DELTA，使 EMPTY_GPU_OUTPUT_FALLBACK 可被观察计数。
         val outputPolicy = GenerationOutputPolicy(
@@ -298,7 +321,10 @@ open class DefaultLocalInferenceBenchmarkRunner(
                 topP = AppConfig.LLM.DEFAULT_TOP_P,
                 repeatPenalty = AppConfig.LLM.DEFAULT_REPEAT_PENALTY,
                 enableThinking = quadrant.thinkingEnabled,
-                onToken = { true }, // 基准只测速，不截断
+                onToken = { delta ->
+                    detector.append(delta) // 健全性旁路：只观察，不截断
+                    true // 基准只测速，不截断
+                },
                 thinkingRequested = quadrant.thinkingEnabled,
                 templateCapability = templateCapability.name,
                 thinkingClassifier = classifier,
@@ -313,7 +339,9 @@ open class DefaultLocalInferenceBenchmarkRunner(
             return null
         }
         // MnnBackend 在 generateStreamMessages 的 finally 内收口遥测记录，generate 返回后必然可读。
-        return backendManager.lastTurnRecord()
+        val record = backendManager.lastTurnRecord() ?: return null
+        // 健全性分类随本轮收口（记录为不可变 data class，copy 补记；null=未产出文本时检测器恒 SANE）。
+        return record.copy(sanityClass = detector.classify().name)
     }
 
     // ------------------------------------------------------------------
@@ -481,6 +509,8 @@ open class DefaultLocalInferenceBenchmarkRunner(
                 mnnCommit = MnnBridge.runtimeInfo?.mnnCommit ?: "",
                 lookahead = overrides.lookahead,
                 decodeStepTokens = overrides.decodeStepTokens,
+                attentionMode = overrides.attentionMode,
+                dynamicOption = overrides.dynamicOption,
             )
         },
     )

@@ -4,14 +4,23 @@ import com.rhodesisland.terminal.config.AppConfig
 import com.rhodesisland.terminal.data.model.Character
 import com.rhodesisland.terminal.data.model.ChatMessage
 import com.rhodesisland.terminal.util.MarkdownParser
+import com.rhodesisland.terminal.util.PromptWindowAnchor
 
 /**
  * 群聊提示词构建（纯函数，JVM 可测）。
  *
  * OpenAI 兼容 chat 消息的 assistant 角色无法表达「谁在发言」——多说话人靠**名字织进正文**表达：
- * - system：一次注入「这是罗德岛干员群聊」+ 全员人设（截断）+「以 X 的身份回话，只输出 X 说的话本身」。
+ * - system：「稳定头」（群聊定位+世界观+世界书静态头+全员人设+规则，不含本轮发言者信息）+
+ *   末尾「本轮任务」块（以 X 的身份回话、@ 提醒、提问/接话、只输出 X 说的话本身）。
+ *   发言者每轮轮换，若出现在 system 开头则云端 prompt 前缀缓存永不命中；
+ *   收敛到尾部增量后，「全员人设」等长稳定前缀可持续复用。
  * - assistant 历史：改写为 `名字：内容`（剥离深度思考）。
  * - user 历史：保持 user（用户=博士）。
+ * - 历史窗口经 [PromptWindowAnchor] 锚定截断（cap=40/step=10），避免逐条滑动破坏前缀。
+ *
+ * 世界书（移植大众版，缓存友好布局）：[lorebookStaticHead] 为常驻条目静态段，拼进 system
+ * （内容只随条目编辑变化 → system 逐字节稳定 → 云端前缀缓存复用）；[lorebookTailMessages]
+ * （动态命中，每轮不同）拆成独立消息插到最后一条 user 之前——绝不进 system 打破头部缓存。
  *
  * [buildApiMessages] 供 [com.rhodesisland.terminal.ui.groupchat.GroupChatViewModel] 的流式路径
  * （`provider.chat(List<ChatMessage>)`）复用；后台 Worker 再映射为 `ChatMessageDto` 走 `chatOnce`。
@@ -21,7 +30,9 @@ object GroupChatPromptBuilder {
     /** 未知成员（已被移出群）的名字兜底。 */
     const val FALLBACK_NAME = "群聊成员"
 
-    /** 构建完整 API 消息序列：system + 尾部最近历史（assistant 带 `名字：` 前缀）。 */
+    /** 构建完整 API 消息序列：system + 尾部最近历史（assistant 带 `名字：` 前缀）+ 世界书动态尾。
+     *  [lorebook] 为世界书解析结果（[LorebookEngine.resolve] 产出）：蓝灯段进 system 稳定区、
+     *  绿灯尾块折入尾部（末条 user 之前 / 无 user 时追加）；null = 不注入，输出与 legacy 一致。 */
     fun buildApiMessages(
         members: List<Character>,
         speaker: Character,
@@ -30,10 +41,33 @@ object GroupChatPromptBuilder {
         userPersona: String? = null,
         userRelationship: String? = null,
         targeted: Boolean = false,
-        worldviewDirective: String = "",
+        worldviewDirective: String? = null,
+        lorebook: com.rhodesisland.terminal.llm.LorebookEngine.Resolved? = null,
+    ): List<ChatMessage> = buildApiMessages(
+        members, speaker, history, askUser, userPersona, userRelationship, targeted, worldviewDirective,
+        lorebookStaticHead = lorebook?.stableBeforeChar.orEmpty() +
+            (if (lorebook?.stableAfterChar.isNullOrBlank()) "" else "\n" + lorebook!!.stableAfterChar.trim()),
+        lorebookTailMessages = listOfNotNull(lorebook?.let { com.rhodesisland.terminal.llm.LorebookEngine.tailBlockMessageOf(it) }),
+    )
+
+    /** 重载：显式静态头/动态尾消息（缓存友好布局的底层实现；[buildApiMessages] 的 Resolved 便捷入口委托到此）。 */
+    fun buildApiMessages(
+        members: List<Character>,
+        speaker: Character,
+        history: List<ChatMessage>,
+        askUser: Boolean,
+        userPersona: String? = null,
+        userRelationship: String? = null,
+        targeted: Boolean = false,
+        worldviewDirective: String? = null,
+        lorebookStaticHead: String = "",
+        lorebookTailMessages: List<ChatMessage> = emptyList(),
     ): List<ChatMessage> {
         val nameById = members.associate { it.id to it.name }
-        val mappedHistory = history.takeLast(AppConfig.GroupChat.MAX_CONTEXT_MESSAGES).mapNotNull { m ->
+        // 锚定截断（step=10）：溢出量在一个量子块内增长时窗口起点不动，云端前缀缓存可持续复用
+        val mappedHistory = PromptWindowAnchor.anchoredWindow(
+            history, AppConfig.GroupChat.MAX_CONTEXT_MESSAGES, step = PromptWindowAnchor.GROUP_TRIM_STEP,
+        ).mapNotNull { m ->
             val clean = MarkdownParser.stripThink(m.content).trim()
             if (clean.isEmpty()) return@mapNotNull null
             when (m.role) {
@@ -45,9 +79,30 @@ object GroupChatPromptBuilder {
                 else -> null
             }
         }
-        return buildList {
-            add(ChatMessage(role = "system", content = buildSystemPrompt(members, speaker, askUser, userPersona, userRelationship, targeted, worldviewDirective)))
-            addAll(mappedHistory)
+        val systemMessage = ChatMessage(
+            role = "system",
+            content = buildSystemPrompt(members, speaker, askUser, userPersona, userRelationship, targeted, worldviewDirective, lorebookStaticHead),
+        )
+        return if (lorebookTailMessages.isEmpty()) {
+            buildList {
+                add(systemMessage)
+                addAll(mappedHistory)
+            }
+        } else {
+            // 动态世界书插在最后一条 user 消息之前（贴近对话、不触碰头部缓存）；
+            // mappedHistory 已完成映射，此处插入不会被 mapNotNull 过滤。
+            buildList {
+                add(systemMessage)
+                val lastUserIdx = mappedHistory.indexOfLast { it.role == "user" }
+                if (lastUserIdx >= 0) {
+                    addAll(mappedHistory.take(lastUserIdx))
+                    addAll(lorebookTailMessages)
+                    addAll(mappedHistory.drop(lastUserIdx))
+                } else {
+                    addAll(mappedHistory)
+                    addAll(lorebookTailMessages)
+                }
+            }
         }
     }
 
@@ -58,11 +113,19 @@ object GroupChatPromptBuilder {
         userPersona: String? = null,
         userRelationship: String? = null,
         targeted: Boolean = false,
-        worldviewDirective: String = "",
+        worldviewDirective: String? = null,
+        lorebookStaticHead: String = "",
     ): String = buildString {
-        append("这是一个罗德岛干员群聊。你在群里扮演「", speaker.name, "」。\n")
-        if (worldviewDirective.isNotBlank()) {
+        // 稳定头：不含本轮发言者信息——群聊每轮换人，speaker 出现在开头会使云端
+        // prompt 前缀缓存每轮全失效。随 speaker/轮次变化的内容全部集中在下方
+        // 「本轮任务」块，保住「定位+世界观+世界书静态头+全员人设+规则」这段长稳定前缀。
+        append("这是一个罗德岛干员群聊。\n")
+        if (!worldviewDirective.isNullOrBlank()) {
             append(worldviewDirective.trim(), "\n")
+        }
+        // 世界书常驻条目静态段（只随条目编辑变化）：世界观之后、人设之前——稳定头内逐字节稳定
+        if (lorebookStaticHead.isNotBlank()) {
+            append(lorebookStaticHead.trim(), "\n")
         }
         append("以下是群成员人设：\n")
         members.forEach { m ->
@@ -77,6 +140,8 @@ object GroupChatPromptBuilder {
             if (!userRelationship.isNullOrBlank()) append("他与群成员的关系：", userRelationship.trim(), "。")
             append("\n")
         }
+        // 变化尾：「本轮任务」块——speaker / targeted / askUser 指令集中于此
+        append("————本轮任务————\n")
         append("现在请你以「", speaker.name, "」的身份回一条消息。\n")
         if (targeted) {
             append("注意：用户这条消息 @ 了你，是专门对你说的，请务必回应。\n")

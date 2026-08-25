@@ -1,6 +1,7 @@
 package com.rhodesisland.terminal.provider.local
 
 import android.content.Context
+import android.os.StatFs
 import android.os.SystemClock
 import android.util.Log
 import com.rhodesisland.terminal.config.AppConfig
@@ -51,8 +52,10 @@ import com.rhodesisland.terminal.llm.thinking.NativeThinkingBudgetCapability
 import com.rhodesisland.terminal.llm.thinking.NativeThinkingBudgetCapabilityResolver
 import com.rhodesisland.terminal.llm.thinking.ThinkingPolicyTelemetry
 import com.rhodesisland.terminal.llm.thinking.shouldTruncateThinking
+import com.rhodesisland.terminal.llm.template.OutputSanityDetector
 import com.rhodesisland.terminal.perfmon.BackendType as PerfmonBackendType
 import com.rhodesisland.terminal.provider.ChatProvider
+import com.rhodesisland.terminal.util.MnnTmpDirJanitor
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -212,6 +215,26 @@ class LocalChatProvider(
     }
 
     /**
+     * 已安装模型的 tmp 目录哈希集（供 [MnnTmpDirJanitor.sweep] 区分「已装模型缓存」与「孤儿缓存」）。
+     * 与 resolver 的 tmp 目录命名同源（MnnTmpDirJanitor.tmpDirFor + config.json 路径哈希），
+     * 保证加载与清扫用同一把尺子：删除模型后其 tmp 目录即时变为孤儿，下一轮 chatTyped 即被清。
+     */
+    private fun modelInstalledTmpHashes(): Set<String> {
+        val modelsDir = ModelPathResolver.getModelsDirectory(context)
+        return (modelsDir.listFiles { f -> f.isDirectory } ?: emptyArray())
+            .mapNotNull { d ->
+                val config = File(d, ModelPathResolver.MNN_CONFIG_FILE)
+                val model = File(d, ModelPathResolver.MNN_MODEL_FILE)
+                if (config.exists() && model.exists()) {
+                    MnnTmpDirJanitor.tmpDirFor(context.cacheDir, config.absolutePath)
+                        .name.substringAfter(MnnTmpDirJanitor.TMP_DIR_PREFIX)
+                } else {
+                    null
+                }
+            }.toSet()
+    }
+
+    /**
      * 本地聊天（类型化结果，Task 3 Step 4）：分离展示文本与模型原始文本。
      *
      * - [LocalChatResult.displayText]：经 `<think>` 折叠装饰的展示文本，存 `content`、驱动 UI。
@@ -263,13 +286,9 @@ class LocalChatProvider(
             // 深度思考开关：透传给 MNN jinja context enable_thinking（运行时生效，无需重载）。
             // 关闭时推理模型跳过 <think> 推理段直接作答（修复「关闭开关仍深度思考」）。
             val deepThinking = settingsNow.deepThinking
-            // 仅推理模型（Think 标签）的输出需要折叠包装：其 chat 模板把起始 <think> 放在 generation
-            // prompt 前缀（非输出流），故 native 输出缺起始 <think>，parseWithThink 无法折叠（修复「本地
-            // 思考过程不可折叠」）。非推理模型（Llama/Gemma/SmolLM）不产生 <think>，无需包装。
-            val shouldFoldThink = deepThinking && isThinkingModel(activeModelId)
-            // 本地思考档位（仅本地，默认 AUTO）：开启深度思考时按档位/复杂度生成软收束提示。
-            // 原生预算能力门禁首期恒 UNVERIFIED -> 统一走提示回退；即便未来出现 VERIFIED，
-            // 也绝不按档位降低总 maxTokens（档位只影响提示/目标，不影响硬边界）。
+            // 本地思考档位（仅本地，默认 AUTO）：开启深度思考时按档位/复杂度解析计划。
+            // AUTO+SIMPLE 路由跳过（高效推理 routing）：简单问题直接关 enable_thinking，
+            // 省掉整段无意义思考的 token 与首字延迟。手动档永不跳过。
             val nativeBudgetCapability = nativeThinkingBudgetResolver.resolve(null)
             val nativeBudgetAvailable = nativeBudgetCapability == NativeThinkingBudgetCapability.VERIFIED
             val thinkingPlan = thinkingPolicyResolver.resolve(
@@ -278,6 +297,14 @@ class LocalChatProvider(
                 latestUserContent = messages.lastOrNull { it.role == "user" }?.content.orEmpty(),
                 nativeBudgetAvailable = nativeBudgetAvailable,
             )
+            val skipThinking = thinkingPlan?.skipThinking == true
+            val firstRoundEnableThinking = deepThinking && !skipThinking
+            // 仅推理模型（Think 标签）的输出需要折叠包装：其 chat 模板把起始 <think> 放在 generation
+            // prompt 前缀（非输出流），故 native 输出缺起始 <think>，parseWithThink 无法折叠（修复「本地
+            // 思考过程不可折叠」）。非推理模型（Llama/Gemma/SmolLM）不产生 <think>，无需包装。
+            // 路由跳过的轮次没有思考段（模板注入的是空 <think></think> 前缀），不得折叠——否则会把
+            // 正文误包进思考块。
+            val shouldFoldThink = deepThinking && !skipThinking && isThinkingModel(activeModelId)
             val thinkingPolicyTelemetry = ThinkingPolicyTelemetry.from(
                 thinkingPlan,
                 nativeBudgetCapability.name,
@@ -485,7 +512,32 @@ class LocalChatProvider(
             // final review I1：每轮恒查证（不按 lookahead 开关短路）——步进认证在开关关闭时
             // 同样可达；lookahead 噪音由 resolver 的 lookahead && 未认证条件天然排除。
             val certifiedOptions = loadCertifiedOptions(modelFingerprint)
-            val resolvedPlanBase = InferenceProfileResolver(context.cacheDir, modelPath).resolve(
+            // Step1（Wave 1）：tmp_path 缓存目录清扫——未安装模型缓存优先删，再按 LRU 驱逐到预算
+            // （每份 ≈ 模型大小）。预算默认保留最大一份活跃模型缓存 + 1 GiB 余量（见 MnnTmpDirJanitor）。
+            val installedTmpHashes = modelInstalledTmpHashes()
+            val swept = MnnTmpDirJanitor.sweep(
+                context.cacheDir,
+                installedTmpHashes,
+                MnnTmpDirJanitor.defaultBudgetBytes(context.cacheDir, installedTmpHashes),
+            )
+            if (swept.isNotEmpty()) {
+                Log.i(TAG, "tmp_path 清扫 ${swept.size} 个缓存目录: " + swept.joinToString { it.name })
+            }
+            // 磁盘资格（复用准入已算好的 weightWorkingSetBytes）：空闲额度足够才给
+            // 该模型开 tmp_path（mmap 权重落盘 + 二次加载快启）；不足保持全内存驻留现状。
+            val resolvedPlanBase = InferenceProfileResolver(
+                context.cacheDir,
+                modelPath,
+                tmpPathEligible = { _ ->
+                    runCatching {
+                        val sf = StatFs(context.cacheDir.absolutePath)
+                        MnnTmpDirJanitor.eligibleFor(weightWorkingSetBytes, sf.availableBytes)
+                    }.getOrDefault(false)
+                },
+                // Wave 2：native 宣告采样热重建能力时，温度等标量不进 load 配置（调参不重载）；
+                // 旧 .so 无能力时保持 legacy 行为逐位不变。
+                samplerHotUpdateCapable = MnnBridge.hasSamplerHotUpdateCapability,
+            ).resolve(
                 // Task 8：热降级后的有效模式（MODERATE+ 恒 BALANCED，撤销 sustained）。
                 mode = decision?.effectiveMode ?: performanceMode,
                 backendPreference = preference,
@@ -514,6 +566,9 @@ class LocalChatProvider(
             // 即截断并进入收束轮直接作答——使「思考长度」设置真正生效（推理模型对软提示服从度低）。
             val thinkingBudgetBytes = thinkingPlan?.thinkingBudgetBytes
             var thinkingBudgetTruncated = false
+            // 思考段循环退化早停标记（与预算截断共用收束轮通道；遥测区分原因）。
+            var thinkingDegenerateTruncated = false
+            val thinkSanity = OutputSanityDetector()
             val downgradeReasons = (listOfNotNull(promptPlan.downgradeReason) +
                 resolvedPlan.downgradeReasons.map { it.name }).distinct()
             var lastControl: GenerationExecutionControl? = null
@@ -611,6 +666,26 @@ class LocalChatProvider(
                                         thinkingBudgetTruncated = true
                                         roundTruncated = true
                                     }
+                                    // 思考段循环退化早停（高效推理 early-exit）：小模型思考常见复读
+                                    // 环/单字符集退化（"哈哈哈哈…"、"。。。。。"），等到字节预算耗尽
+                                    // 才截纯属浪费——检测器只喂思考段内的 token（正文的角色笑声等
+                                    // 合法重复不得误伤），命中即与预算截断走同一收束轮路径。
+                                    if (!roundTruncated && enforceThinkingBudget &&
+                                        roundClassifier.sawThinkOpen && !roundClassifier.sawThinkClose
+                                    ) {
+                                        thinkSanity.append(token)
+                                        when (thinkSanity.classify()) {
+                                            OutputSanityDetector.SanityClass.REPETITION_LOOP,
+                                            OutputSanityDetector.SanityClass.DEGENERATE,
+                                            -> {
+                                                Log.w(TAG, "思考段循环退化早停，进入收束轮")
+                                                thinkingDegenerateTruncated = true
+                                                thinkingBudgetTruncated = true // 复用收束轮触发通道
+                                                roundTruncated = true
+                                            }
+                                            else -> Unit
+                                        }
+                                    }
                                 }
                                 // false -> abort + POLICY_TRUNCATION；max-token 由 native 硬边界返回 MAX_TOKENS。
                                 !roundTruncated
@@ -630,10 +705,11 @@ class LocalChatProvider(
                 }
             }
 
-            // 首轮：完整思考 + 正文（思考超预算由 runRound 内检测截断）。
+            // 首轮：完整思考 + 正文（思考超预算/循环退化由 runRound 内检测截断）。
+            // AUTO+SIMPLE 路由跳过时直接 enable_thinking=false 作答（无思考段）。
             val firstResult = runRound(
                 roundMessages = modelMessages,
-                roundEnableThinking = deepThinking,
+                roundEnableThinking = firstRoundEnableThinking,
                 roundThinkingRequested = deepThinking,
                 roundClassifier = thinkingClassifier,
                 roundPump = renderPump,
@@ -672,7 +748,11 @@ class LocalChatProvider(
                         roundThinkingRequested = true,
                         roundClassifier = coalesceClassifier,
                         roundPump = roundTwoPump,
-                        extraDowngrades = listOf(THINKING_BUDGET_TRUNCATED),
+                        // 降级原因按触发源区分：预算耗尽 vs 思考循环退化（诊断可分辨）。
+                        extraDowngrades = listOf(
+                            if (thinkingDegenerateTruncated) THINKING_DEGENERATE_TRUNCATED
+                            else THINKING_BUDGET_TRUNCATED,
+                        ),
                         enforceThinkingBudget = false,
                         enableScriptDetect = false,
                     )
@@ -805,6 +885,9 @@ class LocalChatProvider(
 
         /** Task 17：思考预算截断的遥测降级原因（并入收束轮记录，诊断页可见）。 */
         const val THINKING_BUDGET_TRUNCATED = "THINKING_BUDGET_TRUNCATED"
+
+        /** 思考段循环退化早停的遥测降级原因（复读环/字符集退化，OutputSanityDetector 判定）。 */
+        const val THINKING_DEGENERATE_TRUNCATED = "THINKING_DEGENERATE_TRUNCATED"
 
         /** Task 17：思考预算截断后的收束指令——作为新一轮 user 消息，enableThinking=false 直接作答。 */
         private const val THINKING_COALESCE_INSTRUCTION = "你的思考已经足够，请立即停止继续思考，直接给出最终答案。"
