@@ -2,11 +2,14 @@ package com.rhodesisland.terminal.ui.lorebook
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -14,12 +17,14 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -33,9 +38,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -47,6 +54,8 @@ import com.rhodesisland.terminal.data.model.Lorebook
 import com.rhodesisland.terminal.data.model.LorebookEntry
 import com.rhodesisland.terminal.data.model.LorebookInsertPosition
 import com.rhodesisland.terminal.data.model.LorebookScopeType
+import com.rhodesisland.terminal.ui.settings.filterCharacters
+import com.rhodesisland.terminal.ui.settings.filterGroups
 import com.rhodesisland.terminal.ui.glass.GlassButton
 import com.rhodesisland.terminal.ui.glass.GlassButtonStyle
 import com.rhodesisland.terminal.ui.glass.GlassListRow
@@ -336,15 +345,29 @@ private fun ScopePickerDialog(
     onDismiss: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
-    var scopeType by remember { mutableStateOf(book.scopeType) }
-    var selectedIds by remember { mutableStateOf(book.scopeIds.toSet()) }
-
-    fun toggle(id: String) {
-        selectedIds = if (id in selectedIds) selectedIds - id else selectedIds + id
+    // 每次打开某本书都播种新草稿；角色/群聊选择分桶，切换类型不再串 ID。
+    var scopeType by remember(book.id) { mutableStateOf(book.scopeType) }
+    var characterSelectedIds by remember(book.id) {
+        mutableStateOf(if (book.scopeType == LorebookScopeType.CHARACTER) book.scopeIds.toSet() else emptySet())
     }
-    // 角色模式：自定义在前内置在后（CharacterRepository 同序）；群聊模式：全部群
-    val characterTargets = characters
-    val groupTargets = groups.map { it.id.toString() to (it.title.ifBlank { "群聊" }) }
+    var groupSelectedIds by remember(book.id) {
+        mutableStateOf(if (book.scopeType == LorebookScopeType.GROUP) book.scopeIds.toSet() else emptySet())
+    }
+    var searchQuery by rememberSaveable(book.id) { mutableStateOf("") }
+
+    fun toggleCharacter(id: String) {
+        characterSelectedIds = if (id in characterSelectedIds) characterSelectedIds - id else characterSelectedIds + id
+    }
+    fun toggleGroup(id: String) {
+        groupSelectedIds = if (id in groupSelectedIds) groupSelectedIds - id else groupSelectedIds + id
+    }
+
+    val characterSelected = characterSelectedIds
+    val groupSelected = groupSelectedIds
+    val filteredCharacters = filterCharacters(characters, searchQuery)
+    val filteredGroups = filterGroups(groups, searchQuery)
+    val missingCharacters = characterSelected - characters.map { it.id }.toSet()
+    val missingGroups = groupSelected - groups.map { it.id.toString() }.toSet()
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -360,37 +383,71 @@ private fun ScopePickerDialog(
                         LorebookScopeType.GROUP to "指定群聊",
                     ),
                     selected = scopeType,
-                    onSelect = { scopeType = it },
+                    onSelect = {
+                        scopeType = it
+                        searchQuery = ""
+                    },
                 )
-                when (scopeType) {
-                    LorebookScopeType.ALL -> {
-                        Text(
-                            "所有角色聊天与群聊都会应用本书。",
-                            color = scheme.onSurfaceVariant,
-                            fontSize = 12.sp,
-                            modifier = Modifier.padding(top = 12.dp),
+                if (scopeType != LorebookScopeType.ALL) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(scheme.surface.copy(alpha = 0.6f))
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Filled.Search, contentDescription = "搜索", tint = scheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        androidx.compose.foundation.text.BasicTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            textStyle = androidx.compose.ui.text.TextStyle(color = scheme.onSurface, fontSize = 12.sp),
+                            decorationBox = { inner ->
+                                if (searchQuery.isEmpty()) {
+                                    Text(
+                                        if (scopeType == LorebookScopeType.CHARACTER) "搜索角色名、代号或 ID" else "搜索群聊名称或 ID",
+                                        color = scheme.onSurfaceVariant,
+                                        fontSize = 12.sp,
+                                    )
+                                }
+                                inner()
+                            },
                         )
                     }
+                }
+                when (scopeType) {
+                    LorebookScopeType.ALL -> Text(
+                        "所有角色聊天与群聊都会应用本书。",
+                        color = scheme.onSurfaceVariant,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
                     LorebookScopeType.CHARACTER -> {
-                        if (characterTargets.isEmpty()) {
-                            Text("还没有可选角色", color = scheme.onSurfaceVariant, fontSize = 12.sp, modifier = Modifier.padding(top = 12.dp))
+                        val rows = missingCharacters.map { it to "已删除角色（ID: $it）" } +
+                            filteredCharacters.map { it.id to it.name }
+                        if (rows.isEmpty()) {
+                            Text("没有找到匹配的角色", color = scheme.onSurfaceVariant, fontSize = 12.sp, modifier = Modifier.padding(top = 12.dp))
                         } else {
                             LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp).padding(top = 8.dp)) {
-                                items(characterTargets.size) { i ->
-                                    val c = characterTargets[i]
-                                    ScopeOptionRow(label = c.name, checked = c.id in selectedIds, onToggle = { toggle(c.id) })
+                                items(rows, key = { it.first }) { (id, label) ->
+                                    ScopeOptionRow(label = label, checked = id in characterSelected, onToggle = { toggleCharacter(id) })
                                 }
                             }
                         }
                     }
                     LorebookScopeType.GROUP -> {
-                        if (groupTargets.isEmpty()) {
-                            Text("还没有群聊，先去通讯页创建一个吧。", color = scheme.onSurfaceVariant, fontSize = 12.sp, modifier = Modifier.padding(top = 12.dp))
+                        val rows = missingGroups.map { it to "已删除群聊（ID: $it）" } +
+                            filteredGroups.map { it.id.toString() to (it.title.ifBlank { "群聊" }) }
+                        if (rows.isEmpty()) {
+                            Text("没有找到匹配的群聊", color = scheme.onSurfaceVariant, fontSize = 12.sp, modifier = Modifier.padding(top = 12.dp))
                         } else {
                             LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp).padding(top = 8.dp)) {
-                                items(groupTargets.size) { i ->
-                                    val (id, name) = groupTargets[i]
-                                    ScopeOptionRow(label = name, checked = id in selectedIds, onToggle = { toggle(id) })
+                                items(rows, key = { it.first }) { (id, label) ->
+                                    ScopeOptionRow(label = label, checked = id in groupSelected, onToggle = { toggleGroup(id) })
                                 }
                             }
                         }
@@ -400,7 +457,11 @@ private fun ScopePickerDialog(
         },
         confirmButton = {
             TextButton(onClick = {
-                val ids = if (scopeType == LorebookScopeType.ALL) emptyList() else selectedIds.toList()
+                val ids = when (scopeType) {
+                    LorebookScopeType.ALL -> emptyList()
+                    LorebookScopeType.CHARACTER -> characterSelectedIds.toList()
+                    LorebookScopeType.GROUP -> groupSelectedIds.toList()
+                }
                 onConfirm(scopeType, ids)
             }) { Text("保存", color = scheme.primary) }
         },
@@ -416,10 +477,18 @@ private fun ScopeOptionRow(label: String, checked: Boolean, onToggle: () -> Unit
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onToggle)
-            .padding(vertical = 6.dp),
+            .padding(horizontal = 8.dp, vertical = 6.dp)
+            .heightIn(min = 48.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp, modifier = Modifier.weight(1f))
+        Text(
+            label,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 13.sp,
+            maxLines = 2,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
         Switch(checked = checked, onCheckedChange = { onToggle() })
     }
 }
