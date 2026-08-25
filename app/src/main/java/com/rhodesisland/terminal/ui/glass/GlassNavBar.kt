@@ -1,5 +1,7 @@
 package com.rhodesisland.terminal.ui.glass
 
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -11,6 +13,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -49,20 +52,27 @@ fun GlassNavBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 10.dp)
+            .padding(horizontal = 8.dp, vertical = 6.dp)
             .windowInsetsPadding(WindowInsets.navigationBars),
         horizontalArrangement = Arrangement.Center,
     ) {
-        Box(Modifier.frostedGlass(GlassShapes.bar, tint = accent?.copy(alpha = 0.08f), shadowElevation = 14.dp)) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .frostedGlass(GlassShapes.bar, tint = accent?.copy(alpha = 0.08f), shadowElevation = 14.dp),
+        ) {
             Row(
-                Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 items.forEach { item ->
                     val selected = item.route == currentRoute
                     Column(
                         modifier = Modifier
-                            .size(width = 64.dp, height = 48.dp)
+                            .weight(1f)
+                            .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
                             .clip(GlassShapes.chip)
                             .then(
                                 if (selected) Modifier.frostedGlass(
@@ -86,6 +96,7 @@ fun GlassNavBar(
                             color = if (selected) selectedColor else MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center,
                             maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                         )
                     }
                 }

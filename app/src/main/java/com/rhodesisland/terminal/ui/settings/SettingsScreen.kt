@@ -13,6 +13,14 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.BatteryAlert
+import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.Window
+import androidx.compose.material.icons.filled.Alarm
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -826,8 +834,11 @@ private fun PasswordField(
                 visualTransformation = if (show) VisualTransformation.None else PasswordVisualTransformation(),
                 cursorBrush = androidx.compose.ui.graphics.SolidColor(scheme.primary),
             )
-            TextButton(onClick = onToggle) {
-                Text(if (show) "🙈" else "👁", fontSize = 16.sp)
+            IconButton(onClick = onToggle) {
+                Icon(
+                    imageVector = if (show) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                    contentDescription = if (show) "隐藏密钥" else "显示密钥",
+                )
             }
         }
     }
@@ -1074,7 +1085,7 @@ private fun GreetingSection(container: AppContainer, scope: CoroutineScope) {
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("⚠️", fontSize = 14.sp)
+                Icon(Icons.Filled.Warning, contentDescription = "提示", tint = scheme.error, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text(
                     "通知权限未开启，收不到主动消息提醒",
@@ -1155,7 +1166,7 @@ private fun GreetingSection(container: AppContainer, scope: CoroutineScope) {
                         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text("🔋", fontSize = 14.sp)
+                        Icon(Icons.Filled.BatteryAlert, contentDescription = "电池优化", tint = scheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
                         Text(
                             if (ignoringBattery) "后台运行：已允许" else "后台运行：未允许（可能被省电冻结）",
@@ -1176,7 +1187,7 @@ private fun GreetingSection(container: AppContainer, scope: CoroutineScope) {
                             modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text("📱", fontSize = 14.sp)
+                            Icon(Icons.Filled.PhoneAndroid, contentDescription = "自启动设置", tint = scheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
                             Text(
                                 "自启动管理（厂商设置）",
@@ -1196,7 +1207,7 @@ private fun GreetingSection(container: AppContainer, scope: CoroutineScope) {
                             modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text("🪟", fontSize = 14.sp)
+                            Icon(Icons.Filled.Window, contentDescription = "后台弹出设置", tint = scheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
                             Text(
                                 "后台弹出界面（影响点通知跳转）",
@@ -1215,7 +1226,7 @@ private fun GreetingSection(container: AppContainer, scope: CoroutineScope) {
                             modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text("⏰", fontSize = 14.sp)
+                            Icon(Icons.Filled.Alarm, contentDescription = "精确闹钟设置", tint = scheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
                             Text(
                                 "精确闹钟未授权（后台触发可靠性降低）",

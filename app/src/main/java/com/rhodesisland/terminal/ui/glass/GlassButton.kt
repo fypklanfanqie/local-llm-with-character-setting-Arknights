@@ -7,6 +7,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -79,6 +80,7 @@ fun GlassButton(
                 enabled = enabled,
                 onClick = onClick,
             )
+            .heightIn(min = 48.dp)
             .padding(horizontal = horizontalPadding, vertical = verticalPadding),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,

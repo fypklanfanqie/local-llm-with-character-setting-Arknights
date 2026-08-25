@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
@@ -310,7 +311,7 @@ fun AppNavGraph(container: AppContainer, initialChatOpen: Boolean = false) {
             composable(BottomTab.Characters.route) {
                 // 宽屏适配：内容列限宽 640dp 居中（Box 默认 TopCenter），手机宽度下无效果；
                 // 通讯 Tab（feed/chat/群聊/邂逅）刻意全出血沉浸设计，不加限宽。
-                Box(tabBottomPadding) { Box(Modifier.widthIn(max = 640.dp)) { CharactersScreen(
+                Box(tabBottomPadding) { Box(Modifier.fillMaxWidth().widthIn(max = 640.dp)) { CharactersScreen(
                     container = container,
                     onNavigateToChat = {
                         // 切到聊天 Tab（保底栏状态）
@@ -387,14 +388,14 @@ fun AppNavGraph(container: AppContainer, initialChatOpen: Boolean = false) {
                 }
             }
             composable(BottomTab.Music.route) {
-                Box(tabBottomPadding) { Box(Modifier.widthIn(max = 640.dp)) { MusicScreen(container = container) } }
+                Box(tabBottomPadding) { Box(Modifier.fillMaxWidth().widthIn(max = 640.dp)) { MusicScreen(container = container) } }
             }
             composable(BottomTab.Models.route) {
-                Box(tabBottomPadding) { Box(Modifier.widthIn(max = 640.dp)) { ModelManagerScreen(container = container) } }
+                Box(tabBottomPadding) { Box(Modifier.fillMaxWidth().widthIn(max = 640.dp)) { ModelManagerScreen(container = container) } }
             }
             composable(BottomTab.Settings.route) {
                 Box(tabBottomPadding) {
-                    Box(Modifier.widthIn(max = 640.dp)) {
+                    Box(Modifier.fillMaxWidth().widthIn(max = 640.dp)) {
                         SettingsScreen(
                             container = container,
                             onNavigateToBackendSettings = {
@@ -409,7 +410,7 @@ fun AppNavGraph(container: AppContainer, initialChatOpen: Boolean = false) {
             }
             composable("backend_settings") {
                 Box(tabBottomPadding) {
-                    Box(Modifier.widthIn(max = 640.dp)) {
+                    Box(Modifier.fillMaxWidth().widthIn(max = 640.dp)) {
                         BackendSettingsScreen(
                             container = container,
                             onBack = { navController.popBackStack() },
@@ -422,7 +423,7 @@ fun AppNavGraph(container: AppContainer, initialChatOpen: Boolean = false) {
                 arguments = listOf(navArgument("bookId") { type = NavType.StringType }),
             ) { entry ->
                 Box(tabBottomPadding) {
-                    Box(Modifier.widthIn(max = 640.dp)) {
+                    Box(Modifier.fillMaxWidth().widthIn(max = 640.dp)) {
                         LorebookDetailScreen(
                             container = container,
                             bookId = entry.arguments?.getString("bookId").orEmpty(),
@@ -443,7 +444,7 @@ fun AppNavGraph(container: AppContainer, initialChatOpen: Boolean = false) {
                 ),
             ) { entry ->
                 Box(tabBottomPadding) {
-                    Box(Modifier.widthIn(max = 640.dp)) {
+                    Box(Modifier.fillMaxWidth().widthIn(max = 640.dp)) {
                         LorebookEntryEditScreen(
                             container = container,
                             bookId = entry.arguments?.getString("bookId").orEmpty(),

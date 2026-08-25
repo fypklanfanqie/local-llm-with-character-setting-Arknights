@@ -2,7 +2,9 @@ package com.rhodesisland.terminal.ui.glass
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -86,6 +88,7 @@ fun <T> GlassSegmented(
 ) {
     Row(
         modifier = modifier
+            .horizontalScroll(rememberScrollState())
             .clip(GlassShapes.pill)
             .frostedGlass(GlassShapes.pill, shadowElevation = 2.dp)
             .padding(3.dp),
@@ -97,6 +100,7 @@ fun <T> GlassSegmented(
                     .clip(GlassShapes.pill)
                     .then(if (on) Modifier.background(MaterialTheme.colorScheme.primary) else Modifier)
                     .clickable { onSelect(value) }
+                    .heightIn(min = 48.dp)
                     .padding(horizontal = 10.dp, vertical = 5.dp),
                 contentAlignment = Alignment.Center,
             ) {
@@ -128,7 +132,14 @@ fun GlassLargeTitle(
             style = MaterialTheme.typography.displaySmall,
             color = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier.weight(1f),
+            maxLines = 2,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
         )
-        actions()
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            actions()
+        }
     }
 }
