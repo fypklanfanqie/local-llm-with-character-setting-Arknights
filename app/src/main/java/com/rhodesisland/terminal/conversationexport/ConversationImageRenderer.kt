@@ -23,6 +23,8 @@ import java.util.Locale
 
 object ConversationImageRenderer {
     private const val BACKGROUND = 0xFF07111F.toInt()
+    /** 单页/长图主 Bitmap 的字节预算（约 48MB）：超出即拒绝渲染，防 OOM Error 闪退。 */
+    internal const val MAX_RENDER_BITMAP_BYTES = 48L * 1024 * 1024
     private const val GOLD = 0xFFD7B76A.toInt()
     private const val SURFACE = 0xFF12233A.toInt()
     private const val USER_BUBBLE = 0xFF3B2D13.toInt()
@@ -94,6 +96,12 @@ object ConversationImageRenderer {
         pageNumber: Int,
         pageCount: Int,
     ): ByteArray {
+        // OOM 是 Error 不是 Exception，外围 runCatching 拦不住——必须在创建前做像素预算：
+        // 超过安全预算直接引导分页/TXT（与布局层 LongImageTooTallException 同一用户出口）。
+        val pixelBudget = (EXPORT_IMAGE_WIDTH_PX.toLong() * height) * 4
+        if (pixelBudget > MAX_RENDER_BITMAP_BYTES) {
+            throw LongImageTooTallException(height)
+        }
         val bitmap = Bitmap.createBitmap(EXPORT_IMAGE_WIDTH_PX, height, Bitmap.Config.ARGB_8888)
         try {
             val canvas = Canvas(bitmap)
@@ -107,6 +115,7 @@ object ConversationImageRenderer {
             messages.forEach { message ->
                 y = drawMessage(canvas, context, message, y, avatarCache)
             }
+            avatarCache.values.forEach { it?.recycle() }
             return ByteArrayOutputStream().use { output ->
                 check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output))
                 output.toByteArray()

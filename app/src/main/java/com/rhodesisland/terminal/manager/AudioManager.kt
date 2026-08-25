@@ -44,6 +44,11 @@ class AudioManager(
     // ===== 角色语音 =====
     private var voicePlayer: MediaPlayer? = null
 
+    /** 每次播放递增的代次：异步回调（onPrepared/onCompletion/onError）先比对身份，
+     *  防止旧播放器迟到的回调清空新播放器状态或在 stop/release 后调用 start()。 */
+    @Volatile
+    private var voiceGeneration = 0L
+
     /** 语音播放的音频焦点助手：播放前申请瞬时焦点（可 duck），结束/出错归还，防与其他 App 叠音。 */
     private val voiceFocus = AudioFocusHelper(context)
 
@@ -53,6 +58,7 @@ class AudioManager(
         stopVoice()
         voiceFocus.request()
 
+        val generation = ++voiceGeneration
         val player = MediaPlayer()
         voicePlayer = player
         try {
@@ -84,28 +90,36 @@ class AudioManager(
             val v = (volume / 100f).coerceIn(0f, 1f)
             player.setVolume(v, v)
             player.setOnCompletionListener { mp ->
+                if (generation != voiceGeneration || voicePlayer !== mp) return@setOnCompletionListener
                 try { mp.release() } catch (e: Exception) {}
                 voicePlayer = null
                 voiceFocus.abandon()
             }
             player.setOnErrorListener { mp, _, _ ->
                 Log.w(TAG, "Voice play failed: $url")
-                try { mp.release() } catch (e: Exception) {}
-                voicePlayer = null
-                voiceFocus.abandon()
+                if (generation == voiceGeneration && voicePlayer === mp) {
+                    try { mp.release() } catch (e: Exception) {}
+                    voicePlayer = null
+                    voiceFocus.abandon()
+                }
                 true
             }
-            // 异步准备：网络 URL 时 prepare() 会阻塞主线程导致 ANR，改用 prepareAsync
-            player.setOnPreparedListener { it.start() }
+            // 异步准备：网络 URL 时 prepare() 会阻塞主线程导致 ANR，改用 prepareAsync。
+            // start() 前校验身份：stopVoice/release 已把本实例释放时不再触碰（IllegalStateException）。
+            player.setOnPreparedListener { mp ->
+                if (generation != voiceGeneration || voicePlayer !== mp) return@setOnPreparedListener
+                runCatching { mp.start() }
+            }
             player.prepareAsync()
         } catch (e: Exception) {
             Log.w(TAG, "Voice play error: ${e.message}")
             try { player.release() } catch (e: Exception) {}
-            voicePlayer = null
+            if (voicePlayer === player) voicePlayer = null
         }
     }
 
     fun stopVoice() {
+        voiceGeneration++
         voiceFocus.abandon()
         voicePlayer?.let {
             // stop() 在 IDLE/ERROR 等状态会抛 IllegalStateException，单独 try 以保证 release() 一定执行

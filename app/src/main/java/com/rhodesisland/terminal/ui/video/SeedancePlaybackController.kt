@@ -71,6 +71,11 @@ class SeedancePlaybackController(
 
     private var bgmWasPlaying = false
 
+    /** release() 后置位：页面销毁与异步回调（焦点监听/轮询/settle effect）竞态时，
+     *  所有触碰 player 的入口直接短路，杜绝 IllegalStateException。 */
+    @Volatile
+    private var released = false
+
     /** API 26+ 的音频焦点请求句柄（acquire 时创建，release 时归还）。 */
     private var focusRequest: android.media.AudioFocusRequest? = null
 
@@ -115,23 +120,34 @@ class SeedancePlaybackController(
         })
     }
 
-    /** 加载并播放本地文件；同一文件重复调用视为继续/恢复播放（自然播完后重播回到片头）。 */
+    /** 加载并播放本地文件；同一文件重复调用视为继续/恢复播放（自然播完后重播回到片头）。
+     *  文件不存在/不可读（存储清理后 READY 任务的残留路径）直接忽略——不抛异常、
+     *  不把播放器打进错误态，UI 保持原状态。 */
     fun play(file: File) {
+        if (released) return
+        if (!file.isFile || !file.canRead()) return
         val path = file.absolutePath
-        if (_activePath.value != path) {
-            player.setMediaItem(MediaItem.fromUri(Uri.fromFile(file)))
-            player.prepare()
-            _activePath.value = path
-        } else if (player.playbackState == Player.STATE_ENDED) {
-            // 自然播完后再次点击：seekTo 回片头重播，而不是停留在 STATE_ENDED 上 setPlayWhenReady。
-            player.seekTo(0)
+        try {
+            if (_activePath.value != path) {
+                player.setMediaItem(MediaItem.fromUri(Uri.fromFile(file)))
+                player.prepare()
+                _activePath.value = path
+            } else if (player.playbackState == Player.STATE_ENDED) {
+                // 自然播完后再次点击：seekTo 回片头重播，而不是停留在 STATE_ENDED 上 setPlayWhenReady。
+                player.seekTo(0)
+            }
+            acquireAudio()
+            player.play()
+        } catch (_: Exception) {
+            // setMediaItem/prepare 同步抛错（罕见 ROM/损坏文件）：复位活动路径，
+            // 下一次 play() 走完整加载；焦点在 acquireAudio 前未申请，无需归还。
+            _activePath.value = null
         }
-        acquireAudio()
-        player.play()
     }
 
     /** 内联播放开关：当前文件正在播放则暂停（已自然播完视为非播放态，触发重播），否则加载/恢复播放。 */
     fun toggle(file: File) {
+        if (released) return
         if (_activePath.value == file.absolutePath &&
             player.playWhenReady &&
             player.playbackState != Player.STATE_ENDED
@@ -142,10 +158,13 @@ class SeedancePlaybackController(
         }
     }
 
-    fun pause() = pauseInternal()
+    fun pause() {
+        if (released) return
+        pauseInternal()
+    }
 
     private fun pauseInternal() {
-        player.pause()
+        runCatching { player.pause() }
         releaseAudio()
     }
 
@@ -154,11 +173,13 @@ class SeedancePlaybackController(
         _fullScreen.value = enabled
     }
 
-    /** 释放播放器、归还音频焦点并恢复 BGM（屏幕销毁/离开时调用）。 */
+    /** 释放播放器、归还音频焦点并恢复 BGM（屏幕销毁/离开时调用）。幂等。 */
     fun release() {
+        if (released) return
+        released = true
         attachedLifecycle?.removeObserver(lifecycleObserver)
         attachedLifecycle = null
-        player.release()
+        runCatching { player.release() }
         _isPlaying.value = false
         releaseAudio()
     }

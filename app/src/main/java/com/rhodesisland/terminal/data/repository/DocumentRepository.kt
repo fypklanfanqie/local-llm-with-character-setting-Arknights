@@ -19,6 +19,7 @@ import kotlinx.serialization.json.putJsonObject
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
+import kotlin.math.min
 
 /**
  * 文档 / 图片处理仓库（直连对话商，不经代理）。
@@ -184,7 +185,10 @@ class DocumentRepository(
         return extractFromImages(cfg, listOf(b64), "请提取并输出图片中的全部文字内容，仅输出文字。")
     }
 
-    /** 渲染 PDF 前 [maxPages] 页为 base64 JPEG；返回 (图片列表, 是否还有未渲染页)。 */
+    /** 渲染 PDF 前 [maxPages] 页为 base64 JPEG；返回 (图片列表, 是否还有未渲染页)。
+     *  每页像素有硬上限（长边 ≤ [MAX_PAGE_LONG_SIDE_PX]）：扫描版/高 DPI 页面按比例降采样，
+     *  防止单页 createBitmap 申请数十至上百 MB 导致 OOM Error（外围 catch(Exception) 拦不住）。
+     *  page.close 放入 finally，单页渲染异常不泄漏页句柄。 */
     private fun renderPdfPages(file: File, maxPages: Int): Pair<List<String>, Boolean> {
         val fd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
         val renderer = PdfRenderer(fd)
@@ -194,12 +198,25 @@ class DocumentRepository(
         try {
             for (i in 0 until pagesToRender) {
                 val page = renderer.openPage(i)
-                val scale = 2 // 2x 提升清晰度，便于模型识读
-                val bitmap = Bitmap.createBitmap(page.width * scale, page.height * scale, Bitmap.Config.ARGB_8888)
-                page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                page.close()
-                images.add(bitmapToBase64Jpeg(bitmap))
-                bitmap.recycle() // 逐页回收，控制峰值内存
+                try {
+                    // 目标 2x 清晰度但封顶像素预算；超高 DPI 页面按最长边降采样
+                    val rawLongSide = maxOf(page.width, page.height)
+                    val scale = min(
+                        2f,
+                        MAX_PAGE_LONG_SIDE_PX.toFloat() / rawLongSide.coerceAtLeast(1),
+                    ).coerceAtLeast(0.1f)
+                    val width = (page.width * scale).toInt().coerceIn(1, MAX_PAGE_LONG_SIDE_PX)
+                    val height = (page.height * scale).toInt().coerceIn(1, MAX_PAGE_LONG_SIDE_PX)
+                    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                    try {
+                        page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                        images.add(bitmapToBase64Jpeg(bitmap))
+                    } finally {
+                        bitmap.recycle() // 逐页回收，控制峰值内存
+                    }
+                } finally {
+                    page.close()
+                }
             }
         } finally {
             renderer.close()
@@ -247,6 +264,9 @@ class DocumentRepository(
     companion object {
         /** PDF 提取页数上限（控制请求体积与成本） */
         private const val MAX_PDF_PAGES = 6
+
+        /** PDF 单页渲染的最长边像素上限：A0/扫描页按比例降采样，防 OOM。 */
+        private const val MAX_PAGE_LONG_SIDE_PX = 2048
 
         /** 纯文本附件读取上限（字节）：超过截断。 */
         private const val MAX_TEXT_BYTES = 2L * 1024 * 1024

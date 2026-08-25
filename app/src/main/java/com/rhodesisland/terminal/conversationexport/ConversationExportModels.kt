@@ -6,6 +6,10 @@ import java.util.Locale
 
 const val EXPORT_IMAGE_WIDTH_PX = 1080
 const val EXPORT_PAGE_HEIGHT_PX = 1920
+/**
+ * 长图最大高度（px）。16384 ≈ 1080×16384×4 ≈ 67MB ARGB_8888 主 Bitmap，
+ * 叠加背景/头像/PNG 输出缓冲已贴近低内存设备 largeHeap 上限——超限直接引导分页导出。
+ */
 const val EXPORT_LONG_IMAGE_MAX_HEIGHT_PX = 16_384
 
 enum class ConversationExportFormat { TEXT, IMAGE }
