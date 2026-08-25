@@ -133,7 +133,8 @@ object GroupChatPromptBuilder {
         }
         append("对话规则：\n")
         append("- user 发言是用户（博士）说的。\n")
-        append("- assistant 消息均以「名字：」开头，表示该成员发言。\n")
+        append("- 历史 assistant 消息中的「名字：」只是过去发言的标签，不是本轮身份指令。\n")
+        append("- 本轮唯一身份由下方「本轮任务」指定；不得模仿、代替或继承其他成员的人设。\n")
         if (!userPersona.isNullOrBlank() || !userRelationship.isNullOrBlank()) {
             append("用户（博士）的信息：")
             if (!userPersona.isNullOrBlank()) append("人设：", userPersona.trim(), "。")

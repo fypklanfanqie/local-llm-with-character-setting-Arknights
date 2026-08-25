@@ -302,7 +302,18 @@ class GroupChatViewModel(
                     }
 
                     val displayResponse = provider.chat(apiMessages, onChunk)
-                    val clean = GroupChatPromptBuilder.stripSpeakerPrefix(displayResponse, memberNames)
+                    val normalized = normalizeGeneratedReply(
+                        raw = displayResponse,
+                        expectedSpeakerName = speaker.name,
+                        memberNames = memberNames,
+                    )
+                    val clean = when (normalized) {
+                        is GroupChatReplyNormalization.Valid -> normalized.text
+                        is GroupChatReplyNormalization.ForeignSpeakerPrefix ->
+                            throw IllegalStateException("本轮回复未能确认发言角色，请稍后重试")
+                        GroupChatReplyNormalization.Empty ->
+                            throw IllegalStateException("本轮没有生成有效回复，请稍后重试")
+                    }
                     val rowId = container.groupChatRepository.sendMemberMessage(convId, speaker.id, clean)
                     repliesOk++
                     container.settingsRepository.setGroupLastSpeakerId(speaker.id)
@@ -324,7 +335,7 @@ class GroupChatViewModel(
             } catch (e: Exception) {
                 if (repliesOk == 0) {
                     // 一条回复都没成功：回滚用户消息、恢复输入、报错
-                    if (userMsgId != 0L) runCatching { container.chatRepository.deleteMessage(userMsgId) }
+                    if (userMsgId != 0L) runCatching { container.chatRepository.deleteMessage(convId, userMsgId) }
                     pendingFinals.clear()
                     _uiState.update { s ->
                         val msgs = s.messages.filterNot { it.id == "streaming" }.toMutableList()
@@ -383,7 +394,7 @@ class GroupChatViewModel(
         if (id <= 0L) return
         viewModelScope.launch {
             pendingFinals.removeAll { it.databaseId == id }
-            container.chatRepository.deleteMessage(id)
+            container.chatRepository.deleteMessage(_conversationId.value ?: return@launch, id)
             _uiState.update { s ->
                 if (s.messages.any { it.id == "msg-$id" }) s.copy(messages = s.messages.filterNot { it.id == "msg-$id" })
                 else s

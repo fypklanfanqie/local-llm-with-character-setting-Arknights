@@ -25,8 +25,10 @@ import com.rhodesisland.terminal.llm.LorebookEngine
 import com.rhodesisland.terminal.notification.AppLifecycleObserver
 import com.rhodesisland.terminal.notification.GroupChatNotificationManager
 import com.rhodesisland.terminal.ui.groupchat.GroupChatPromptBuilder
+import com.rhodesisland.terminal.ui.groupchat.GroupChatReplyNormalization
 import com.rhodesisland.terminal.ui.groupchat.GroupScreenTracker
 import com.rhodesisland.terminal.ui.groupchat.GroupSpeakerPicker
+import com.rhodesisland.terminal.ui.groupchat.normalizeGeneratedReply
 import com.rhodesisland.terminal.util.MarkdownParser
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -332,8 +334,19 @@ class GroupChatWorker(
         return try {
             withTimeout(AppConfig.GroupChat.GENERATE_TIMEOUT_MS) {
                 client.chatOnce(apiConfig.baseUrl, apiConfig.apiKey, apiConfig.model, messages)
-                    .let { GroupChatPromptBuilder.stripSpeakerPrefix(it, members.map { c -> c.name }) }
-            }.takeIf { it.isNotBlank() }
+                    .let {
+                        when (val normalized = normalizeGeneratedReply(
+                            raw = it,
+                            expectedSpeakerName = speaker.name,
+                            memberNames = members.map { member -> member.name },
+                        )) {
+                            is GroupChatReplyNormalization.Valid -> normalized.text
+                            is GroupChatReplyNormalization.ForeignSpeakerPrefix,
+                            GroupChatReplyNormalization.Empty,
+                            -> null
+                        }
+                    }
+            }.takeIf { it?.isNotBlank() == true }
         } catch (ce: CancellationException) {
             throw ce
         } catch (e: Exception) {
