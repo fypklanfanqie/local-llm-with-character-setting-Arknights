@@ -136,8 +136,8 @@ class MnnBackend(
         }
         val configFile = File(modelPath)
         if (!configFile.exists()) {
-            lastErrorMessage = "config.json 不存在: $modelPath"
-            Log.e(TAG, lastErrorMessage!!)
+            lastErrorMessage = "模型配置文件不存在"
+            Log.e(TAG, "config.json 不存在: $modelPath")
             return@withLock false
         }
         // 热复用：同路径 + 同 loadConfigHash 已加载 -> 直接复用，不重建。
@@ -154,16 +154,15 @@ class MnnBackend(
         val h = try {
             bridge.nativeCreate(modelPath, nativeConfigJson)
         } catch (e: Throwable) {
-            lastErrorMessage = "nativeCreate 异常: ${e.message}"
-            Log.e(TAG, lastErrorMessage!!)
+            lastErrorMessage = "模型加载失败"
+            Log.e(TAG, "nativeCreate 异常", e)
             0L
         }
         if (h == 0L) {
             // nativeCreate 返回 0：取 native 侧真实失败原因，供 BackendManager 汇总上报。
             val nativeErr = runCatching { bridge.nativeGetLastError() }.getOrDefault("").orEmpty()
-            lastErrorMessage = "模型加载失败 (backend=${mode.mnnBackendType})" +
-                (if (nativeErr.isNotBlank()) ": $nativeErr" else "")
-            Log.e(TAG, lastErrorMessage!!)
+            lastErrorMessage = "模型加载失败"
+            Log.e(TAG, "模型加载失败 (backend=${mode.mnnBackendType}): ${nativeErr.ifBlank { "unknown" }}")
             return@withLock false
         }
         handle = h

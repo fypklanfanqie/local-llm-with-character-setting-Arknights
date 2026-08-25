@@ -73,6 +73,7 @@ import com.rhodesisland.terminal.video.SeedanceVideoExporter
 import com.rhodesisland.terminal.video.VideoExportTarget
 import com.rhodesisland.terminal.video.exportTargetForSdk
 import com.rhodesisland.terminal.video.suggestedVideoFileName
+import com.rhodesisland.terminal.util.toUserErrorMessage
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -136,7 +137,7 @@ fun EncounterScreen(
                 exporter.exportToUri(pending, uri).onSuccess {
                     Toast.makeText(context, "视频已保存到所选位置", Toast.LENGTH_SHORT).show()
                 }.onFailure { e ->
-                    Toast.makeText(context, "保存失败：${e.message}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "保存失败：${e.toUserErrorMessage()}", Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -150,7 +151,7 @@ fun EncounterScreen(
                     exporter.exportToMediaStore(video).onSuccess {
                         Toast.makeText(context, "视频已保存到相册 Movies/RhodesIslandTerminal", Toast.LENGTH_SHORT).show()
                     }.onFailure { e ->
-                        Toast.makeText(context, "保存失败：${e.message}", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "保存失败：${e.toUserErrorMessage()}", Toast.LENGTH_SHORT).show()
                     }
                 }
                 VideoExportTarget.CreateDocument -> {
@@ -411,11 +412,9 @@ internal fun EncounterDetailsDialog(
                 ParamRow("音频", if (video.generateAudio) "开启" else "关闭")
                 ParamRow("水印", if (video.watermark) "开启" else "关闭")
             }
-            if (video.errorStage != null || video.errorCode != null || video.errorMessage != null) {
+            if (video.errorMessage?.isNotBlank() == true) {
                 DetailSection(title = "错误信息") {
-                    video.errorStage?.takeIf { it.isNotBlank() }?.let { ParamRow("阶段", it) }
-                    video.errorCode?.takeIf { it.isNotBlank() }?.let { ParamRow("错误码", it) }
-                    video.errorMessage?.takeIf { it.isNotBlank() }?.let { ParamRow("信息", it) }
+                    DetailText(video.errorMessage.orEmpty())
                 }
             }
 

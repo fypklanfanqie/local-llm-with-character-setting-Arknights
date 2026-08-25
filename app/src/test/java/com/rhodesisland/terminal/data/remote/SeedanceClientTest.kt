@@ -878,8 +878,9 @@ class SeedanceClientTest {
         val ex = expectApiException()
         assertEquals(SeedanceError.BAD_ENDPOINT, ex.classification)
         assertEquals(404, ex.httpStatus)
-        assertNotNull("错误文案应提示核对地址", ex.message)
-        assertTrue("错误文案应包含接口后缀提示", ex.message.orEmpty().contains(SEEDANCE_TASKS_SUFFIX))
+        assertTrue("错误文案应提示核对地址", ex.message.orEmpty().contains("服务地址"))
+        assertTrue("错误文案不得包含 HTTP 状态码", !ex.message.orEmpty().contains("404"))
+        assertTrue("错误文案不得包含接口路径", !ex.message.orEmpty().contains(SEEDANCE_TASKS_SUFFIX))
     }
 
     @Test

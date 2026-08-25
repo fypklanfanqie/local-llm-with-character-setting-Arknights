@@ -5,6 +5,8 @@ import com.rhodesisland.terminal.data.model.ChatMessage
 import com.rhodesisland.terminal.data.model.ChatProviderType
 import com.rhodesisland.terminal.data.remote.ChatMessageDto
 import com.rhodesisland.terminal.data.remote.DirectLlmClient
+import com.rhodesisland.terminal.data.remote.DirectLlmException
+import com.rhodesisland.terminal.data.remote.DirectLlmFailure
 import com.rhodesisland.terminal.data.repository.SettingsRepository
 import com.rhodesisland.terminal.provider.ChatProvider
 import kotlinx.serialization.json.JsonElement
@@ -44,7 +46,7 @@ class CloudChatProvider(
         val apiConfig = settings.getApiConfigNow()
         // 内置免费服务商（Cloudflare 代理）无需客户端 key（key 由代理注入）；其余服务商必须配置
         if (apiConfig.apiKey.isBlank() && !isFreeProxyBaseUrl(apiConfig.baseUrl)) {
-            throw Exception("请先在设置页配置 API Key")
+            throw DirectLlmException(DirectLlmFailure.HTTP, statusCode = 401, technicalMessage = "missing API key")
         }
 
         val apiMessages = messages.map { msg ->
@@ -63,7 +65,7 @@ class CloudChatProvider(
             onCall = { activeCall = it },
             deepThinking = settings.getDeepThinkingNow(),
         )
-        if (content.isBlank()) throw Exception("API 返回空内容")
+        if (content.isBlank()) throw DirectLlmException(DirectLlmFailure.EMPTY_RESPONSE)
         return content
     }
 

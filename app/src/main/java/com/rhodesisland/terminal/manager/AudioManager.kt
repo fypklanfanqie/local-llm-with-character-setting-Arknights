@@ -175,7 +175,7 @@ class AudioManager(
             bgmPlayer?.addListener(object : Player.Listener {
                 override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                     Log.w(TAG, "BGM play error: ${error.message}")
-                    _error.value = "播放失败：${error.message ?: "未知错误"}"
+                    _error.value = "播放失败，请检查音频资源或网络"
                 }
 
                 override fun onIsPlayingChanged(playing: Boolean) {

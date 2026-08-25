@@ -5,9 +5,11 @@ import com.rhodesisland.terminal.data.model.TtsAuthMode
 import com.rhodesisland.terminal.data.model.TtsConfig
 import com.rhodesisland.terminal.data.model.authMode
 import com.rhodesisland.terminal.data.model.validationError
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -40,6 +42,7 @@ class VolcTtsClient(
     companion object {
         private const val SUCCESS_AUDIO_CHUNK = 0
         private const val SUCCESS_FINISH = 20_000_000
+        private const val TAG = "VolcTtsClient"
 
         private val json = Json {
             ignoreUnknownKeys = true
@@ -113,11 +116,12 @@ class VolcTtsClient(
         currentCoroutineContext()[Job]?.invokeOnCompletion { runCatching { call.cancel() } }
 
         call.execute().use { response ->
-            val body = response.body ?: throw Exception("火山引擎 TTS 返回空响应体")
+            val body = response.body ?: throw Exception("语音服务返回为空")
             val logId = response.header("X-Tt-Logid")
             if (!response.isSuccessful) {
-                val snippet = body.bytes().decodeToString().take(500)
-                throw Exception("TTS HTTP ${response.code}: $snippet${logId?.let { "（LogID: $it）" } ?: ""}")
+                val raw = body.bytes()
+                Log.w(TAG, "TTS HTTP failure code=${response.code} logId=$logId bodyLength=${raw.size}")
+                throw Exception("语音服务请求失败，请检查配置后重试")
             }
             parseChunkedResponse(body, logId)
         }
@@ -136,13 +140,13 @@ class VolcTtsClient(
             val trimmed = line.trim()
             if (trimmed.isEmpty()) continue
             if (trimmed.startsWith("data:") || trimmed.startsWith("event:")) {
-                throw Exception("火山引擎返回 SSE 格式；当前客户端仅支持 HTTP Chunked")
+                throw Exception("语音服务返回格式不受支持")
             }
 
             val obj = try {
                 json.parseToJsonElement(trimmed).jsonObject
             } catch (_: Exception) {
-                throw Exception("火山引擎返回了无法解析的 Chunked JSON")
+                throw Exception("语音服务返回格式异常")
             }
             val code = obj["code"]?.jsonPrimitive?.intOrNull
             when (code) {
@@ -155,17 +159,17 @@ class VolcTtsClient(
                 try {
                     output.write(Base64.getMimeDecoder().decode(data.replace(Regex("\\s"), "")))
                 } catch (_: IllegalArgumentException) {
-                    throw Exception("火山引擎返回了非法 Base64 音频数据")
+                    throw Exception("语音数据异常")
                 }
             }
         }
 
         errorInfo?.let { error ->
-            val code = error["code"]?.jsonPrimitive?.intOrNull ?: "未知"
-            val message = error["message"]?.jsonPrimitive?.contentOrNull.orEmpty()
-            throw Exception("火山引擎错误 $code: $message${logId?.let { "（LogID: $it）" } ?: ""}")
+            val code = error["code"]?.jsonPrimitive?.intOrNull
+            Log.w(TAG, "TTS service error code=$code logId=$logId")
+            throw Exception("语音服务暂时无法合成，请稍后重试")
         }
-        if (output.size() == 0) throw Exception("火山引擎返回无音频数据${logId?.let { "（LogID: $it）" } ?: ""}")
+        if (output.size() == 0) throw Exception("语音服务未返回音频，请稍后重试")
         return output.toByteArray()
     }
 }

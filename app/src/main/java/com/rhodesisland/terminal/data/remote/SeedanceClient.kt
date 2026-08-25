@@ -5,6 +5,7 @@ import com.rhodesisland.terminal.data.model.SeedanceConfig
 import com.rhodesisland.terminal.data.model.SeedanceModelVariant
 import com.rhodesisland.terminal.data.model.SeedanceRatio
 import com.rhodesisland.terminal.data.model.SeedanceResolution
+import com.rhodesisland.terminal.util.seedanceUserErrorMessage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.ensureActive
@@ -470,32 +471,32 @@ class SeedanceClient(
                 when {
                     status in 200..299 -> SeedanceProbeResult.Ok("接口正常，服务地址可用")
                     status == 401 || status == 403 ->
-                        SeedanceProbeResult.Failed("接口可达，但 API Key 无效或未授权（HTTP $status）")
+                        SeedanceProbeResult.Failed("接口可达，但 API Key 无效或未授权")
                     status == 429 || status >= 500 ->
-                        SeedanceProbeResult.Failed("接口可达，但服务暂时繁忙（HTTP $status），请稍后重试")
+                        SeedanceProbeResult.Failed("接口可达，但服务暂时繁忙，请稍后重试")
                     status == 404 || status == 405 -> {
                         // 路径正确时，对不存在的探测任务服务端返回 JSON 错误体（如「任务不存在」）；
                         // 路径错误（被网关拦下）则通常是 HTML/空体。
                         val jsonBody = raw.isNotBlank() &&
                             (raw.trimStart().startsWith("{") || raw.trimStart().startsWith("["))
                         if (jsonBody) {
-                            SeedanceProbeResult.Ok("接口可达，路径正确（HTTP $status 为探测任务的预期返回）")
+                            SeedanceProbeResult.Ok("接口可达，路径正确（探测任务返回预期结果）")
                         } else {
                             val hint = if (media) {
                                 "中转站地址请填写完整「创建任务」接口（如 https://api.lk888.ai/v1/media/generate），或直接填该站点主机"
                             } else {
                                 "官方地址填 base（含 /api/v3）；中转站请粘贴完整的「创建任务」接口地址（如 https://xxx/v1/media/generate），不要只填主机或 /v1"
                             }
-                            SeedanceProbeResult.Failed("接口可达，但路径可能不正确（HTTP $status）：$hint")
+                            SeedanceProbeResult.Failed("接口可达，但路径可能不正确：$hint")
                         }
                     }
-                    else -> SeedanceProbeResult.Failed("接口可达，但返回 HTTP $status，请检查服务地址")
+                    else -> SeedanceProbeResult.Failed("接口可达，但返回异常，请检查服务地址")
                 }
             }
         } catch (e: IOException) {
             coroutineContext.ensureActive() // 被取消（超时/页面离开）时抛 CancellationException
             Log.w(TAG, "seedance probe network error")
-            SeedanceProbeResult.Failed("无法连接该地址：${e.message ?: "网络错误"}")
+            SeedanceProbeResult.Failed("无法连接服务，请检查地址与网络")
         } finally {
             handle?.dispose()
             call.cancel()
@@ -643,21 +644,7 @@ class SeedanceClient(
 
     /** 面向用户的中文可读文案，绝不携带 API Key / base64 / 签名 URL / 服务端原始消息。 */
     private fun humanReadableMessage(classification: SeedanceError, httpStatus: Int): String =
-        when (classification) {
-            SeedanceError.SENSITIVE_CONTENT -> "视频生成内容未通过审核，请修改角色或场景描述后重试"
-            SeedanceError.QUOTA_EXCEEDED -> "额度不足或已达上限，请稍后重试"
-            SeedanceError.AUTH -> "Seedance API Key 无效或未授权"
-            SeedanceError.INVALID_PARAMETER -> "请求参数不合法，请调整生成设置"
-            SeedanceError.BAD_ENDPOINT ->
-                "服务地址或路径可能不正确（HTTP $httpStatus）：官方 base 会自动补 /contents/generations/tasks；中转站请粘贴完整的「创建任务」接口地址（如 https://api.lk888.ai/v1/media/generate）"
-            SeedanceError.NOT_FOUND ->
-                "模型或任务不存在（HTTP $httpStatus）：请检查模型 ID 是否可用，以及 API Key 与所选区域是否匹配（火山方舟 / BytePlus / 中转站）"
-            SeedanceError.MODEL_NOT_OPEN ->
-                "模型未开通（HTTP $httpStatus）：请在火山方舟控制台开通该模型服务后重试"
-            SeedanceError.TRANSIENT_429_5XX -> "视频服务暂时繁忙（HTTP $httpStatus），请稍后重试"
-            SeedanceError.AMBIGUOUS_TRANSPORT -> "网络错误，无法确认任务状态"
-            SeedanceError.OTHER -> "视频生成失败（HTTP $httpStatus）"
-        }
+        seedanceUserErrorMessage(classification)
 
     companion object {
         private const val TAG = "SeedanceClient"

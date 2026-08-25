@@ -121,6 +121,7 @@ import com.rhodesisland.terminal.video.SeedanceVideoExporter
 import com.rhodesisland.terminal.video.VideoExportTarget
 import com.rhodesisland.terminal.video.exportTargetForSdk
 import com.rhodesisland.terminal.video.suggestedVideoFileName
+import com.rhodesisland.terminal.util.toUserErrorMessage
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -257,7 +258,7 @@ fun ChatScreen(
         exportScope.launch {
             conversationExportWriter.writeText(uri, ConversationTextExporter.render(document))
                 .onSuccess { Toast.makeText(context, "聊天记录已导出", Toast.LENGTH_SHORT).show() }
-                .onFailure { Toast.makeText(context, "导出失败：${it.message ?: "无法写入文件"}", Toast.LENGTH_SHORT).show() }
+                .onFailure { error -> Toast.makeText(context, "导出失败：${error.toUserErrorMessage()}", Toast.LENGTH_SHORT).show() }
             exportBusy = false
         }
     }
@@ -273,9 +274,9 @@ fun ChatScreen(
                 .onSuccess { png ->
                     conversationExportWriter.writePng(uri, png)
                         .onSuccess { Toast.makeText(context, "聊天记录图片已导出", Toast.LENGTH_SHORT).show() }
-                        .onFailure { Toast.makeText(context, "导出失败：${it.message ?: "无法写入图片"}", Toast.LENGTH_SHORT).show() }
+                        .onFailure { error -> Toast.makeText(context, "导出失败：${error.toUserErrorMessage()}", Toast.LENGTH_SHORT).show() }
                 }
-                .onFailure { Toast.makeText(context, it.message ?: "图片生成失败，请尝试分页导出或 TXT", Toast.LENGTH_SHORT).show() }
+                .onFailure { error -> Toast.makeText(context, error.toUserErrorMessage(), Toast.LENGTH_SHORT).show() }
             exportBusy = false
         }
     }
@@ -300,9 +301,9 @@ fun ChatScreen(
                         onSuccess = { pngs ->
                             conversationExportWriter.writePngPages(treeUri, suggestedExportBaseName(document.ownerName, document.title, document.exportedAt), pngs)
                                 .onSuccess { count -> Toast.makeText(context, "已导出 $count 张聊天记录图片", Toast.LENGTH_SHORT).show() }
-                                .onFailure { Toast.makeText(context, "导出失败：${it.message ?: "无法写入图片"}", Toast.LENGTH_SHORT).show() }
+                                .onFailure { error -> Toast.makeText(context, "导出失败：${error.toUserErrorMessage()}", Toast.LENGTH_SHORT).show() }
                         },
-                        onFailure = { Toast.makeText(context, it.message ?: "图片生成失败，请尝试 TXT", Toast.LENGTH_SHORT).show() },
+                        onFailure = { error -> Toast.makeText(context, error.toUserErrorMessage(), Toast.LENGTH_SHORT).show() },
                     )
                 exportBusy = false
             }
@@ -375,7 +376,7 @@ fun ChatScreen(
                 exporter.exportToUri(video, uri).onSuccess {
                     Toast.makeText(context, "视频已保存到所选位置", Toast.LENGTH_SHORT).show()
                 }.onFailure { e ->
-                    Toast.makeText(context, "保存失败：${e.message}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "保存失败：${e.toUserErrorMessage()}", Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -409,7 +410,7 @@ fun ChatScreen(
                     exporter.exportToMediaStore(video).onSuccess {
                         Toast.makeText(context, "视频已保存到相册 Movies/RhodesIslandTerminal", Toast.LENGTH_SHORT).show()
                     }.onFailure { e ->
-                        Toast.makeText(context, "保存失败：${e.message}", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "保存失败：${e.toUserErrorMessage()}", Toast.LENGTH_SHORT).show()
                     }
                 }
                 VideoExportTarget.CreateDocument -> {
@@ -643,7 +644,7 @@ fun ChatScreen(
                     val document = pendingConversationExport ?: return@ConversationExportImageModeDialog
                     val error = runCatching { ConversationImageLayout.plan(document, ConversationImageMode.LONG_IMAGE) }.exceptionOrNull()
                     if (error != null) {
-                        Toast.makeText(context, error.message ?: "图片生成失败，请尝试分页导出或 TXT", Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, "图片生成失败：${error.toUserErrorMessage()}", Toast.LENGTH_LONG).show()
                         return@ConversationExportImageModeDialog
                     }
                     showExportImageModePicker = false

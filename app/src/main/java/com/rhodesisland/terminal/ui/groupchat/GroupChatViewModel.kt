@@ -17,6 +17,7 @@ import com.rhodesisland.terminal.data.repository.GroupChatRepository
 import com.rhodesisland.terminal.llm.LorebookEngine
 import com.rhodesisland.terminal.ui.chat.PendingFinal
 import com.rhodesisland.terminal.util.MarkdownParser
+import com.rhodesisland.terminal.util.toUserErrorMessage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -138,7 +139,7 @@ class GroupChatViewModel(
             throw e
         } catch (e: Exception) {
             Log.e(TAG, "群信息加载失败", e)
-            _uiState.update { it.copy(errorMessage = "群信息加载失败：${e.message}") }
+            _uiState.update { it.copy(errorMessage = "群信息加载失败：${e.toUserErrorMessage()}") }
         }
     }
 
@@ -331,7 +332,7 @@ class GroupChatViewModel(
                             messages = msgs,
                             isStreaming = false,
                             showTyping = false,
-                            errorMessage = e.message ?: "请求失败",
+                            errorMessage = e.toUserErrorMessage(),
                             inputText = text,
                             typingCharacterId = null,
                         )

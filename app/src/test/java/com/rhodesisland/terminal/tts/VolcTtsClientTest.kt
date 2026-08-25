@@ -61,7 +61,9 @@ class VolcTtsClientTest {
         val error = runCatching {
             client.synthesize("你好", "amiya", TtsConfig(apiKey = "key", defaultVoiceId = "S"), "S")
         }.exceptionOrNull()
-        assertTrue(error?.message?.contains("55000000") == true)
+        assertTrue(error?.message?.contains("语音服务暂时无法合成") == true)
+        assertTrue(error?.message?.contains("55000000") != true)
+        assertTrue(error?.message?.contains("resource mismatch") != true)
     }
 
     private fun successResponse() = MockResponse().setBody(

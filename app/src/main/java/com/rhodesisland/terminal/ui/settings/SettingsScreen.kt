@@ -71,6 +71,7 @@ import com.rhodesisland.terminal.data.model.UserProfileConfig
 import com.rhodesisland.terminal.util.AppStorageUsage
 import com.rhodesisland.terminal.util.CrashCapture
 import com.rhodesisland.terminal.util.UserProfileImageStore
+import com.rhodesisland.terminal.util.toUserErrorMessage
 import com.rhodesisland.terminal.data.model.SeedanceModelVariant
 import com.rhodesisland.terminal.data.model.SeedanceRatio
 import com.rhodesisland.terminal.data.model.SeedanceResolution
@@ -324,9 +325,9 @@ fun SettingsScreen(
                                         messages = listOf(ChatMessageDto("user", JsonPrimitive("你好，请回复「测试通过」")))
                                     ).take(60).let { "连接成功：$it" }
                                 }.onFailure {
-                                    // 上游 400/401/404 的真实 message 已在异常文案里（HTTP {code}: {msg}）。
+                                    // 技术异常只写日志；UI 统一显示固定文案。
                                     android.util.Log.w("SettingsScreen", "LLM 测试连接失败", it)
-                                }.exceptionOrNull()?.message?.let { "连接失败：$it" }
+                                }.exceptionOrNull()?.let { "连接失败：${it.toUserErrorMessage()}" }
                                 probeRunning = false
                             }
                         },
@@ -476,7 +477,7 @@ fun SettingsScreen(
                         )
                                     }
                                 }
-                                ttsPreviewError = result.exceptionOrNull()?.message
+                                ttsPreviewError = result.exceptionOrNull()?.toUserErrorMessage()
                                 ttsPreviewBusy = false
                             }
                         },

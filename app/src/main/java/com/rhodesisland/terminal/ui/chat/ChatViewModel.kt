@@ -19,6 +19,7 @@ import com.rhodesisland.terminal.data.model.GiftHistory
 import com.rhodesisland.terminal.provider.local.LocalChatProvider
 import com.rhodesisland.terminal.util.MarkdownParser
 import com.rhodesisland.terminal.util.PromptWindowAnchor
+import com.rhodesisland.terminal.util.toUserErrorMessage
 import com.rhodesisland.terminal.llm.LorebookEngine
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -104,7 +105,7 @@ class ChatViewModel(
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {
                 Log.e(TAG, "activeCharacter flow 异常", e)
-                _uiState.update { it.copy(errorMessage = "角色数据加载失败：${e.message}", showWelcome = false) }
+                _uiState.update { it.copy(errorMessage = "角色数据加载失败：${e.toUserErrorMessage()}", showWelcome = false) }
             }
         }
         // 监听角色 + 活跃会话映射：确定该角色的活跃会话；无（或已被删除）则自动新建「新对话」。
@@ -127,7 +128,7 @@ class ChatViewModel(
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {
                 Log.e(TAG, "活跃会话 flow 异常", e)
-                _uiState.update { it.copy(errorMessage = "会话数据加载失败：${e.message}", showWelcome = false) }
+                _uiState.update { it.copy(errorMessage = "会话数据加载失败：${e.toUserErrorMessage()}", showWelcome = false) }
             }
         }
         // 监听活跃会话 + 聊天记录 + 会话内 Seedance 视频（flatMapLatest 保证会话切换时取消旧订阅，
@@ -153,7 +154,7 @@ class ChatViewModel(
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {
                 Log.e(TAG, "聊天记录 flow 异常", e)
-                _uiState.update { it.copy(errorMessage = "聊天记录加载失败：${e.message}", showWelcome = false) }
+                _uiState.update { it.copy(errorMessage = "聊天记录加载失败：${e.toUserErrorMessage()}", showWelcome = false) }
             }
         }
         // 监听当前角色的会话列表（供抽屉展示 + 同步当前会话标题）
@@ -168,7 +169,7 @@ class ChatViewModel(
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {
                 Log.e(TAG, "会话列表 flow 异常", e)
-                _uiState.update { it.copy(errorMessage = "会话列表加载失败：${e.message}") }
+                _uiState.update { it.copy(errorMessage = "会话列表加载失败：${e.toUserErrorMessage()}") }
             }
         }
         // 监听活跃会话变化 -> 同步标题/高亮（切换/新建/删除后立即生效）
@@ -189,7 +190,7 @@ class ChatViewModel(
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {
                 Log.e(TAG, "providerType flow 异常", e)
-                _uiState.update { it.copy(errorMessage = "Provider 切换失败：${e.message}") }
+                _uiState.update { it.copy(errorMessage = "Provider 切换失败：${e.toUserErrorMessage()}") }
             }
         }
         // 监听 TTS 语言
@@ -410,7 +411,10 @@ class ChatViewModel(
         viewModelScope.launch {
             runCatching { container.conversationExportService.prepare(conversationId, backgroundPath) }
                 .onSuccess(onReady)
-                .onFailure { onError(it.message ?: "无法准备对话导出") }
+                .onFailure { error ->
+                    Log.w(TAG, "对话导出准备失败", error)
+                    onError(error.toUserErrorMessage())
+                }
         }
     }
 
@@ -897,7 +901,7 @@ class ChatViewModel(
                         characterImageSource = autoCharacterImageSource,
                     )
                 } else {
-                    termReason = "出错: ${e.message ?: "请求失败"}"
+                    termReason = "出错: ${e.toUserErrorMessage()}"
                     // 回滚：删除已落库的用户消息（无对应回复，避免孤儿），恢复输入框内容，
                     // 让用户可直接重试而无需重输（重发产生新消息，不会重复）。
                     if (userMsgId != 0L) runCatching { container.chatRepository.deleteMessage(userMsgId) }
@@ -910,7 +914,7 @@ class ChatViewModel(
                             showTyping = false,
                             stopRequested = false,
                             activeGenerationId = null,
-                            errorMessage = e.message ?: "请求失败",
+                            errorMessage = e.toUserErrorMessage(),
                             inputText = text,
                             uploadedImages = images,
                             uploadedFiles = files,
@@ -1078,7 +1082,7 @@ class ChatViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.w(TAG, "自动朗读失败: ${e.message}", e)
+                Log.w(TAG, "自动朗读失败", e)
             } finally {
                 _uiState.update {
                     it.copy(
@@ -1253,7 +1257,7 @@ class ChatViewModel(
                     // Room Flow 会回填该消息。不要再手动 append 同一 databaseId，否则 LazyColumn key 重复并崩溃。
                 }
                 .onFailure { error ->
-                    _uiState.update { it.copy(errorMessage = "礼物已送出，感谢回复生成失败：${error.message ?: "请稍后重试"}") }
+                    _uiState.update { it.copy(errorMessage = "礼物已送出，感谢回复生成失败：${error.toUserErrorMessage()}") }
                 }
         }
     }
@@ -1351,7 +1355,7 @@ class ChatViewModel(
                         ttsPlayingIndex = -1,
                         ttsSubtitleJp = "",
                         ttsSubtitleCn = "",
-                        errorMessage = "TTS 失败: ${e.message}",
+                        errorMessage = "TTS 失败：${e.toUserErrorMessage()}",
                     )
                 }
             }

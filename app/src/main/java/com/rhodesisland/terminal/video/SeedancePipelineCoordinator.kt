@@ -14,6 +14,7 @@ import com.rhodesisland.terminal.data.remote.SeedanceRemoteStatus
 import com.rhodesisland.terminal.data.remote.SeedanceTaskResponse
 import com.rhodesisland.terminal.data.remote.MEDIA_REFERENCE_MAX_BYTES
 import com.rhodesisland.terminal.data.remote.seedanceProtocolFor
+import com.rhodesisland.terminal.util.seedanceUserErrorMessage
 import com.rhodesisland.terminal.data.repository.SeedanceVideoRepository
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.Json
@@ -270,7 +271,7 @@ class SeedancePipelineCoordinator(
             task.taskUuid, sources.character, sources.builtInAssetPath, sources.backgroundImagePath,
         ).getOrElse { e ->
             return fail(task, SeedanceVideoState.SNAPSHOT_PENDING, SeedanceVideoState.FAILED_SNAPSHOT,
-                STAGE_SNAPSHOT, "SNAPSHOT_FAILED", e.message ?: "参考图快照复制失败")
+                STAGE_SNAPSHOT, "SNAPSHOT_FAILED", "参考图快照复制失败")
         }
 
         // 先写回参考图字段（幂等），再 CAS 推进状态；崩溃后仍在 SNAPSHOT_PENDING 可重跑。
@@ -318,12 +319,12 @@ class SeedancePipelineCoordinator(
         } catch (e: SeedancePromptParseException) {
             store.transition(task.id, SeedanceVideoState.PROMPTING, SeedanceVideoState.FAILED_PROMPT) {
                 it.copy(errorStage = STAGE_PROMPT, errorCode = "PROMPT_PARSE",
-                    errorMessage = e.message ?: "提示词生成失败", retryDisposition = "manual")
+                    errorMessage = "提示词生成失败，请稍后重试", retryDisposition = "manual")
             }
             return PipelineOutcome.WaitingForUser
         } catch (e: Exception) {
             return retryTransient(task, SeedanceVideoState.PROMPTING, SeedanceVideoState.PROMPT_PENDING,
-                SeedanceVideoState.FAILED_PROMPT, STAGE_PROMPT, "PROMPT_TRANSIENT", e.message)
+                SeedanceVideoState.FAILED_PROMPT, STAGE_PROMPT, "PROMPT_TRANSIENT", "提示词生成暂时失败")
         }
 
         val docJson = promptJson.encodeToString(SeedancePromptDocument.serializer(), doc)
@@ -477,7 +478,7 @@ class SeedancePipelineCoordinator(
                 // 歧义：POST 可能已到服务端，绝不自动重发。
                 store.transition(task.id, SeedanceVideoState.SUBMITTING, SeedanceVideoState.FAILED_SUBMISSION) {
                     it.copy(errorStage = STAGE_SUBMIT, errorCode = ERROR_CODE_AMBIGUOUS_POST,
-                        errorMessage = e.message, requiresCostConfirmation = true,
+                        errorMessage = seedanceUserErrorMessage(e.classification), requiresCostConfirmation = true,
                         retryDisposition = "ambiguous_post",
                         submissionAttemptId = attemptId, submissionStartedAt = startedAt, requestFingerprint = fingerprint)
                 }
@@ -490,7 +491,7 @@ class SeedancePipelineCoordinator(
                 val costConfirmation = e.httpStatus != null && e.httpStatus >= 500
                 store.transition(task.id, SeedanceVideoState.SUBMITTING, SeedanceVideoState.FAILED_SUBMISSION) {
                     it.copy(errorStage = STAGE_SUBMIT, errorCode = code,
-                        errorMessage = e.message, retryDisposition = "manual",
+                        errorMessage = seedanceUserErrorMessage(e.classification), retryDisposition = "manual",
                         requiresCostConfirmation = costConfirmation,
                         submissionAttemptId = attemptId, submissionStartedAt = startedAt, requestFingerprint = fingerprint)
                 }
@@ -527,14 +528,14 @@ class SeedancePipelineCoordinator(
         if (delay == null) {
             store.transition(task.id, task.state, SeedanceVideoState.FAILED_QUERY) {
                 it.copy(errorStage = STAGE_QUERY, errorCode = e.classification.name,
-                    errorMessage = e.message, retryDisposition = "manual")
+                    errorMessage = seedanceUserErrorMessage(e.classification), retryDisposition = "manual")
             }
             return PipelineOutcome.WaitingForUser
         }
         updateFields(task.id) {
             it.copy(nextRetryAt = clock() + delay, automaticRetryCount = it.automaticRetryCount + 1,
                 errorStage = STAGE_QUERY, errorCode = e.classification.name,
-                errorMessage = e.message, retryDisposition = "bounded_retry")
+                errorMessage = seedanceUserErrorMessage(e.classification), retryDisposition = "bounded_retry")
         }
         return PipelineOutcome.Reschedule(delay)
     }
@@ -588,7 +589,7 @@ class SeedancePipelineCoordinator(
             SeedanceRemoteStatus.FAILED -> {
                 store.transition(task.id, task.state, SeedanceVideoState.FAILED_REMOTE) {
                     it.withRemote().copy(errorStage = STAGE_REMOTE, errorCode = "REMOTE_FAILED",
-                        errorMessage = sanitizeRemoteError(response.error?.message) ?: "远端视频生成失败",
+                        errorMessage = "远端视频生成失败，请稍后重试",
                         retryDisposition = "manual")
                 }
                 PipelineOutcome.WaitingForUser
@@ -651,7 +652,7 @@ class SeedancePipelineCoordinator(
                 .getOrElse { e ->
                     store.transition(task.id, SeedanceVideoState.DOWNLOADING, SeedanceVideoState.FAILED_DOWNLOAD) {
                         it.copy(errorStage = STAGE_DOWNLOAD, errorCode = "DOWNLOAD_FAILED",
-                            errorMessage = e.message ?: "视频下载失败", retryDisposition = "manual")
+                            errorMessage = "视频下载失败，请稍后重试", retryDisposition = "manual")
                     }
                     return PipelineOutcome.WaitingForUser
                 }
@@ -700,16 +701,23 @@ class SeedancePipelineCoordinator(
         if (delay == null) {
             store.transition(task.id, from, exhaustedState) {
                 it.copy(errorStage = stage, errorCode = code,
-                    errorMessage = message ?: "操作失败", retryDisposition = "manual")
+                    errorMessage = fixedPipelineMessage(stage, message), retryDisposition = "manual")
             }
             return PipelineOutcome.WaitingForUser
         }
         store.transition(task.id, from, backTo) {
             it.copy(nextRetryAt = clock() + delay, automaticRetryCount = it.automaticRetryCount + 1,
                 errorStage = stage, errorCode = code,
-                errorMessage = message, retryDisposition = "bounded_retry")
+                errorMessage = fixedPipelineMessage(stage, message), retryDisposition = "bounded_retry")
         }
         return PipelineOutcome.Reschedule(delay)
+    }
+
+    private fun fixedPipelineMessage(stage: String, fallback: String?): String = when (stage) {
+        STAGE_PROMPT -> "提示词生成暂时失败，请稍后重试"
+        STAGE_DOWNLOAD -> "视频下载失败，请稍后重试"
+        STAGE_QUERY -> "查询视频任务失败，请稍后重试"
+        else -> fallback?.takeIf { it in setOf("视频下载失败", "提示词生成暂时失败") } ?: "操作失败，请稍后重试"
     }
 
     private suspend fun updateFields(taskId: Long, mutate: (SeedanceVideo) -> SeedanceVideo) {
@@ -734,19 +742,4 @@ internal fun newAttemptId(now: Long): String =
 private fun sha256Hex(bytes: ByteArray): String {
     val digest = MessageDigest.getInstance("SHA-256").digest(bytes)
     return digest.joinToString("") { "%02x".format(it.toInt() and 0xFF) }
-}
-
-/**
- * 远端失败文案净化：剔除可能泄露的签名 URL 与内联数据，长度截断 200 字符。
- * 净化后为空返回 null（调用方回退固定文案）。绝不透传服务端原始消息。
- */
-private fun sanitizeRemoteError(raw: String?): String? {
-    if (raw.isNullOrBlank()) return null
-    val cleaned = raw
-        .replace(Regex("https?://\\S+"), "[链接]")
-        .replace(Regex("data:[^\\s,;}\"']+"), "[数据]")
-        .replace(Regex("\\s+"), " ")
-        .trim()
-        .take(200)
-    return cleaned.takeIf { it.isNotBlank() }
 }

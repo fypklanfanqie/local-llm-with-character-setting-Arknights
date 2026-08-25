@@ -292,7 +292,7 @@ class BackendManager(
                 }
 
                 if (!ok) {
-                    val reason = backendFor(attempt.backend).lastErrorMessage ?: lastError?.message ?: "初始化失败"
+                    val reason = backendFor(attempt.backend).lastErrorMessage ?: "初始化失败"
                     failureReasons += "${attempt.variant.name}: $reason"
                     Log.w(TAG, "${attempt.variant.name} 初始化失败: $reason")
                     // CPU 优化失败推进到 CPU 兼容（下一变体），不黑名单 CPU；GPU/NPU 失败记会话级黑名单。
@@ -473,11 +473,11 @@ class BackendManager(
                 )
             }
 
-            // 所有尝试均失败：汇总各变体原因详细报错。
+            // 所有尝试均失败：详细原因只写日志，UI 侧拿到固定异常文案。
             val detail = if (failureReasons.isEmpty()) "所有后端尝试均初始化失败"
                 else "本地模型加载失败（所有后端尝试均失败）。${failureReasons.joinToString("；")}"
             Log.e(TAG, detail)
-            throw lastError?.let { IllegalStateException(detail, it) } ?: IllegalStateException(detail)
+            throw IllegalStateException("本地推理后端暂不可用，请检查模型文件或稍后重试", lastError)
         } finally {
             // 本地推理保活收尾：结束前台服务 + 释放 WakeLock（幂等；异常吞掉，不影响生成结果返回）。
             runCatching { inferenceSession.end() }

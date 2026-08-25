@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rhodesisland.terminal.data.model.SeedanceVideo
 import com.rhodesisland.terminal.data.model.SeedanceVideoState
+import com.rhodesisland.terminal.util.seedanceUserErrorMessage
 
 /** 视频卡容器 testTag（instrumentation 测试定位用）。 */
 const val SEEDANCE_VIDEO_CARD_TAG = "seedance_video_card"
@@ -282,15 +283,14 @@ internal fun stateText(video: SeedanceVideo): String = when (video.state) {
     SeedanceVideoState.READY -> "视频已生成"
     SeedanceVideoState.CANCELLED -> "已取消"
     SeedanceVideoState.CANCEL_REQUESTED -> "正在取消…"
-    SeedanceVideoState.EXPIRED -> video.errorMessage?.takeIf { it.isNotBlank() } ?: "视频任务已过期"
+    SeedanceVideoState.EXPIRED -> "视频任务已过期"
     SeedanceVideoState.FAILED_SNAPSHOT,
     SeedanceVideoState.FAILED_PROMPT,
     SeedanceVideoState.FAILED_PROMPT_CONFIG_CHANGED,
     SeedanceVideoState.FAILED_SUBMISSION,
     SeedanceVideoState.FAILED_REMOTE,
     SeedanceVideoState.FAILED_QUERY,
-    SeedanceVideoState.FAILED_DOWNLOAD ->
-        video.errorMessage?.takeIf { it.isNotBlank() } ?: defaultFailureText(video.state)
+    SeedanceVideoState.FAILED_DOWNLOAD -> defaultFailureText(video.state)
 }
 
 /** FAILED_* 缺少 errorMessage 时的兜底文案。 */

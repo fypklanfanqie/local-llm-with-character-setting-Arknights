@@ -252,13 +252,14 @@ class LocalChatProvider(
         }
 
         val modelPath = ModelPathResolver.getLoadPath(context, activeModelId)
-            ?: throw Exception("模型文件未找到，请先下载模型: $activeModelId")
+            ?: throw Exception("模型文件未找到，请先下载并选择模型")
 
         // 2a. 模型包完整性校验（Task 12）：config 派生必需文件（graph/weight/tokenizer/...）存在、
         //     非空、非分片、路径不逃逸。校验失败拒绝进入 native（绝不硬编码 verified=true）。
         val validation = ModelBundleValidator.validate(File(modelPath).parentFile ?: File(modelPath))
         if (!validation.valid) {
-            throw Exception("模型包校验失败：${validation.errors.joinToString("；")}")
+            Log.e(TAG, "模型包校验失败: ${validation.errors.joinToString("；")}")
+            throw Exception("模型包校验失败，请重新下载模型")
         }
 
         // 2. 检查 MNN 引擎 native 就绪（libMNN.so）

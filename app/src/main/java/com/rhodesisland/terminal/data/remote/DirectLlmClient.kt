@@ -22,6 +22,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import android.util.Log
 import java.io.IOException
 import kotlin.coroutines.coroutineContext
 
@@ -129,12 +130,19 @@ class DirectLlmClient(
         try {
             call.execute().use { response ->
                 val raw = response.body?.string().orEmpty()
-                if (!response.isSuccessful) throw Exception(parseError(response.code, raw))
+                if (!response.isSuccessful) {
+                    throw httpFailure(response.code, raw, "chatOnce/openai")
+                }
                 parseFullContent(raw)
             }
         } catch (e: IOException) {
             coroutineContext.ensureActive() // 被取消（call.cancel 触发流关闭）时抛 CancellationException
-            throw Exception("网络错误: ${e.message ?: "请求失败"}", e)
+            Log.w(TAG, "OpenAI chatOnce network failure", e)
+            throw DirectLlmException(
+                failure = DirectLlmFailure.NETWORK,
+                technicalMessage = e.message,
+                cause = e,
+            )
         } finally {
             handle?.dispose()
             call.cancel()
@@ -159,7 +167,7 @@ class DirectLlmClient(
                 val body = response.body
                 if (!response.isSuccessful || body == null) {
                     val raw = body?.string().orEmpty()
-                    throw Exception(parseError(response.code, raw))
+                    throw httpFailure(response.code, raw, "stream/openai")
                 }
                 val isSse = body.contentType()?.subtype
                     ?.equals("event-stream", ignoreCase = true) == true
@@ -193,7 +201,12 @@ class DirectLlmClient(
             }
         } catch (e: IOException) {
             coroutineContext.ensureActive() // 被取消时抛 CancellationException
-            throw Exception("网络错误: ${e.message ?: "请求失败"}", e)
+            Log.w(TAG, "streaming network failure", e)
+            throw DirectLlmException(
+                failure = DirectLlmFailure.NETWORK,
+                technicalMessage = e.message,
+                cause = e,
+            )
         } finally {
             handle?.dispose()
             call.cancel()
@@ -400,7 +413,7 @@ class DirectLlmClient(
                 val body = response.body
                 if (!response.isSuccessful || body == null) {
                     val raw = body?.string().orEmpty()
-                    throw Exception(parseError(response.code, raw))
+                    throw httpFailure(response.code, raw, "stream/anthropic")
                 }
                 val isSse = body.contentType()?.subtype
                     ?.equals("event-stream", ignoreCase = true) == true
@@ -430,7 +443,12 @@ class DirectLlmClient(
             }
         } catch (e: IOException) {
             coroutineContext.ensureActive() // 被取消时抛 CancellationException
-            throw Exception("网络错误: ${e.message ?: "请求失败"}", e)
+            Log.w(TAG, "streaming network failure", e)
+            throw DirectLlmException(
+                failure = DirectLlmFailure.NETWORK,
+                technicalMessage = e.message,
+                cause = e,
+            )
         } finally {
             handle?.dispose()
             call.cancel()
@@ -473,12 +491,19 @@ class DirectLlmClient(
         return try {
             call.execute().use { response ->
                 val raw = response.body?.string().orEmpty()
-                if (!response.isSuccessful) throw Exception(parseError(response.code, raw))
+                if (!response.isSuccessful) {
+                    throw httpFailure(response.code, raw, "chatOnce/anthropic")
+                }
                 parseAnthropicContent(raw)
             }
         } catch (e: IOException) {
             coroutineContext.ensureActive()
-            throw Exception("网络错误: ${e.message ?: "请求失败"}", e)
+            Log.w(TAG, "Anthropic chatOnce network failure", e)
+            throw DirectLlmException(
+                failure = DirectLlmFailure.NETWORK,
+                technicalMessage = e.message,
+                cause = e,
+            )
         } finally {
             handle?.dispose()
             call.cancel()
@@ -579,22 +604,17 @@ class DirectLlmClient(
         return sb.toString()
     }
 
-    /** 从错误响应体提取人类可读信息：error.message / error / message / HTTP {code}。 */
-    private fun parseError(code: Int, raw: String): String {
-        val msg = try {
-            val obj = json.parseToJsonElement(raw).jsonObject
-            when (val err = obj["error"]) {
-                is JsonObject -> err["message"]?.jsonPrimitive?.contentOrNull
-                is JsonPrimitive -> err.contentOrNull
-                else -> obj["message"]?.jsonPrimitive?.contentOrNull
-            }
-        } catch (e: Exception) {
-            null
-        }
-        if (!msg.isNullOrBlank()) return "HTTP $code: $msg"
-        // JSON 解析失败（HTML/纯文本错误页，常见于中转站/网关）：附上响应体片段便于定位
-        // 自定义提供商 400 的真实原因（如 model not found / unknown parameter）。
-        val snippet = raw.trim().replace('\r', ' ').replace('\n', ' ').take(160)
-        return if (snippet.isNotBlank()) "HTTP $code: $snippet" else "HTTP $code"
+    /** 把 HTTP 状态与远端响应体隔离：body 仅进入技术日志，不进入异常 message。 */
+    private fun httpFailure(code: Int, raw: String, operation: String): DirectLlmException {
+        Log.w(TAG, "$operation HTTP failure code=$code bodyLength=${raw.length}")
+        return DirectLlmException(
+            failure = DirectLlmFailure.HTTP,
+            statusCode = code,
+            technicalMessage = "HTTP $code bodyLength=${raw.length}",
+        )
+    }
+
+    companion object {
+        private const val TAG = "DirectLlmClient"
     }
 }

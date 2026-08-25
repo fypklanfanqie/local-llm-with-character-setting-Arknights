@@ -82,7 +82,7 @@ fun ModelManagerScreen(container: AppContainer) {
                     Icon(Icons.Filled.CloudOff, contentDescription = null, tint = scheme.onSurfaceVariant, modifier = Modifier.size(48.dp))
                     Spacer(Modifier.height(16.dp))
                     Text("无法获取模型列表", color = scheme.onSurface, fontSize = 14.sp)
-                    Text("请检查网络或配置 MODEL_LIST_URL", color = scheme.onSurfaceVariant, fontSize = 11.sp)
+                    Text("请稍后重试或检查网络连接", color = scheme.onSurfaceVariant, fontSize = 11.sp)
                 }
             }
             return
