@@ -82,7 +82,7 @@ class AppContainer(private val context: Context) {
 
     // ===== 仓库 =====
     val settingsRepository: SettingsRepository by lazy { SettingsRepository(settingsStore) }
-    val chatRepository: ChatRepository by lazy { ChatRepository(database.chatDao()) }
+    val chatRepository: ChatRepository by lazy { ChatRepository(database.chatDao(), database) }
     val conversationRepository: ConversationRepository by lazy { ConversationRepository(database.conversationDao()) }
     val assetRepository: AssetRepository by lazy { AssetRepository(context) }
     val documentRepository: DocumentRepository by lazy { DocumentRepository(directLlmClient) }
@@ -93,7 +93,6 @@ class AppContainer(private val context: Context) {
         SpecialEventConversationCoordinator(
             database = database,
             conversations = conversationRepository,
-            chats = chatRepository,
             settings = settingsRepository,
             catalog = specialEventCatalog,
         )

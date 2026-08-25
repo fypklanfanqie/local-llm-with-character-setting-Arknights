@@ -99,9 +99,13 @@ data class SpecialEventEntity(
     val sceneKey: String,
     val unlockedAt: Long,
     val startedAt: Long? = null,
+    /** 导航壳会话 id（普通 conversation 行）；仅用于路由/通知跳转，不是消息存储位置。 */
     val conversationId: Long? = null,
     val isRead: Boolean = false,
+    /** v11 兼容字段：旧版普通表开场消息 id；新写入不再使用（见 openingMemoryMessageId）。 */
     val openingMessageId: Long? = null,
+    /** v12：永久归档表内的开场消息行 id（special_event_memory_message.id）。 */
+    val openingMemoryMessageId: Long? = null,
 )
 
 /** 以 sourceKey 做唯一约束，阻止消息/视频重试重复增加好感。 */
@@ -251,4 +255,4 @@ internal fun LungmenWalletEntity.toDomain() = LungmenWallet(balance, updatedAt)
 internal fun GiftDefinitionEntity.toDomain() = GiftDefinition(id, name, description, imagePath, price, affinityGain, createdAt)
 internal fun GiftInventoryEntity.toDomain() = GiftInventory(giftId, quantity, updatedAt)
 internal fun GiftHistoryEntity.toDomain() = GiftHistory(id, characterId, giftId, giftName, giftDescription, giftImagePath, price, affinityGain, sentAt, conversationId, thankYouText)
-internal fun SpecialEventEntity.toDomain() = SpecialEvent(id, characterId, threshold, title, sceneKey, unlockedAt, startedAt, conversationId, isRead, openingMessageId)
+internal fun SpecialEventEntity.toDomain() = SpecialEvent(id, characterId, threshold, title, sceneKey, unlockedAt, startedAt, conversationId, isRead, openingMemoryMessageId ?: openingMessageId)

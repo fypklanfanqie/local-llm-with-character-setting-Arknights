@@ -63,6 +63,9 @@ class ChatCompletionRepository(private val database: AppDatabase) {
      * 原子地插入/修剪助手消息，并在 [outbox] 非空时以 INSERT IGNORE 落库自动视频任务
      * （初始态 SNAPSHOT_PENDING）。聊天回复本身不回滚 outbox 冲突：唯一索引已存在同
      * 助手消息任务时 [FinalizedAssistant.videoTaskId] 为 null。
+     *
+     * **特殊邂逅会话**（special_event.conversationId 命中）：助手消息只写永久归档表
+     * （archiveKey = reply:<UUID>），忽略 outbox（事件中禁自动视频）、不写普通表。
      */
     suspend fun finalizeAssistant(
         characterId: String,
@@ -70,6 +73,30 @@ class ChatCompletionRepository(private val database: AppDatabase) {
         assistant: ChatMessage,
         outbox: AutoVideoOutboxDraft?,
     ): FinalizedAssistant = database.withTransaction {
+        val eventId = runCatching {
+            database.affinityDao().getSpecialEventByConversation(conversationId)?.id
+        }.getOrNull()
+        if (eventId != null) {
+            val entity = com.rhodesisland.terminal.data.local.SpecialEventMemoryMessageEntity(
+                eventId = eventId,
+                archiveKey = "reply:${java.util.UUID.randomUUID()}",
+                role = assistant.role,
+                characterId = assistant.characterId ?: characterId,
+                content = assistant.content,
+                imagesJson = encodeStringList(assistant.images),
+                filesJson = encodeFileList(assistant.files),
+                fileNamesJson = encodeStringList(assistant.fileNames),
+                timestamp = assistant.timestamp,
+                modelContent = assistant.modelContent,
+                completionState = assistant.completionState.storageKey,
+            )
+            val memoryDao = database.specialEventMemoryDao()
+            val inserted = memoryDao.insertMessageIgnore(entity)
+            val rowId = if (inserted != -1L) inserted
+            else memoryDao.getByArchiveKey(eventId, entity.archiveKey)?.id ?: -1L
+            memoryDao.touchMemory(eventId, System.currentTimeMillis())
+            return@withTransaction FinalizedAssistant(assistantMessageId = rowId, videoTaskId = null)
+        }
         val assistantMessageId = database.chatDao().insertAndTrim(
             conversationId,
             assistant.toEntity(characterId, conversationId),

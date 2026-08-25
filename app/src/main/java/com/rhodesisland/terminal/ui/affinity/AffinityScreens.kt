@@ -12,18 +12,22 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.material.icons.filled.Event
-import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.ui.unit.sp
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -31,28 +35,29 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
 import com.rhodesisland.terminal.AppContainer
 import com.rhodesisland.terminal.affinity.AFFINITY_EVENT_THRESHOLDS
 import com.rhodesisland.terminal.affinity.SpecialEventLaunchResult
+import com.rhodesisland.terminal.affinity.formatAffinity
+import com.rhodesisland.terminal.affinity.nextAffinityHint
+import com.rhodesisland.terminal.data.local.toMessage
 import com.rhodesisland.terminal.data.model.Character
 import com.rhodesisland.terminal.data.model.GiftHistory
 import com.rhodesisland.terminal.data.model.SpecialEvent
 import com.rhodesisland.terminal.ui.characters.CharacterPortrait
-import com.rhodesisland.terminal.ui.affinity.AffinityGiftImage
 import com.rhodesisland.terminal.ui.glass.GlassSheet
-import com.rhodesisland.terminal.affinity.formatAffinity
-import com.rhodesisland.terminal.affinity.nextAffinityHint
 import kotlinx.coroutines.launch
 
 @Composable
@@ -142,6 +147,9 @@ fun AffinityEventsScreen(
     val affinity by container.affinityRepository.observeAffinity(character.id).collectAsState(initial = com.rhodesisland.terminal.data.model.CharacterAffinity(character.id, 0f, 0L))
     val events by container.affinityRepository.observeSpecialEvents(character.id).collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
+    // 回忆弹层：已开始事件点「回忆」时在本页内打开只读预览（不新增导航路由）。
+    var memorySheetEvent by remember { mutableStateOf<SpecialEvent?>(null) }
+
     AffinityArchivePage(
         title = "${character.name} · 特殊邂逅",
         code = "EVENT ARCHIVE / ${character.code.ifBlank { character.id.uppercase() }}",
@@ -159,13 +167,113 @@ fun AffinityEventsScreen(
                 onOpen = {
                     scope.launch {
                         event?.let { container.specialEventConversationCoordinator.markRead(it.id) }
-                        when (container.specialEventConversationCoordinator.launch(character.id, threshold)) {
-                            is SpecialEventLaunchResult.Ready, is SpecialEventLaunchResult.Existing -> onOpenEventConversation()
+                        when (val result = container.specialEventConversationCoordinator.launch(character.id, threshold)) {
+                            // 已开始的事件：本页内打开回忆预览；未开始：创建后直接进入聊天。
+                            is SpecialEventLaunchResult.Existing -> memorySheetEvent = result.event
+                            is SpecialEventLaunchResult.Ready -> onOpenEventConversation()
                             SpecialEventLaunchResult.Missing -> Unit
                         }
                     }
                 },
             )
+        }
+    }
+
+    memorySheetEvent?.let { sheetEvent ->
+        SpecialEventMemorySheet(
+            container = container,
+            character = character,
+            event = sheetEvent,
+            onDismiss = { memorySheetEvent = null },
+            onContinueChat = {
+                memorySheetEvent = null
+                scope.launch {
+                    container.specialEventConversationCoordinator.launch(character.id, sheetEvent.threshold)
+                    onOpenEventConversation()
+                }
+            },
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SpecialEventMemorySheet(
+    container: AppContainer,
+    character: Character,
+    event: SpecialEvent,
+    onDismiss: () -> Unit,
+    onContinueChat: () -> Unit,
+) {
+    val rows by container.database.specialEventMemoryDao()
+        .observeRecentMessages(event.id, 200)
+        .collectAsState(initial = emptyList())
+    val messages = rows.asReversed()
+
+    GlassSheet(onDismissRequest = onDismiss) {
+        Text(
+            text = event.title,
+            color = Color(0xFFF2F0EA),
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+        Text(
+            text = "特殊邂逅回忆 · 永久保存",
+            color = archiveSecondaryColor(),
+            fontSize = 11.sp,
+            modifier = Modifier.padding(top = 3.dp, bottom = 10.dp),
+        )
+        if (messages.isEmpty()) {
+            Text(
+                text = "这段回忆暂时没有可显示的内容。",
+                color = Color(0xFFAAB4C1),
+                fontSize = 13.sp,
+                modifier = Modifier.padding(vertical = 24.dp),
+            )
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 430.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(messages, key = { it.id }) { row ->
+                    val message = row.toMessage()
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(
+                                if (message.role == "user") Color(0x332D78A8)
+                                else Color(0x332F3C4D),
+                            )
+                            .padding(horizontal = 12.dp, vertical = 9.dp),
+                    ) {
+                        Text(
+                            text = if (message.role == "user") "博士" else character.name,
+                            color = if (message.role == "user") archivePrimaryColor() else Color(0xFFD2D8E0),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            text = com.rhodesisland.terminal.util.MarkdownParser.stripThink(message.content)
+                                .ifBlank { "（空消息）" },
+                            color = Color(0xFFF2F0EA),
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(top = 3.dp),
+                        )
+                    }
+                }
+            }
+        }
+        TextButton(
+            onClick = onContinueChat,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 10.dp),
+        ) {
+            Text("继续聊天", color = archivePrimaryColor(), fontSize = 14.sp)
         }
     }
 }
@@ -216,8 +324,7 @@ private fun ArchiveRouteCard(icon: androidx.compose.ui.graphics.vector.ImageVect
 }
 
 @Composable
-private fun EventArchiveNode(threshold: Int, event: SpecialEvent?, enabled: Boolean, onOpen: () -> Unit) {
-    Surface(color = archiveSurfaceColor(), shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
+private fun EventArchiveNode(threshold: Int, event: SpecialEvent?, enabled: Boolean, onOpen: () -> Unit) {    Surface(color = archiveSurfaceColor(), shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(48.dp)) {
                 Text("$threshold", color = if (enabled) archivePrimaryColor() else Color(0xFFAAB4C1), fontSize = 18.sp, fontWeight = FontWeight.Bold)

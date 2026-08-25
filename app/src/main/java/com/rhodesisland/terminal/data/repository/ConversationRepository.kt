@@ -78,9 +78,12 @@ class ConversationRepository(private val dao: ConversationDao) {
         dao.updateAutoVideoEnabled(id, enabled)
     }
 
-    /** 删除会话及其全部消息（事务性，见 ConversationDao.deleteConversation）。 */
-    suspend fun delete(id: Long) {
-        dao.deleteConversation(id)
+    /**
+     * 删除会话及其全部消息（事务性，见 ConversationDao.deleteConversation）。
+     * 特殊邂逅导航壳被保护：返回 false 表示不可删除（调用方提示用户），事件回忆不受影响。
+     */
+    suspend fun delete(id: Long): Boolean {
+        return dao.deleteConversation(id)
     }
 
     /** 清空全部聊天记录（存储管理用；Seedance 任务记录保留）。 */

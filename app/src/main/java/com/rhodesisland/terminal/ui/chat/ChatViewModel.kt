@@ -366,16 +366,21 @@ class ChatViewModel(
     /**
      * 删除指定会话（连同其全部消息）。
      * 若删的是当前活跃会话，自动切到最近的另一个；一条不剩则清活跃记录，由 combine 自动新建。
+     * 特殊邂逅会话不可删除：仓库层拒绝后提示用户「特殊邂逅记录永久保存」。
      */
     fun deleteConversation(id: Long) {
         viewModelScope.launch {
-            val charId = _uiState.value.characterId
-            container.conversationRepository.delete(id)
+            val deleted = container.conversationRepository.delete(id)
+            if (!deleted) {
+                _uiState.update { it.copy(errorMessage = "特殊邂逅的回忆会永久保存，无法删除") }
+                return@launch
+            }
             // 删除的若是当前活跃会话（或其 pending 所属会话），同步清理，防止残留串台。
             if (id == _activeConversationId.value || pendingFinal?.conversationId == id) {
                 pendingFinal = null
             }
             if (id == _activeConversationId.value) {
+                val charId = _uiState.value.characterId
                 val remaining = container.conversationRepository.listByCharacter(charId)
                 val target = remaining.firstOrNull()
                 if (target != null) {
@@ -904,7 +909,7 @@ class ChatViewModel(
                     termReason = "出错: ${e.toUserErrorMessage()}"
                     // 回滚：删除已落库的用户消息（无对应回复，避免孤儿），恢复输入框内容，
                     // 让用户可直接重试而无需重输（重发产生新消息，不会重复）。
-                    if (userMsgId != 0L) runCatching { container.chatRepository.deleteMessage(userMsgId) }
+                    if (userMsgId != 0L) runCatching { container.chatRepository.deleteMessage(convId, userMsgId) }
                     pendingFinal = null
                     _uiState.update { s ->
                         val msgs = s.messages.filterNot { it.id == "streaming" }.toMutableList()
@@ -1286,7 +1291,7 @@ class ChatViewModel(
                     s.copy(messages = s.messages.filterNot { it.id == "msg-$id" })
                 }
             }
-            container.chatRepository.deleteMessage(id)
+            container.chatRepository.deleteMessage(_activeConversationId.value ?: return@launch, id)
             // 兜底：DB 删除提交后（Room 已不会再回填该行），确保列表中不残留。
             _uiState.update { s ->
                 if (s.messages.any { it.id == "msg-$id" }) {

@@ -96,11 +96,11 @@ interface ChatDao {
     @Insert
     suspend fun insert(entity: ChatHistoryEntity): Long
 
-    @Query("DELETE FROM chat_history WHERE conversationId = :conversationId")
+    @Query("DELETE FROM chat_history WHERE conversationId = :conversationId AND NOT EXISTS (SELECT 1 FROM special_event e WHERE e.conversationId = :conversationId)")
     suspend fun clearHistory(conversationId: Long)
 
-    @Query("DELETE FROM chat_history WHERE id = :id")
-    suspend fun deleteById(id: Long)
+    @Query("DELETE FROM chat_history WHERE id = :id AND conversationId = :conversationId AND NOT EXISTS (SELECT 1 FROM special_event e WHERE e.conversationId = chat_history.conversationId)")
+    suspend fun deleteById(conversationId: Long, id: Long)
 
     @Query("SELECT COUNT(*) FROM chat_history WHERE conversationId = :conversationId")
     suspend fun count(conversationId: Long): Int
@@ -143,10 +143,19 @@ interface ConversationDao {
     @Query("UPDATE conversation SET autoVideoEnabled = :enabled WHERE id = :id")
     suspend fun updateAutoVideoEnabled(id: Long, enabled: Boolean): Int
 
-    @Query("SELECT * FROM conversation WHERE characterId = :characterId ORDER BY updatedAt DESC")
+    // 特殊邂逅导航壳不出现在普通会话列表/抽屉/导出选择器中
+    @Query(
+        "SELECT * FROM conversation WHERE characterId = :characterId AND NOT EXISTS " +
+            "(SELECT 1 FROM special_event e WHERE e.conversationId = conversation.id) " +
+            "ORDER BY updatedAt DESC",
+    )
     fun observeByCharacter(characterId: String): Flow<List<ConversationEntity>>
 
-    @Query("SELECT * FROM conversation WHERE characterId = :characterId ORDER BY updatedAt DESC")
+    @Query(
+        "SELECT * FROM conversation WHERE characterId = :characterId AND NOT EXISTS " +
+            "(SELECT 1 FROM special_event e WHERE e.conversationId = conversation.id) " +
+            "ORDER BY updatedAt DESC",
+    )
     suspend fun listByCharacter(characterId: String): List<ConversationEntity>
 
     @Query("SELECT * FROM conversation WHERE id = :id")
@@ -174,34 +183,49 @@ interface ConversationDao {
     @Query("SELECT COUNT(*) FROM conversation WHERE characterId = :characterId")
     suspend fun count(characterId: String): Int
 
+    /**
+     * 删除单个普通会话及其消息。**特殊邂逅导航壳被保护**：
+     * `isSpecialEventShell` 命中时本方法 no-op 返回 false，事件回忆不受普通删除影响。
+     * 调用方（ChatViewModel.deleteConversation）据此向用户提示「特殊邂逅记录不可删除」。
+     */
+    @Transaction
+    suspend fun deleteConversation(id: Long): Boolean {
+        if (isSpecialEventShell(id)) return false
+        deleteMessages(id)
+        delete(id)
+        return true
+    }
+
     @Query("DELETE FROM conversation WHERE id = :id")
     suspend fun delete(id: Long)
 
     @Query("DELETE FROM chat_history WHERE conversationId = :conversationId")
     suspend fun deleteMessages(conversationId: Long)
 
+    @Query("SELECT EXISTS(SELECT 1 FROM special_event WHERE conversationId = :conversationId)")
+    suspend fun isSpecialEventShell(conversationId: Long): Boolean
+
     /**
-     * 事务性删除会话：先删该会话的全部消息，再删会话本身。
-     * 跨表 SQL（conversation + chat_history）在单个 @Transaction 内保证原子。
+     * 清空全部聊天记录（存储管理用）：跳过特殊邂逅导航壳及其消息——
+     * 事件壳的 chat_history 行保留作为 v12 迁移回填来源的审计副本；归档表本身不提供删除。
      */
     @Transaction
-    suspend fun deleteConversation(id: Long) {
-        deleteMessages(id)
-        delete(id)
-    }
-
-    /** 清空全部聊天记录（事务：先删全部消息再删全部会话），供设置页「存储管理」使用。 */
-    @Transaction
     suspend fun clearAllConversations() {
-        deleteAllMessages()
-        deleteAllConversations()
+        deleteAllMessagesExceptEventShells()
+        deleteAllConversationsExceptEventShells()
     }
 
-    @Query("DELETE FROM chat_history")
-    suspend fun deleteAllMessages()
+    @Query(
+        "DELETE FROM chat_history WHERE conversationId NOT IN " +
+            "(SELECT conversationId FROM special_event WHERE conversationId IS NOT NULL)",
+    )
+    suspend fun deleteAllMessagesExceptEventShells()
 
-    @Query("DELETE FROM conversation")
-    suspend fun deleteAllConversations()
+    @Query(
+        "DELETE FROM conversation WHERE id NOT IN " +
+            "(SELECT conversationId FROM special_event WHERE conversationId IS NOT NULL)",
+    )
+    suspend fun deleteAllConversationsExceptEventShells()
 }
 
 @Database(
@@ -218,8 +242,10 @@ interface ConversationDao {
         DailyCheckinPromptEntity::class,
         SpecialEventEntity::class,
         AffinityRewardEntity::class,
+        SpecialEventMemoryEntity::class,
+        SpecialEventMemoryMessageEntity::class,
     ],
-    version = 11,
+    version = 12,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -227,6 +253,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun conversationDao(): ConversationDao
     abstract fun seedanceVideoDao(): SeedanceVideoDao
     abstract fun affinityDao(): AffinityDao
+    abstract fun specialEventMemoryDao(): SpecialEventMemoryDao
 
     companion object {
         @Volatile
@@ -444,6 +471,88 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v11 -> v12：特殊邂逅永久归档。
+         *
+         * - 新建 `special_event_memory`（事件级元数据，eventId = special_event.id）与
+         *   `special_event_memory_message`（归档消息，(eventId, archiveKey) 唯一幂等）；
+         * - special_event 新增 openingMemoryMessageId（归档内开场消息 id，旧 openingMessageId
+         *   语义不变仍指普通表行）；为所有旧事件回填元数据；
+         * - 把旧事件会话的 chat_history 全量回填进归档（archiveKey = 'legacy:<旧消息id>'），
+         *   保留附件/modelContent/completionState/时间顺序；旧行不删除（审计副本）；
+         * - 归档表**没有删除接口**：普通聊天删除、清空记录均不影响回忆。
+         */
+        val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE special_event ADD COLUMN openingMemoryMessageId INTEGER")
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `special_event_memory` (" +
+                        "`eventId` INTEGER NOT NULL PRIMARY KEY, " +
+                        "`characterId` TEXT NOT NULL, " +
+                        "`threshold` INTEGER NOT NULL, " +
+                        "`title` TEXT NOT NULL, " +
+                        "`sourceConversationId` INTEGER, " +
+                        "`createdAt` INTEGER NOT NULL, " +
+                        "`updatedAt` INTEGER NOT NULL)",
+                )
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_special_event_memory_characterId_updatedAt` " +
+                        "ON `special_event_memory` (`characterId`, `updatedAt`)",
+                )
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `special_event_memory_message` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`eventId` INTEGER NOT NULL, " +
+                        "`archiveKey` TEXT NOT NULL, " +
+                        "`sourceChatMessageId` INTEGER, " +
+                        "`role` TEXT NOT NULL, " +
+                        "`characterId` TEXT, " +
+                        "`content` TEXT NOT NULL, " +
+                        "`imagesJson` TEXT NOT NULL, " +
+                        "`filesJson` TEXT NOT NULL, " +
+                        "`fileNamesJson` TEXT NOT NULL, " +
+                        "`timestamp` INTEGER NOT NULL, " +
+                        "`modelContent` TEXT, " +
+                        "`completionState` TEXT NOT NULL DEFAULT 'complete')",
+                )
+                database.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_special_event_memory_message_eventId_archiveKey` " +
+                        "ON `special_event_memory_message` (`eventId`, `archiveKey`)",
+                )
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_special_event_memory_message_eventId_timestamp_id` " +
+                        "ON `special_event_memory_message` (`eventId`, `timestamp`, `id`)",
+                )
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_special_event_memory_message_sourceChatMessageId` " +
+                        "ON `special_event_memory_message` (`sourceChatMessageId`)",
+                )
+                // 回填元数据：所有旧事件（含尚未开始的）都有归档行，事件页可稳定观察状态。
+                database.execSQL(
+                    "INSERT OR IGNORE INTO special_event_memory(" +
+                        "eventId, characterId, threshold, title, sourceConversationId, createdAt, updatedAt) " +
+                        "SELECT id, characterId, threshold, title, conversationId, " +
+                        "COALESCE(startedAt, unlockedAt), COALESCE(startedAt, unlockedAt) FROM special_event",
+                )
+                // 回填旧消息：仅事件壳会话的行；'legacy:<id>' 幂等键防重复回填。
+                database.execSQL(
+                    "INSERT OR IGNORE INTO special_event_memory_message(" +
+                        "eventId, archiveKey, sourceChatMessageId, role, characterId, content, " +
+                        "imagesJson, filesJson, fileNamesJson, timestamp, modelContent, completionState) " +
+                        "SELECT se.id, 'legacy:' || h.id, h.id, h.role, h.characterId, h.content, " +
+                        "h.imagesJson, h.filesJson, h.fileNamesJson, h.timestamp, h.modelContent, h.completionState " +
+                        "FROM special_event se JOIN chat_history h ON h.conversationId = se.conversationId",
+                )
+                // 开场消息映射到归档行。
+                database.execSQL(
+                    "UPDATE special_event SET openingMemoryMessageId = (" +
+                        "SELECT m.id FROM special_event_memory_message m " +
+                        "WHERE m.eventId = special_event.id AND m.sourceChatMessageId = special_event.openingMessageId) " +
+                        "WHERE openingMessageId IS NOT NULL",
+                )
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 // 双重检查锁定：避免两个并发首次调用各建一个 RoomDatabase 实例，
@@ -452,7 +561,7 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "rhodes_chat.db"
-                ).addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11).build().also { INSTANCE = it }
+                ).addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12).build().also { INSTANCE = it }
             }
         }
     }

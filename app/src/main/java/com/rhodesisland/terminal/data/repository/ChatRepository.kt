@@ -1,10 +1,14 @@
 package com.rhodesisland.terminal.data.repository
 
+import com.rhodesisland.terminal.data.local.AppDatabase
 import com.rhodesisland.terminal.data.local.ChatDao
 import com.rhodesisland.terminal.data.local.ChatHistoryEntity
+import com.rhodesisland.terminal.data.local.SpecialEventMemoryMessageEntity
+import com.rhodesisland.terminal.data.local.toMessage as toArchiveMessage
 import com.rhodesisland.terminal.data.model.AttachedFile
 import com.rhodesisland.terminal.data.model.ChatMessage
 import com.rhodesisland.terminal.data.model.MessageCompletionState
+import java.util.UUID
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
@@ -12,40 +16,126 @@ import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 
 /**
- * 聊天记录仓库
- * 按会话（conversationId）分桶读写消息；会话本身见 [ConversationRepository]。
- * 对应小程序 storage.getHistory / setHistory / clearHistory。
+ * 聊天记录仓库（Room v12 起：按会话路由）。
  *
- * 注：助手回复需要与自动视频 outbox 同事务落库的路径走 [ChatCompletionRepository.finalizeAssistant]
- * （Task 2 引入），本类保持通用消息读写不变。
+ * - 普通单聊 / 群聊：读写 `chat_history`（100 条窗口 + 事务修剪，行为不变）；
+ * - **特殊邂逅会话**（special_event.conversationId 命中）：读写永久归档表
+ *   `special_event_memory_message`——无 100 条修剪、无删除接口，保证「永久回忆」。
+ *
+ * 所有读路径（Flow/一次性/导出）与写路径走同一套路由，杜绝「聊天页写归档、通知写普通表」分叉。
  */
-class ChatRepository(private val dao: ChatDao) {
+class ChatRepository(
+    private val dao: ChatDao,
+    private val database: AppDatabase? = null,
+) {
+    /** 归档 DAO；database 未注入时（旧测试构造）事件路由不可用。 */
+    private val memoryDao get() = database?.specialEventMemoryDao()
 
-    fun getHistoryFlow(conversationId: Long): Flow<List<ChatMessage>> =
+    /**
+     * 判断 [conversationId] 是否为特殊邂逅会话。查询失败按普通会话处理（不阻塞聊天），
+     * 但生产构造恒有 database，不会走该分支。
+     */
+    private suspend fun isEventConversation(conversationId: Long): Boolean {
+        val db = database ?: return false
+        return runCatching { db.affinityDao().getSpecialEventByConversation(conversationId) }
+            .getOrNull() != null
+    }
+
+    fun getHistoryFlow(conversationId: Long): Flow<List<ChatMessage>> {
+        val mem = memoryDao ?: return legacyFlow(conversationId)
+        // Flow 无法逐值判路由：以「当前是否事件会话」一次性判定后选择数据源。
+        // 会话类型在创建后不变（事件壳不会被转成普通会话），故静态判定安全。
+        return kotlinx.coroutines.flow.flow {
+            val eventId = runCatching { resolveEventId(conversationId) }.getOrNull()
+            if (eventId != null) {
+                mem.observeRecentMessages(eventId, EVENT_ARCHIVE_WINDOW).collect { rows ->
+                    emit(rows.map { it.toArchiveMessage() }.asReversed())
+                }
+            } else {
+                legacyFlow(conversationId).collect { emit(it) }
+            }
+        }
+    }
+
+    private fun legacyFlow(conversationId: Long): Flow<List<ChatMessage>> =
         dao.getHistory(conversationId).map { entities ->
             // DAO 返回最新 N 条（DESC），反转为 ASC 以便按时间正序展示
             entities.map { it.toMessage() }.asReversed()
         }
 
-    suspend fun getHistory(conversationId: Long): List<ChatMessage> =
-        dao.getHistoryList(conversationId).map { it.toMessage() }.asReversed()
+    suspend fun getHistory(conversationId: Long): List<ChatMessage> {
+        val eventId = memoryDao?.let { runCatching { resolveEventId(conversationId) }.getOrNull() }
+        if (eventId != null) {
+            return memoryDao!!.loadRecentMessages(eventId, EVENT_ARCHIVE_WINDOW)
+                .map { it.toArchiveMessage() }.asReversed()
+        }
+        return dao.getHistoryList(conversationId).map { it.toMessage() }.asReversed()
+    }
 
-    /** 导出使用：按时间正序读取该会话全部仍保存在数据库中的消息，不受 UI 历史窗口限制。 */
-    suspend fun getAllHistoryForExport(conversationId: Long): List<ChatMessage> =
-        dao.getAllHistoryList(conversationId).map { it.toMessage() }
+    /** 导出使用：按时间正序读取全部消息（事件归档全量；普通表不受 UI 窗口限制）。 */
+    suspend fun getAllHistoryForExport(conversationId: Long): List<ChatMessage> {
+        val eventId = memoryDao?.let { runCatching { resolveEventId(conversationId) }.getOrNull() }
+        if (eventId != null) {
+            return memoryDao!!.getAllMessages(eventId).map { it.toArchiveMessage() }
+        }
+        return dao.getAllHistoryList(conversationId).map { it.toMessage() }
+    }
 
+    /**
+     * 追加一条消息。事件会话写入永久归档（幂等键 msg:<UUID>），返回归档行 id；
+     * 普通会话保持原 insertAndTrim 行为。
+     */
     suspend fun addMessage(characterId: String, conversationId: Long, message: ChatMessage): Long {
+        val mem = memoryDao
+        if (mem != null) {
+            val eventId = runCatching { resolveEventId(conversationId) }.getOrNull()
+            if (eventId != null) {
+                val entity = SpecialEventMemoryMessageEntity(
+                    eventId = eventId,
+                    archiveKey = "msg:${UUID.randomUUID()}",
+                    role = message.role,
+                    characterId = message.characterId ?: characterId,
+                    content = message.content,
+                    imagesJson = encodeStringList(message.images),
+                    filesJson = encodeFileList(message.files),
+                    fileNamesJson = encodeStringList(message.fileNames),
+                    timestamp = message.timestamp,
+                    modelContent = message.modelContent,
+                    completionState = message.completionState.storageKey,
+                )
+                val inserted = mem.insertMessageIgnore(entity)
+                // IGNORE 冲突（同 key 已存在，理论不可能因 UUID 随机）兜底回读。
+                return if (inserted != -1L) inserted
+                else mem.getByArchiveKey(eventId, entity.archiveKey)?.id ?: -1L
+            }
+        }
         // 事务性插入 + 修剪，避免 Flow 在中间状态 emit（详见 ChatDao.insertAndTrim）
         return dao.insertAndTrim(conversationId, message.toEntity(characterId, conversationId))
     }
 
-    /** 按 id 删除单条消息（发送失败回滚用） */
-    suspend fun deleteMessage(id: Long) {
-        dao.deleteById(id)
+    /**
+     * 按会话 + id 删除单条普通消息（发送失败回滚用）。
+     * 事件归档行**不可删**：事件会话直接 no-op；普通会话才执行 ChatDao.deleteById。
+     * 会话参数是必要防线，避免归档自增 id 与普通表 id 碰撞后误删另一会话的消息。
+     */
+    suspend fun deleteMessage(conversationId: Long, id: Long) {
+        if (memoryDao != null && runCatching { isEventConversation(conversationId) }.getOrDefault(false)) return
+        dao.deleteById(conversationId, id)
     }
 
     suspend fun clearHistory(conversationId: Long) {
+        // 事件会话的 clearHistory no-op（归档不可清）；普通会话照旧。
+        if (memoryDao != null && runCatching { isEventConversation(conversationId) }.getOrDefault(false)) return
         dao.clearHistory(conversationId)
+    }
+
+    /** 解析 conversationId 对应的事件 id；非事件会话返回 null。 */
+    private suspend fun resolveEventId(conversationId: Long): Long? =
+        database?.affinityDao()?.getSpecialEventByConversation(conversationId)?.id
+
+    companion object {
+        /** 归档最近窗口条数（回忆页/模型上下文共用）；导出走全量 getAllMessages。 */
+        const val EVENT_ARCHIVE_WINDOW = 200
     }
 }
 
@@ -91,14 +181,14 @@ internal fun ChatMessage.toEntity(characterId: String, conversationId: Long): Ch
 /** 实体字段编解码用的 JSON（宽松：容忍历史行多余/缺失字段）。 */
 private val entityJson = Json { ignoreUnknownKeys = true }
 
-private fun encodeStringList(list: List<String>): String =
+internal fun encodeStringList(list: List<String>): String =
     if (list.isEmpty()) "" else entityJson.encodeToString(ListSerializer(String.serializer()), list)
 
 private fun decodeStringList(s: String): List<String> =
     if (s.isBlank()) emptyList()
     else runCatching { entityJson.decodeFromString(ListSerializer(String.serializer()), s) }.getOrDefault(emptyList())
 
-private fun encodeFileList(list: List<AttachedFile>): String =
+internal fun encodeFileList(list: List<AttachedFile>): String =
     if (list.isEmpty()) "" else entityJson.encodeToString(kotlinx.serialization.builtins.ListSerializer(AttachedFile.serializer()), list)
 
 private fun decodeFileList(s: String): List<AttachedFile> =
