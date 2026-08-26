@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +23,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rhodesisland.terminal.ui.theme.GlassShapes
@@ -77,7 +79,33 @@ fun MonogramAvatar(
 }
 
 /**
+ * 自适应横向滚动行：父级给**有界**宽度时启用 horizontalScroll（窄屏溢出兜底）；
+ * 父级本身已是横向滚动容器（测量约束为无限宽，如聊天顶栏第二行）时退化为普通 Row。
+ *
+ * 直接对 Row 用 horizontalScroll 在无限宽约束下会抛 IllegalStateException 崩溃
+ * （Compose 禁止滚动组件被无限最大宽度测量），本封装按约束分流规避该崩溃类。
+ */
+@Composable
+internal fun AdaptiveScrollRow(
+    modifier: Modifier = Modifier,
+    content: @Composable RowScope.() -> Unit,
+) {
+    BoxWithConstraints(modifier = modifier) {
+        val bounded = constraints.maxWidth != Constraints.Infinity
+        Row(
+            modifier = if (bounded) Modifier.horizontalScroll(rememberScrollState()) else Modifier,
+            verticalAlignment = Alignment.CenterVertically,
+            content = content,
+        )
+    }
+}
+
+/**
  * 玻璃分段控件（iOS segmented 风）：选项列表 + 选中项主色高亮药丸。
+ *
+ * 内部经 [AdaptiveScrollRow] 兜底：正常页面（有界宽）下选项超宽可横向滑动；
+ * 已在横向滚动容器内（如聊天顶栏第二行）时自动不滚动，绝不触发
+ * 「滚动组件被无限宽约束测量」的 IllegalStateException 崩溃。
  */
 @Composable
 fun <T> GlassSegmented(
@@ -86,13 +114,7 @@ fun <T> GlassSegmented(
     onSelect: (T) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(
-        modifier = modifier
-            .horizontalScroll(rememberScrollState())
-            .clip(GlassShapes.pill)
-            .frostedGlass(GlassShapes.pill, shadowElevation = 2.dp)
-            .padding(3.dp),
-    ) {
+    AdaptiveScrollRow(modifier = modifier.clip(GlassShapes.pill).frostedGlass(GlassShapes.pill, shadowElevation = 2.dp).padding(3.dp)) {
         options.forEach { (value, label) ->
             val on = value == selected
             Box(
@@ -135,11 +157,6 @@ fun GlassLargeTitle(
             maxLines = 2,
             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
         )
-        Row(
-            modifier = Modifier.horizontalScroll(rememberScrollState()),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            actions()
-        }
+        AdaptiveScrollRow { actions() }
     }
 }
