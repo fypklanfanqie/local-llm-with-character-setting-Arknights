@@ -34,8 +34,8 @@ android {
         // targetSdk 35（Android 15）：强制 edge-to-edge（本项目已自处理 insets，天然合规）；
         // dataSync FGS 引入 6h/24h 超时 -> 推理前台服务已迁移 specialUse 类型（见 InferenceForegroundService）。
         targetSdk = 35
-        versionCode = 6
-        versionName = "2.6.0"
+        versionCode = 7
+        versionName = "3.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
