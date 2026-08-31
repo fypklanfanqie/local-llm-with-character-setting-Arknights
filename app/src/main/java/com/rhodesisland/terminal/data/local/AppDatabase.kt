@@ -44,6 +44,18 @@ data class ConversationEntity(
      * 多群聊（v7）引入：一个群 = 一行带 isGroup=1 的 conversation，可设名称（title）与封面。
      */
     val coverImagePath: String? = null,
+    /**
+     * 滚动摘要文本（单聊云端）：watermark 之前的消息已被压缩成这段前情提要，
+     * 作为稳定 system 前缀注入请求（两次折叠之间逐字节不变 → 前缀缓存命中）。
+     * v12->v13 迁移新增列，旧行默认空串=尚未折叠。
+     */
+    val summaryText: String = "",
+    /**
+     * 摘要水位线：chat_history 行 id ≤ 该值的原文均已折入 [summaryText]（不再随请求发送）；
+     * null = 尚未折叠过。原文行**永不删除**（导出完整保留），仅在读取时按水位截取。
+     * v12->v13 迁移新增列。
+     */
+    val summarizedUpToMessageId: Long? = null,
 )
 
 /**
@@ -90,6 +102,26 @@ interface ChatDao {
     @Query("SELECT * FROM chat_history WHERE conversationId = :conversationId ORDER BY timestamp DESC, id DESC LIMIT ${AppConfig.MAX_HISTORY_PER_CONVERSATION}")
     suspend fun getHistoryList(conversationId: Long): List<ChatHistoryEntity>
 
+    /**
+     * Prompt 供给查询（LLM 路径专用）：LIMIT 放宽到 [AppConfig.MAX_PROMPT_SUPPLY]
+     * （= 请求 cap + 一个锚定量子块），让 `PromptWindowAnchor.anchoredWindow` 收到超额
+     * 供给做量子截断——若只取 cap 本身，单聊窗口恒 ≤ max、锚定退化为 no-op，
+     * 云端前缀缓存起点随 DB 层逐条修剪而漂移。UI 显示走上面的 [getHistory] Flow 窗口。
+     */
+    @Query("SELECT * FROM chat_history WHERE conversationId = :conversationId ORDER BY timestamp DESC, id DESC LIMIT ${AppConfig.MAX_PROMPT_SUPPLY}")
+    suspend fun getHistoryListForPrompt(conversationId: Long): List<ChatHistoryEntity>
+
+    /**
+     * 滚动摘要：取水位线之后最旧的一批未摘要原文（id 升序，时间序）。
+     * [watermark] 传 0 表示尚未折叠过（自动增 id 恒 ≥1）。折叠批大小由调用方限制。
+     */
+    @Query("SELECT * FROM chat_history WHERE conversationId = :conversationId AND id > :watermark ORDER BY timestamp ASC, id ASC LIMIT :limit")
+    suspend fun getUnfoldedOldestBatch(conversationId: Long, watermark: Long, limit: Int): List<ChatHistoryEntity>
+
+    /** 滚动摘要：统计水位线之后的未摘要原文条数（配合触发阈值判定）。 */
+    @Query("SELECT COUNT(*) FROM chat_history WHERE conversationId = :conversationId AND id > :watermark")
+    suspend fun countUnfolded(conversationId: Long, watermark: Long): Int
+
     @Query("SELECT * FROM chat_history WHERE conversationId = :conversationId ORDER BY timestamp ASC, id ASC")
     suspend fun getAllHistoryList(conversationId: Long): List<ChatHistoryEntity>
 
@@ -114,13 +146,16 @@ interface ChatDao {
      * 旧实现是三次独立 DB 操作，Flow 会在 insert 后、trim 前 emit 一次中间状态
      * （此时 DB 有 N+1 条，配合旧的 ASC 查询会漏掉最新消息，造成 UI 闪烁）；
      * 若进程在 insert 与 trim 之间被杀，DB 永久多于 N 条。事务保证 Flow 只在提交后 emit 一次。
+     *
+     * 修剪目标是 [AppConfig.MAX_PROMPT_SUPPLY]（请求 cap + 锚定步长余量），而非显示窗口：
+     * 表内须保有超额行，prompt 供给查询才能喂出 > cap 的列表供 anchoredWindow 量子截断。
      */
     @Transaction
     suspend fun insertAndTrim(conversationId: Long, entity: ChatHistoryEntity): Long {
         val id = insert(entity)
         val c = count(conversationId)
-        if (c > AppConfig.MAX_HISTORY_PER_CONVERSATION) {
-            trimOldest(conversationId, c - AppConfig.MAX_HISTORY_PER_CONVERSATION)
+        if (c > AppConfig.MAX_PROMPT_SUPPLY) {
+            trimOldest(conversationId, c - AppConfig.MAX_PROMPT_SUPPLY)
         }
         return id
     }
@@ -179,6 +214,13 @@ interface ConversationDao {
     /** 更新群封面路径并刷新 updatedAt（null=清除封面）。 */
     @Query("UPDATE conversation SET coverImagePath = :coverPath, updatedAt = :updatedAt WHERE id = :id")
     suspend fun updateGroupCover(id: Long, coverPath: String?, updatedAt: Long)
+
+    /**
+     * 滚动摘要写回：新摘要文本与推进后的水位线原子更新（不改 updatedAt——摘要属后台维护，
+     * 不应把会话顶到列表最前）。返回受影响行数（0 = 会话不存在/已删除）。
+     */
+    @Query("UPDATE conversation SET summaryText = :summaryText, summarizedUpToMessageId = :upToMessageId WHERE id = :id")
+    suspend fun updateSummary(id: Long, summaryText: String, upToMessageId: Long?): Int
 
     @Query("SELECT COUNT(*) FROM conversation WHERE characterId = :characterId")
     suspend fun count(characterId: String): Int
@@ -244,8 +286,11 @@ interface ConversationDao {
         AffinityRewardEntity::class,
         SpecialEventMemoryEntity::class,
         SpecialEventMemoryMessageEntity::class,
+        MomentPostEntity::class,
+        MomentCommentEntity::class,
+        MomentLikeEntity::class,
     ],
-    version = 12,
+    version = 14,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -254,6 +299,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun seedanceVideoDao(): SeedanceVideoDao
     abstract fun affinityDao(): AffinityDao
     abstract fun specialEventMemoryDao(): SpecialEventMemoryDao
+    abstract fun momentDao(): MomentDao
 
     companion object {
         @Volatile
@@ -553,6 +599,65 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v12 -> v13：滚动摘要上下文压缩（单聊云端）。
+         *
+         * - conversation 新增 summaryText TEXT NOT NULL DEFAULT ''：前情提要正文，旧行默认空串=尚未折叠；
+         * - conversation 新增 summarizedUpToMessageId INTEGER 可空水位线（null=从未折叠），
+         *   chat_history 行 id ≤ 水位者已折入摘要、请求读取时按水位截取；
+         * - 原文行**永不删除**（导出/回滚完整保留）；非破坏式 ALTER，历史数据原样保留。
+         */
+        val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE conversation ADD COLUMN summaryText TEXT NOT NULL DEFAULT ''")
+                database.execSQL("ALTER TABLE conversation ADD COLUMN summarizedUpToMessageId INTEGER")
+            }
+        }
+
+        /**
+         * v13 -> v14：朋友圈（仿微信）。三张新表，纯新增、非破坏式：
+         *
+         * - moment_post：帖子（authorType "user"|"character"；imagesJson 落盘图片路径数组）；
+         * - moment_comment：评论（同 authorType；角色评论 = 发帖者回复）；
+         * - moment_like：点赞（unique(postId, characterId) 防重，characterId NULL = 用户）。
+         *
+         * 列集/类型与 [MomentPostEntity]/[MomentCommentEntity]/[MomentLikeEntity] 完全一致，
+         * 索引名遵循 Room 命名 index_<表>_<列...>。
+         */
+        val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `moment_post` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`authorType` TEXT NOT NULL, " +
+                        "`characterId` TEXT, " +
+                        "`content` TEXT NOT NULL, " +
+                        "`imagesJson` TEXT NOT NULL, " +
+                        "`createdAt` INTEGER NOT NULL, " +
+                        "`imagePrompt` TEXT)"
+                )
+                database.execSQL("CREATE INDEX IF NOT EXISTS `index_moment_post_createdAt` ON `moment_post` (`createdAt`)")
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `moment_comment` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`postId` INTEGER NOT NULL, " +
+                        "`authorType` TEXT NOT NULL, " +
+                        "`characterId` TEXT, " +
+                        "`content` TEXT NOT NULL, " +
+                        "`createdAt` INTEGER NOT NULL)"
+                )
+                database.execSQL("CREATE INDEX IF NOT EXISTS `index_moment_comment_postId_createdAt` ON `moment_comment` (`postId`, `createdAt`)")
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `moment_like` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`postId` INTEGER NOT NULL, " +
+                        "`characterId` TEXT, " +
+                        "`createdAt` INTEGER NOT NULL)"
+                )
+                database.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_moment_like_postId_characterId` ON `moment_like` (`postId`, `characterId`)")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 // 双重检查锁定：避免两个并发首次调用各建一个 RoomDatabase 实例，
@@ -561,7 +666,7 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "rhodes_chat.db"
-                ).addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12).build().also { INSTANCE = it }
+                ).addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14).build().also { INSTANCE = it }
             }
         }
     }

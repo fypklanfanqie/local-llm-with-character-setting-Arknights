@@ -42,6 +42,7 @@ fun CharacterFeedHost(
     onNavigateToCharacters: () -> Unit,
     onOpenEncounter: () -> Unit,
     onOpenGroupChat: () -> Unit,
+    onOpenMoments: () -> Unit = {},
 ) {
     val navController = rememberNavController()
     NavHost(navController = navController, startDestination = "feed_root", modifier = Modifier.fillMaxSize()) {
@@ -54,6 +55,7 @@ fun CharacterFeedHost(
                 onNavigateToCharacters = onNavigateToCharacters,
                 onOpenEncounter = onOpenEncounter,
                 onOpenGroupChat = onOpenGroupChat,
+                onOpenMoments = onOpenMoments,
                 onOpenAffinity = { characterId -> navController.navigate(feedAffinityRoute(characterId)) },
             )
         }

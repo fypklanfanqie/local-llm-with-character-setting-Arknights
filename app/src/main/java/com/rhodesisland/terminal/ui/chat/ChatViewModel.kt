@@ -710,12 +710,33 @@ class ChatViewModel(
                     }
                 }
 
+                // 特殊邂逅强制云端判定（自历史上移到此处先执行——滚动摘要分流需要最终 provider 结论）。
+                val specialEvent = container.database.affinityDao().getSpecialEventByConversation(convId)
+                if (specialEvent != null && container.settingsRepository.getActiveProviderNow() != ChatProviderType.CLOUD) {
+                    container.chatProviderManager.switchProvider(ChatProviderType.CLOUD)
+                }
+                val isCloudProvider = container.settingsRepository.getActiveProviderNow() == ChatProviderType.CLOUD
+
+                // 滚动摘要水位线（仅云端读取）：水位之前的原文已折入前情提要、请求按水位截取。
+                // 折叠批之间的相邻请求共享逐字节一致的前缀 → 云端缓存全程命中；折叠那一刻断一次，
+                // 每 80+ 条才一次、摊薄后命中率仍≈97%（滚动摘要上下文压缩方案）。
+                val rollingSummaryState = if (isCloudProvider) {
+                    runCatching { container.database.conversationDao().getById(convId) }.getOrNull()
+                        ?.let { it.summaryText to (it.summarizedUpToMessageId ?: 0L) }
+                } else {
+                    null
+                }
+                val summaryText = rollingSummaryState?.first.orEmpty()
+                val summaryWatermark = rollingSummaryState?.second ?: 0L
+
                 // 构建 API 消息（含图片多模态 / 文档文本提取）。
                 // 锚定截断（step=20）：溢出量在一个量子块内增长时窗口起点不动，
-                // 云端 prompt 前缀缓存可持续复用（逐条 takeLast 会让长对话命中率归零）。
-                val history = PromptWindowAnchor.anchoredWindow(
-                    container.chatRepository.getHistory(convId), AppConfig.MAX_CONTEXT_MESSAGES,
-                )
+                // 云端 prompt 前缀缓存可持续复用（逐条 takeLast 会让长对话命中率归零）；
+                // 与滚动摘要叠加分工：摘要压缩长程记忆（80 条触发/40 条一批），锚定兜底折叠未跟上时的突发峰值。
+                val historySource = container.chatRepository.getHistory(convId).let { msgs ->
+                    if (summaryWatermark > 0L) msgs.filter { it.databaseId == null || it.databaseId > summaryWatermark } else msgs
+                }
+                val history = PromptWindowAnchor.anchoredWindow(historySource, AppConfig.MAX_CONTEXT_MESSAGES)
                 val resolvedHistory = history.map { msg ->
                     if (msg.role == "user" && (msg.images.isNotEmpty() || msg.files.isNotEmpty())) {
                         // 仅本次发送的消息严格解析（可操作错误照常上抛让用户看到）；
@@ -730,12 +751,8 @@ class ChatViewModel(
                         msg
                     }
                 }
-                val specialEvent = container.database.affinityDao().getSpecialEventByConversation(convId)
-                if (specialEvent != null && container.settingsRepository.getActiveProviderNow() != ChatProviderType.CLOUD) {
-                    container.chatProviderManager.switchProvider(ChatProviderType.CLOUD)
-                }
-                val isCloudProvider = container.settingsRepository.getActiveProviderNow() == ChatProviderType.CLOUD
                 // 博士档案（人设/关系）注入 system：云端与本地共用同一消息列表，一处注入两端生效。
+                // （specialEvent/isCloudProvider 已在历史构建前判定，特殊邂逅强制云端语义不变。）
                 // 特殊邂逅追加离线场景背景，保证后续对话持续围绕解锁的事件，而非只落一条开场白。
                 val userDirective = container.settingsRepository.getUserProfileNow().toDirectiveText()
                 // 自定义世界观（绑定到该角色的私聊）注入 system
@@ -765,6 +782,11 @@ class ChatViewModel(
                 val lorebookTailText = lorebookActivation?.tailInjection.orEmpty()
                 val apiMessages = buildList {
                     add(ChatMessage(role = "system", content = lorebookStaticHead + char.systemPrompt + worldviewDirective + eventDirective + userDirective))
+                    if (isCloudProvider && summaryText.isNotBlank()) {
+                        // 【前情提要】独立第二段 system（滚动摘要，单聊云端）：插在人设之后、历史之前
+                        // = 常驻稳定前缀的一部分；仅折叠那一刻变一次，其余轮次逐字节稳定 → 缓存锚。
+                        add(ChatMessage(role = "system", content = "【前情提要】\n$summaryText"))
+                    }
                     addAll(resolvedHistory.map {
                         if (isCloudProvider) {
                             // 云端历史含  thinking（注入的推理），回传前剥离（reasoning 不应回传给对话商）。
@@ -1010,6 +1032,10 @@ class ChatViewModel(
         }
         // 刷新会话 updatedAt，把它顶到列表最前
         container.conversationRepository.touch(convId)
+
+        // 滚动摘要后台折叠（单聊云端，默认开启不可关）：回复落库后检查阈值，fire-and-forget；
+        // 内部吞异常、绝不阻塞聊天主链路；非云端会话由闸门跳过（不发请求不烧钱）。
+        viewModelScope.launch { runCatching { container.rollingSummarizer.foldIfDue(convId) } }
 
         val finalShowThink = _uiState.value.deepThinkingEnabled
         val assistantSrc = if (finalShowThink) displayResponse else MarkdownParser.stripThink(displayResponse)

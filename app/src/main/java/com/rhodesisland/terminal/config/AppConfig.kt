@@ -1,5 +1,7 @@
 package com.rhodesisland.terminal.config
 
+import com.rhodesisland.terminal.util.PromptWindowAnchor
+
 /**
  * 应用全局配置
  */
@@ -49,6 +51,17 @@ object AppConfig {
     // 在候选中保留 system + 最近完整 user/assistant 轮次，预留输出/模板空间，不再依赖模型静默左截断。
     // 云端历史经 PromptWindowAnchor.anchoredWindow 按块锚定截断（step=20），避免逐条滑动破坏前缀缓存。
     const val MAX_CONTEXT_MESSAGES = 100
+
+    /**
+     * Prompt 历史供给上限：请求 cap + 一个完整锚定量子块（TRIM_STEP）。
+     *
+     * DB 存储与 LLM 取数按此放宽（ChatDao 供给查询 + insertAndTrim 修剪目标），单聊
+     * `PromptWindowAnchor.anchoredWindow(max = MAX_CONTEXT_MESSAGES)` 才能收到超额供给做
+     * 量子截断——否则列表恒 ≤ max、退化为 no-op，滑动下沉到 DB 层逐轮掉一条，
+     * 云端前缀缓存起点漂移、命中率归零。UI Flow 查询仍用 [MAX_HISTORY_PER_CONVERSATION]
+     * 的显示窗口（契约见 PromptSupplyWindowContractTest）。
+     */
+    const val MAX_PROMPT_SUPPLY = MAX_CONTEXT_MESSAGES + PromptWindowAnchor.TRIM_STEP
 
     // ===== 角色问候（角色主动消息）=====
     // 开启后，所选角色会在白天随机时间主动给用户发消息（早安/晚安/关心/开话题）。
@@ -109,5 +122,48 @@ object AppConfig {
     object Lorebook {
         /** 绿灯触发条目折入请求尾部时的参考块标题（GroupChatPromptBuilder 尾块 / 本地 user 并入共用）。 */
         const val REFERENCE_HEADER = "[设定参考]"
+    }
+
+    // ===== 滚动摘要上下文压缩（单聊云端）=====
+    // 常驻稳定前缀=[人设+世界书静态头 system]+[【前情提要】system]；追加区=未摘要轮次+本轮新消息。
+    // 两次折叠之间消息列表纯追加 → 云端前缀缓存全程命中；折叠那一刻断一次前缀，摊薄后仍≈97%。
+    // 折叠批量为用户可调（设置页），触发阈值由 RollingSummary.triggerFor 派生（2N 封顶于供给上限之下）。
+    object RollingSummary {
+        /** 默认压缩节奏：每 50 条压一次（用户方案定稿值）。 */
+        const val DEFAULT_FOLD_BATCH = 50
+        /** 折叠批量下限（太小会让摘要频繁重算、缓存断点过多）。 */
+        const val MIN_FOLD_BATCH = 10
+        /** 折叠批量上限（太大导致追加区峰值贴近供给上限、锚定兜底负担过重）。 */
+        const val MAX_FOLD_BATCH = 80
+        /** 新摘要的硬性长度上限（中文字符）；提示词同步要求 ≤300 字。 */
+        const val SUMMARY_MAX_CHARS = 300
+    }
+
+    // ===== 朋友圈（仿微信；角色经云端 LLM + 用户自有生图 API 发帖）=====
+    object Moment {
+        /** PeriodicWork 周期（分钟），与问候/群聊一致（WorkManager 下限 15 分钟）。 */
+        const val HEARTBEAT_INTERVAL_MIN = 15L
+        /** 自动发圈默认间隔（小时）。 */
+        const val DEFAULT_INTERVAL_HOURS = 6
+        /** 自动发圈最小/最大间隔（小时）。 */
+        const val MIN_INTERVAL_HOURS = 1
+        const val MAX_INTERVAL_HOURS = 72
+        /** 自动发圈时段（避免深夜）：08:00–23:00。 */
+        const val HOUR_START = 8
+        const val HOUR_END = 23
+        /** 生成发圈文案/提示词的超时（ms）。 */
+        const val GENERATE_TIMEOUT_MS = 60_000L
+        /** 生图请求超时（ms）——生图模型常见 30s~2min 出图。 */
+        const val IMAGE_GEN_TIMEOUT_MS = 180_000L
+        /** 生成文案时带入该角色会话的最近历史条数（衔接正在聊的话题）。 */
+        const val MAX_CONTEXT_MESSAGES = 12
+        /** 朋友圈列表窗口（最多展示的帖子数，超出修剪）。 */
+        const val FEED_WINDOW = 100
+        /** 每帖最多图片数（用户可发/AI 可生成）。 */
+        const val MAX_IMAGES = 3
+        /** 文案长度上限（提示词同步约束；存储再兜底截断）。 */
+        const val CAPTION_MAX_CHARS = 500
+        /** 生图输出最大字节数（Base64 落盘前的解码上限）。 */
+        const val MAX_IMAGE_BYTES = 12L * 1024 * 1024
     }
 }

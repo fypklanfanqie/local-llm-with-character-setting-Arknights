@@ -21,23 +21,51 @@ object ChatAutoScrollPolicy {
         val followBottom: Boolean = true,
         /** 是否显示「回到底部」按钮（仅当离开底部暂停跟随且下方确有内容时）。 */
         val showReturnToBottom: Boolean = false,
+        /**
+         * 跟随锚点：最近一次「确认在底部」时的列表总项数。
+         * null = 尚未确认过（视为已锚定）。跟随滚动前的[shouldFollowBottom]校验用它判定
+         * 「旧末项是否仍在视口内」——内容自然增长时必然成立，用户上翻后必然不成立，
+         * 由此消除「滚动落定 -> 策略更新」竞态窗口内的误跟随（快速上翻被瞬间拉回底部）。
+         */
+        val followAnchorTotal: Int? = null,
     )
 
     /** 会话切换/新建：重置为自动跟随并隐藏按钮。 */
     fun onConversationChanged(state: State): State = State(followBottom = true, showReturnToBottom = false)
 
-    /** 点击「回到底部」：恢复跟随并隐藏按钮（实际滚动由 UI 执行）。 */
+    /** 点击「回到底部」：恢复跟随并隐藏按钮（实际滚动由 UI 执行），重置锚点等待重新确认。 */
     fun onReturnToBottom(state: State): State = State(followBottom = true, showReturnToBottom = false)
 
     /**
      * 布局静止后的位置回调（拖拽/程序滚动进行中不调用）。
      *
      * @param isNearBottom 末项 bottom 距 viewport 底部在阈值内（或不可再向下滚动）。
+     * @param totalItems 当前列表总项数；确认在底部时记为跟随锚点（[State.followAnchorTotal]）。
      */
-    fun onScrollSettled(state: State, isNearBottom: Boolean): State =
+    fun onScrollSettled(state: State, isNearBottom: Boolean, totalItems: Int): State =
         if (isNearBottom) {
-            State(followBottom = true, showReturnToBottom = false)
+            State(followBottom = true, showReturnToBottom = false, followAnchorTotal = totalItems)
         } else {
-            State(followBottom = false, showReturnToBottom = true)
+            State(followBottom = false, showReturnToBottom = true, followAnchorTotal = state.followAnchorTotal)
         }
+
+    /**
+     * 内容增长后是否应执行跟随滚动（在 [State.followBottom] 允许的前提下做二次校验）。
+     *
+     * - 锚点为 null：视为已锚定（跟随前从未有过 settle 机会，如刚切会话）。
+     * - 锚点有效：视口内必须仍能看到「锚定时的旧末项」（lastVisibleIndex >= 锚点-1）。
+     *   用户翻上去后旧末项已滚出视口 → 不跟随；内容增长时旧末项仍在 → 跟随。
+     */
+    fun shouldFollowBottom(
+        state: State,
+        totalItems: Int,
+        lastVisibleIndex: Int,
+    ): Boolean {
+        if (!state.followBottom) return false
+        val anchor = state.followAnchorTotal ?: return true
+        if (totalItems <= 0) return false
+        // 列表被清空重置（如切换会话）：锚点失效，视为已锚定
+        if (anchor > totalItems) return true
+        return lastVisibleIndex >= anchor - 1
+    }
 }

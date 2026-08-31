@@ -7,8 +7,8 @@ import kotlin.random.Random
  * 群成员选择（纯函数，JVM 可测）。
  *
  * - [pick]：后台自动聊天的严格 round-robin（与 [com.rhodesisland.terminal.work.GreetingWorker.pickCharacter] 语义一致）。
- * - [randomReplyCount]/[pickRandom]：用户回合的**随机多人答复**——无 @ 时随机 1..[AppConfig.GroupChat.MAX_REPLIES_PER_USER_MESSAGE]
- *   人；有 @ 时被提及成员全部答复并占用名额、其余随机补齐。
+ * - [resolveReplySpeakers]：用户回合的答复名单——**有 @ 时仅被 @ 成员按提及顺序答复**（定向回答，
+ *   不再随机补人）；无 @ 时随机 1..[AppConfig.GroupChat.MAX_REPLIES_PER_USER_MESSAGE] 人。
  */
 object GroupSpeakerPicker {
 
@@ -23,43 +23,23 @@ object GroupSpeakerPicker {
     }
 
     /**
-     * 本轮答复人数：无 @ 随机 1..cap；有 @ 时 [mentionCount] 个被提及成员必定回 + 随机 0..(cap-mentionCount) 人加入。
-     * 上限 [AppConfig.GroupChat.MAX_REPLIES_PER_USER_MESSAGE]，封顶可作答的成员数。
+     * 本轮答复名单（有序，可作发言顺序）：
+     *
+     * - [mentionIds] 经成员过滤去重后非空 → **仅返回被 @ 的成员**（保持提及顺序）：@ 谁谁答，
+     *   其余成员不抢答（定向回答语义）。
+     * - 无有效提及 → 从 [memberIds] 随机取 1..[AppConfig.GroupChat.MAX_REPLIES_PER_USER_MESSAGE] 人
+     *   （cap 封顶于可作答成员数），顺序随机。
      */
-    fun randomReplyCount(
-        memberCount: Int,
-        mentionCount: Int,
-        random: Random = Random.Default,
-    ): Int {
-        if (memberCount <= 0) return 0
-        val cap = minOf(AppConfig.GroupChat.MAX_REPLIES_PER_USER_MESSAGE, memberCount)
-        val mentions = mentionCount.coerceAtMost(cap)
-        if (mentions >= cap) return cap
-        return if (mentions > 0) {
-            mentions + random.nextInt(cap - mentions + 1)
-        } else {
-            random.nextInt(1, cap + 1)
-        }
-    }
-
-    /**
-     * 挑本轮发言序列（长度 [count]）：[first]（@ 到的成员，按消息中出现顺序，去重）打头，
-     * 其余成员 shuffled 补齐；不足时返回可返回的最长序列。
-     */
-    fun pickRandom(
+    fun resolveReplySpeakers(
         memberIds: Set<String>,
-        first: List<String>,
-        count: Int,
+        mentionIds: List<String>,
         random: Random = Random.Default,
     ): List<String> {
-        if (memberIds.isEmpty() || count <= 0) return emptyList()
-        val result = mutableListOf<String>()
-        first.forEach { id ->
-            if (id in memberIds && id !in result) result.add(id)
-        }
-        if (result.size >= count) return result.take(count)
-        val rest = memberIds.filter { it !in result }.shuffled(random)
-        result.addAll(rest.take(count - result.size))
-        return result
+        val mentioned = mentionIds.filter { it in memberIds }.distinct()
+        if (memberIds.isEmpty()) return emptyList()
+        if (mentioned.isNotEmpty()) return mentioned
+        val cap = minOf(AppConfig.GroupChat.MAX_REPLIES_PER_USER_MESSAGE, memberIds.size)
+        val count = random.nextInt(1, cap + 1)
+        return memberIds.shuffled(random).take(count)
     }
 }

@@ -72,8 +72,10 @@ fun CheckinShopScreen(
     val checkedIn by container.affinityRepository.observeCheckinClaimed().collectAsState(initial = false)
     val gifts by container.affinityRepository.observeOwnedGifts().collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     var message by remember { mutableStateOf<String?>(null) }
     var showCreate by remember { mutableStateOf(false) }
+    var deleteTarget by remember { mutableStateOf<OwnedGift?>(null) }
 
     AffinityArchivePage(
         title = "每日供应与商店",
@@ -108,7 +110,7 @@ fun CheckinShopScreen(
             item { EmptyArchiveCard("暂无礼物档案", "创建一份礼物，再用龙门币购买并赠送给干员。") }
         } else {
             items(gifts.size, key = { gifts[it].definition.id }) { index ->
-                GiftShopCard(gifts[index]) {
+                GiftShopCard(gifts[index], onBuy = {
                     scope.launch {
                         message = when (container.affinityRepository.buyGift(gifts[index].definition.id)) {
                             is GiftPurchaseResult.Purchased -> "购买成功，已加入库存"
@@ -116,7 +118,7 @@ fun CheckinShopScreen(
                             GiftPurchaseResult.GiftMissing -> "礼物档案不存在"
                         }
                     }
-                }
+                }, onDelete = { deleteTarget = gifts[index] })
             }
         }
         if (message != null) item { ArchiveNotice(message!!) }
@@ -131,6 +133,28 @@ fun CheckinShopScreen(
                         .onFailure { message = it.message ?: "礼物创建失败" }
                 }
             },
+        )
+    }
+    deleteTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            title = { Text("删除礼物档案") },
+            text = {
+                Text(
+                    "确定删除「${target.definition.name}」？已购买未送出的库存（${target.inventory.quantity} 份）将一并删除，送礼历史保留。",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    deleteTarget = null
+                    scope.launch {
+                        val imagePath = container.affinityRepository.deleteGift(target.definition.id)
+                        if (imagePath != null) GiftImageStore.deleteDefinitionImage(context, imagePath)
+                        message = "礼物档案已删除"
+                    }
+                }) { Text("删除", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("取消") } },
         )
     }
 }
@@ -155,17 +179,24 @@ private fun CheckinHero(wallet: LungmenWallet, checkedIn: Boolean, onClaim: () -
 }
 
 @Composable
-private fun GiftShopCard(gift: OwnedGift, onBuy: () -> Unit) {
+private fun GiftShopCard(gift: OwnedGift, onBuy: () -> Unit, onDelete: (() -> Unit)? = null) {
     Surface(shape = RoundedCornerShape(16.dp), color = archiveSurfaceColor()) {
-        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            GiftImage(gift.definition.imagePath, 64.dp)
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(gift.definition.name, color = Color(0xFFF2F0EA), fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                if (gift.definition.description.isNotBlank()) Text(gift.definition.description, color = Color(0xFFAAB4C1), fontSize = 12.sp, maxLines = 2)
-                Text("${gift.definition.price} LMD  ·  +${formatAffinity(gift.definition.affinityGain)} 好感  ·  库存 ${gift.inventory.quantity}", color = archivePrimaryColor(), fontSize = 11.sp)
+        Column(Modifier.fillMaxWidth().padding(start = 14.dp, top = 14.dp, end = 14.dp, bottom = 6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                GiftImage(gift.definition.imagePath, 64.dp)
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(gift.definition.name, color = Color(0xFFF2F0EA), fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    if (gift.definition.description.isNotBlank()) Text(gift.definition.description, color = Color(0xFFAAB4C1), fontSize = 12.sp, maxLines = 2)
+                    Text("${gift.definition.price} LMD  ·  +${formatAffinity(gift.definition.affinityGain)} 好感  ·  库存 ${gift.inventory.quantity}", color = archivePrimaryColor(), fontSize = 11.sp)
+                }
             }
-            TextButton(onClick = onBuy) { Text("采购", color = archivePrimaryColor()) }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                if (onDelete != null) {
+                    TextButton(onClick = onDelete) { Text("删除", color = Color(0xFFE57373), fontSize = 13.sp) }
+                }
+                TextButton(onClick = onBuy) { Text("采购", color = archivePrimaryColor()) }
+            }
         }
     }
 }

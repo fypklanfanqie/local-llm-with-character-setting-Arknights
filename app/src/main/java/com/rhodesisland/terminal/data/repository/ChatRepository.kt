@@ -18,7 +18,10 @@ import kotlinx.serialization.builtins.serializer
 /**
  * 聊天记录仓库（Room v12 起：按会话路由）。
  *
- * - 普通单聊 / 群聊：读写 `chat_history`（100 条窗口 + 事务修剪，行为不变）；
+ * - 普通单聊 / 群聊：读写 `chat_history`——UI Flow 取 AppConfig.MAX_HISTORY_PER_CONVERSATION
+ *   显示窗口；LLM/prompt 路径（[getHistory]）取 `MAX_PROMPT_SUPPLY` 供给量（cap+锚定步长），
+ *   让调用侧的 `PromptWindowAnchor.anchoredWindow` 有溢出余量做量子截断，云端前缀缓存起点
+ *   不随逐轮修剪漂移。事务修剪目标同为供给量。
  * - **特殊邂逅会话**（special_event.conversationId 命中）：读写永久归档表
  *   `special_event_memory_message`——无 100 条修剪、无删除接口，保证「永久回忆」。
  *
@@ -69,7 +72,9 @@ class ChatRepository(
             return memoryDao!!.loadRecentMessages(eventId, EVENT_ARCHIVE_WINDOW)
                 .map { it.toArchiveMessage() }.asReversed()
         }
-        return dao.getHistoryList(conversationId).map { it.toMessage() }.asReversed()
+        // 供给查询（LIMIT = cap + 锚定步长）：所有调用方都是 LLM prompt 组装路径，
+        // 各自再做 anchoredWindow / takeLast 截断——超额供给是量子截断生效的前提。
+        return dao.getHistoryListForPrompt(conversationId).map { it.toMessage() }.asReversed()
     }
 
     /** 导出使用：按时间正序读取全部消息（事件归档全量；普通表不受 UI 窗口限制）。 */

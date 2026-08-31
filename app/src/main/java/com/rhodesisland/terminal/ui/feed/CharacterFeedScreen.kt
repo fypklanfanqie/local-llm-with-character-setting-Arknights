@@ -66,6 +66,8 @@ object FeedRoute {
     const val GROUP_LIST = "group_list"
     /** 群聊会话页路由模板（后接群 id）。 */
     const val GROUP_CHAT = "group_chat/{groupId}"
+    /** 朋友圈（仿微信 Moments）。 */
+    const val MOMENTS = "moments"
 
     fun groupChatRoute(groupId: Long): String = "group_chat/$groupId"
 }
@@ -85,6 +87,8 @@ fun CharacterFeedScreen(
     onOpenEncounter: () -> Unit = {},
     /** 进入「群聊」多人同群聊天（顶栏玻璃按钮，仅云端可用）。 */
     onOpenGroupChat: () -> Unit = {},
+    /** 进入「朋友圈」（顶栏玻璃按钮，替代原「全部角色」入口；角色页仍可从底部 Tab 进）。 */
+    onOpenMoments: () -> Unit = {},
     /** 进入好感度独立页面（由 [CharacterFeedHost] 承载）。 */
     onOpenAffinity: (String) -> Unit = {},
     /** 当前落定立绘的主题色上报（供 dock 栏等全局着色）；页面销毁时应回传 null 复位。 */
@@ -222,13 +226,13 @@ fun CharacterFeedScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 GlassButton(
-                    onClick = onNavigateToCharacters,
+                    onClick = onOpenMoments,
                     style = GlassButtonStyle.Glass,
                     horizontalPadding = 12.dp,
                     verticalPadding = 8.dp,
                 ) {
                     Text(
-                        "全部角色",
+                        "朋友圈",
                         color = Color.White.copy(alpha = 0.92f),
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,

@@ -10,6 +10,8 @@ import com.rhodesisland.terminal.data.model.Lorebook
 import com.rhodesisland.terminal.data.model.LorebookGlobalConfig
 import com.rhodesisland.terminal.data.model.LorebookScopeType
 import com.rhodesisland.terminal.data.model.LorebookTargetType
+import com.rhodesisland.terminal.data.model.MomentAutoConfig
+import com.rhodesisland.terminal.data.model.MomentImageGenConfig
 import com.rhodesisland.terminal.data.model.SeedanceConfig
 import com.rhodesisland.terminal.data.model.UserProfileConfig
 import com.rhodesisland.terminal.data.model.SystemVoiceTemplate
@@ -86,6 +88,24 @@ class SettingsRepository(private val store: SettingsStore) {
     /** 性能浮窗液态玻璃开关（默认开）。 */
     val liquidGlass: Flow<Boolean> = store.liquidGlass
 
+    // ===== 滚动摘要压缩节奏（单聊云端）=====
+    /** 折叠批量：每 N 条未摘要原文触发一次后台压缩（默认 50，读侧已钳制）。 */
+    val rollingSummaryFoldBatch: Flow<Int> = store.rollingSummaryFoldBatch
+    suspend fun getRollingSummaryFoldBatchNow(): Int =
+        dataStoreFirst(rollingSummaryFoldBatch, AppConfig.RollingSummary.DEFAULT_FOLD_BATCH)
+    suspend fun setRollingSummaryFoldBatch(batch: Int) = store.setRollingSummaryFoldBatch(batch)
+
+    // ===== 云端生成参数（可空=未自定义；请求层遇 null 不发字段走模型商默认）=====
+    val cloudTemperature: Flow<Float?> = store.cloudTemperature
+    suspend fun getCloudTemperatureNow(): Float? =
+        dataStoreFirstOrNull(cloudTemperature)
+    suspend fun setCloudTemperature(value: Float?) = store.setCloudTemperature(value)
+
+    val cloudMaxTokens: Flow<Int?> = store.cloudMaxTokens
+    suspend fun getCloudMaxTokensNow(): Int? =
+        dataStoreFirstOrNull(cloudMaxTokens)
+    suspend fun setCloudMaxTokens(value: Int?) = store.setCloudMaxTokens(value)
+
     // ===== 使用指南 =====
     /** 是否已完成首次阅读水平选择。 */
     val guideSetupDone: Flow<Boolean> = store.guideSetupDone
@@ -109,6 +129,30 @@ class SettingsRepository(private val store: SettingsStore) {
     val greetingLastCharId: Flow<String?> = store.greetingLastCharId
     /** 下一次问候投递目标时间（epoch ms；0 = 尚未初始化）。 */
     val greetingNextFireAt: Flow<Long> = store.greetingNextFireAt
+
+    // ===== 朋友圈（仿微信）=====
+    /** 朋友圈生图 API 配置（OpenAI 聊天格式兼容，与主 LLM 分离）。 */
+    val momentImageGenConfig: Flow<MomentImageGenConfig> = store.momentImageGenConfig
+    suspend fun getMomentImageGenConfigNow(): MomentImageGenConfig = store.getMomentImageGenConfigNow()
+    suspend fun setMomentImageGenConfig(config: MomentImageGenConfig) = store.setMomentImageGenConfig(config)
+
+    /** 朋友圈封面图路径（空=默认渐变）。 */
+    val momentCoverPath: Flow<String> = store.momentCoverPath
+    suspend fun setMomentCoverPath(path: String?) = store.setMomentCoverPath(path)
+
+    /** 自动发圈配置（开关/间隔/角色集）。 */
+    val momentAutoConfig: Flow<MomentAutoConfig> = store.momentAutoConfig
+    suspend fun getMomentAutoConfigNow(): MomentAutoConfig = store.getMomentAutoConfigNow()
+    suspend fun setMomentAutoConfig(config: MomentAutoConfig) = store.setMomentAutoConfig(config)
+
+    /** 下一次自动发圈目标时间（epoch ms；0 = 尚未初始化）。 */
+    val momentNextFireAt: Flow<Long> = store.momentNextFireAt
+    suspend fun getMomentNextFireAtNow(): Long = store.getMomentNextFireAtNow()
+    suspend fun setMomentNextFireAt(epochMs: Long) = store.setMomentNextFireAt(epochMs)
+
+    /** 上次自动发圈的角色 id（轮换用）。 */
+    suspend fun getMomentLastCharIdNow(): String? = store.getMomentLastCharIdNow()
+    suspend fun setMomentLastCharId(id: String?) = store.setMomentLastCharId(id)
 
     // ===== 群聊（仅云端可用）=====
     /** 群聊配置聚合快照（开关/成员/自动聊天）。 */

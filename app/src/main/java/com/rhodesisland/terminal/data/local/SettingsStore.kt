@@ -12,6 +12,8 @@ import com.rhodesisland.terminal.data.model.ChatProviderType
 import com.rhodesisland.terminal.data.model.GroupChatConfig
 import com.rhodesisland.terminal.data.model.Lorebook
 import com.rhodesisland.terminal.data.model.LorebookGlobalConfig
+import com.rhodesisland.terminal.data.model.MomentAutoConfig
+import com.rhodesisland.terminal.data.model.MomentImageGenConfig
 import com.rhodesisland.terminal.data.model.SeedanceConfig
 import com.rhodesisland.terminal.data.model.UserProfileConfig
 import com.rhodesisland.terminal.data.model.Worldview
@@ -33,6 +35,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -123,6 +126,12 @@ class SettingsStore(
         // 聊天顶栏第二行控件（云端/本地 + 快捷开关）是否展开（默认开）
         val CHAT_TOPBAR_CONTROLS_EXPANDED = booleanPreferencesKey("chat_topbar_controls_expanded")
 
+        // 滚动摘要上下文压缩（单聊云端）：用户可调折叠批量（每 N 条压缩一次，默认 50）
+        val ROLLING_SUMMARY_FOLD_BATCH = intPreferencesKey("cloud_summary_fold_batch")
+        // 云端生成参数（留空/未设置=不带字段、走模型商默认；参照大众版「生成参数」区语义）
+        val CLOUD_TEMPERATURE = floatPreferencesKey("cloud_temperature")
+        val CLOUD_MAX_TOKENS = intPreferencesKey("cloud_max_tokens")
+
         // 通讯界面自定义背景：是否启用 + 内部存储图片绝对路径列表（JSON List<String>，有序）。
         // 所选相册图复制到 filesDir/chat_backgrounds/，仅存路径，不依赖 SAF 持久权限。
         val CHAT_BG_ENABLED = booleanPreferencesKey("chat_bg_enabled")
@@ -175,6 +184,20 @@ class SettingsStore(
         val USER_AVATAR_PATH = stringPreferencesKey("user_avatar_path")
         val USER_PERSONA = stringPreferencesKey("user_persona")
         val USER_RELATIONSHIP = stringPreferencesKey("user_relationship")
+
+        // ===== 朋友圈（仿微信）=====
+        // 生图 API（OpenAI 聊天格式兼容的中转站/官方端点；与主 LLM 配置分离）。API Key 仅落 DataStore。
+        val MOMENT_IMAGEGEN_BASE_URL = stringPreferencesKey("moment_imagegen_base_url")
+        val MOMENT_IMAGEGEN_API_KEY = stringPreferencesKey("moment_imagegen_api_key")
+        val MOMENT_IMAGEGEN_MODEL = stringPreferencesKey("moment_imagegen_model")
+        // 朋友圈封面图内部存储路径（空=默认渐变）
+        val MOMENT_COVER_PATH = stringPreferencesKey("moment_cover_path")
+        // 自动发圈：开关 + 间隔（小时）+ 参与角色集 + 下次触发时间 + 上次发帖角色（轮换）
+        val MOMENT_AUTO_ENABLED = booleanPreferencesKey("moment_auto_enabled")
+        val MOMENT_AUTO_INTERVAL_HOURS = intPreferencesKey("moment_auto_interval_hours")
+        val MOMENT_AUTO_CHARACTER_IDS = stringSetPreferencesKey("moment_auto_character_ids")
+        val MOMENT_NEXT_FIRE_AT = longPreferencesKey("moment_next_fire_at")
+        val MOMENT_LAST_CHAR_ID = stringPreferencesKey("moment_last_char_id")
 
         // ===== 配置变更检测（移植自 iFeng 的 hasConfigChanged/acknowledgeConfigChange）=====
         // 记录"上次成功加载模型时所用的"线程/上下文/后端/lookahead。当前值 != last_applied 即视为已变更，
@@ -290,6 +313,79 @@ class SettingsStore(
             p[Keys.SEEDANCE_SCENE_DESCRIPTION] = config.sceneDescription
         }
     }
+
+    // ===== 朋友圈（仿微信）=====
+    val momentImageGenConfig: Flow<MomentImageGenConfig> = dataStore.data.map { p ->
+        MomentImageGenConfig(
+            baseUrl = p[Keys.MOMENT_IMAGEGEN_BASE_URL] ?: "",
+            apiKey = p[Keys.MOMENT_IMAGEGEN_API_KEY] ?: "",
+            model = p[Keys.MOMENT_IMAGEGEN_MODEL] ?: "",
+        )
+    }
+
+    /** 一次原子写回全部生图配置键（单个 edit 事务，防逐字段写回被并发覆盖）。 */
+    suspend fun setMomentImageGenConfig(config: MomentImageGenConfig) {
+        dataStore.edit { p ->
+            p[Keys.MOMENT_IMAGEGEN_BASE_URL] = config.baseUrl.trim()
+            p[Keys.MOMENT_IMAGEGEN_API_KEY] = config.apiKey
+            p[Keys.MOMENT_IMAGEGEN_MODEL] = config.model.trim()
+        }
+    }
+
+    val momentCoverPath: Flow<String> = dataStore.data.map { p -> p[Keys.MOMENT_COVER_PATH] ?: "" }
+
+    suspend fun setMomentCoverPath(path: String?) {
+        dataStore.edit { p ->
+            if (path.isNullOrBlank()) p.remove(Keys.MOMENT_COVER_PATH) else p[Keys.MOMENT_COVER_PATH] = path
+        }
+    }
+
+    val momentAutoConfig: Flow<MomentAutoConfig> = dataStore.data.map { p ->
+        val storedInterval = p[Keys.MOMENT_AUTO_INTERVAL_HOURS] ?: AppConfig.Moment.DEFAULT_INTERVAL_HOURS
+        MomentAutoConfig(
+            enabled = p[Keys.MOMENT_AUTO_ENABLED] ?: false,
+            intervalHours = storedInterval.takeIf { it in AppConfig.Moment.MIN_INTERVAL_HOURS..AppConfig.Moment.MAX_INTERVAL_HOURS }
+                ?: AppConfig.Moment.DEFAULT_INTERVAL_HOURS,
+            characterIds = p[Keys.MOMENT_AUTO_CHARACTER_IDS] ?: emptySet(),
+        )
+    }
+
+    /** 一次原子写回自动发圈配置键。 */
+    suspend fun setMomentAutoConfig(config: MomentAutoConfig) {
+        dataStore.edit { p ->
+            p[Keys.MOMENT_AUTO_ENABLED] = config.enabled
+            p[Keys.MOMENT_AUTO_INTERVAL_HOURS] = config.intervalHours
+            p[Keys.MOMENT_AUTO_CHARACTER_IDS] = config.characterIds
+        }
+    }
+
+    val momentNextFireAt: Flow<Long> = dataStore.data.map { p -> p[Keys.MOMENT_NEXT_FIRE_AT] ?: 0L }
+
+    suspend fun setMomentNextFireAt(epochMs: Long) {
+        dataStore.edit { p ->
+            if (epochMs <= 0L) p.remove(Keys.MOMENT_NEXT_FIRE_AT) else p[Keys.MOMENT_NEXT_FIRE_AT] = epochMs
+        }
+    }
+
+    suspend fun getMomentNextFireAtNow(): Long =
+        withTimeoutOrNull(5_000L) { dataStore.data.map { p -> p[Keys.MOMENT_NEXT_FIRE_AT] ?: 0L }.first() } ?: 0L
+
+    val momentLastCharId: Flow<String?> = dataStore.data.map { p -> p[Keys.MOMENT_LAST_CHAR_ID] }
+
+    suspend fun setMomentLastCharId(id: String?) {
+        dataStore.edit { p ->
+            if (id == null) p.remove(Keys.MOMENT_LAST_CHAR_ID) else p[Keys.MOMENT_LAST_CHAR_ID] = id
+        }
+    }
+
+    suspend fun getMomentLastCharIdNow(): String? =
+        withTimeoutOrNull(5_000L) { dataStore.data.map { p -> p[Keys.MOMENT_LAST_CHAR_ID] }.first() }
+
+    suspend fun getMomentImageGenConfigNow(): MomentImageGenConfig =
+        withTimeoutOrNull(5_000L) { momentImageGenConfig.first() } ?: MomentImageGenConfig.EMPTY
+
+    suspend fun getMomentAutoConfigNow(): MomentAutoConfig =
+        withTimeoutOrNull(5_000L) { momentAutoConfig.first() } ?: MomentAutoConfig()
 
     // ===== TTS Config =====
     val ttsConfig: Flow<TtsConfig> = dataStore.data.map { p ->
@@ -633,6 +729,43 @@ class SettingsStore(
      */
     val llmMaxTokens: Flow<Int> = dataStore.data.map { p ->
         p[Keys.LLM_MAX_TOKENS] ?: AppConfig.LLM.DEFAULT_MAX_TOKENS
+    }
+
+    // ===== 滚动摘要压缩节奏（单聊云端）=====
+
+    /** 折叠批量（每 N 条原文压一次摘要）；读出时钳制到配置区间，脏数据不外泄。 */
+    val rollingSummaryFoldBatch: Flow<Int> = dataStore.data.map { p ->
+        (p[Keys.ROLLING_SUMMARY_FOLD_BATCH] ?: AppConfig.RollingSummary.DEFAULT_FOLD_BATCH)
+            .coerceIn(AppConfig.RollingSummary.MIN_FOLD_BATCH, AppConfig.RollingSummary.MAX_FOLD_BATCH)
+    }
+
+    suspend fun setRollingSummaryFoldBatch(batch: Int) {
+        dataStore.edit {
+            it[Keys.ROLLING_SUMMARY_FOLD_BATCH] =
+                batch.coerceIn(AppConfig.RollingSummary.MIN_FOLD_BATCH, AppConfig.RollingSummary.MAX_FOLD_BATCH)
+        }
+    }
+
+    // ===== 云端生成参数（null=未自定义 → 请求体不发该字段，走模型商默认）=====
+
+    val cloudTemperature: Flow<Float?> = dataStore.data.map { p ->
+        p[Keys.CLOUD_TEMPERATURE]
+    }
+
+    suspend fun setCloudTemperature(value: Float?) {
+        dataStore.edit {
+            if (value == null) it.remove(Keys.CLOUD_TEMPERATURE) else it[Keys.CLOUD_TEMPERATURE] = value
+        }
+    }
+
+    val cloudMaxTokens: Flow<Int?> = dataStore.data.map { p ->
+        p[Keys.CLOUD_MAX_TOKENS]
+    }
+
+    suspend fun setCloudMaxTokens(value: Int?) {
+        dataStore.edit {
+            if (value == null) it.remove(Keys.CLOUD_MAX_TOKENS) else it[Keys.CLOUD_MAX_TOKENS] = value
+        }
     }
 
     /** 推理后端偏好（默认 AUTO）*/

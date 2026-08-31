@@ -207,6 +207,9 @@ interface AffinityDao {
     @Query("DELETE FROM gift_definition WHERE id = :giftId")
     suspend fun deleteGift(giftId: Long)
 
+    @Query("DELETE FROM gift_inventory WHERE giftId = :giftId")
+    suspend fun deleteInventory(giftId: Long)
+
     @Query("SELECT * FROM gift_definition WHERE id = :giftId")
     suspend fun getGift(giftId: Long): GiftDefinitionEntity?
 

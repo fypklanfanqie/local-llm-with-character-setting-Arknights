@@ -36,8 +36,9 @@ data class LorebookActivation(
  *
  * 激活流程：constant 直过 → 主关键词命中 → 次级关键词按逻辑判定 → 概率掷点 →
  * 可选递归轮（已激活 content 并入扫描文本再扫，最多 [MAX_RECURSION_ROUNDS] 轮，尊重
- * preventRecursion / excludeRecursion）→ 预算装配（constant > 高 order > 直接 > 递归；
- * 超限从「递归低 order」起丢，constant 最高 order 永远最后丢）→ 分静态头/动态尾两段拼装。
+ * preventRecursion / excludeRecursion）→ 预算装配（两段式：constant 豁免裁剪恒保留=软上限；
+ * 动态条目受硬约束，超限跳过不整批丢弃；constant > 高 order > 直接 > 递归的保序不变）→
+ * 分静态头/动态尾两段拼装。
  *
  * 关键词默认子串忽略大小写；matchWholeWords 用 \b 词界正则，含 CJK 字符的关键词退化为子串
  * （中文无词界，Java 正则 \b 基于 ASCII \w 判定会误判）。
@@ -134,15 +135,23 @@ object LorebookEngine {
             return LorebookActivation(head, "", 0, PromptWindowPlanner.estimateTextTokens(head))
         }
 
-        // 预算装配：rank 升序（constant 最先保）+ order 降序（高 order 先保）。cap<=0 不限。
-        // 注意 constant 也计入预算——极端情况下超预算时 constant 低 order 先丢，最高 order 最后丢。
+        // 预算装配（两段式，契约见 LorebookEngineTest.budget* 用例）：constant 恒保留、豁免裁剪，
+        // [budgetCapTokens] 对其仅为**软**上限——旧 break 会把后排蓝灯整块丢弃（低 order 先丢），
+        // 核心世界观凭空消失且静态头缩水。硬上限只约束动态条目：遇超限不整批 break，
+        // 跳过当前大块继续尝试更小者，凑满为度。排序不变：rank 升序（constant 最先保）
+        // + order 降序（高 order 先保）。cap<=0 不限。
         val cap = config.budgetCapTokens
         val ranked = hits.values.sortedWith(compareBy({ it.rank }, { -it.entry.order }))
         var used = 0
         val kept = ArrayList<Pair<Int, LorebookEntry>>(ranked.size) // rank to entry
         for (hit in ranked) {
             val cost = PromptWindowPlanner.estimateTextTokens(formatBlock(hit.entry))
-            if (cap > 0 && used + cost > cap) break
+            if (hit.rank == RANK_CONSTANT) {
+                kept.add(hit.rank to hit.entry)
+                used += cost
+                continue
+            }
+            if (cap > 0 && used + cost > cap) continue
             kept.add(hit.rank to hit.entry)
             used += cost
         }

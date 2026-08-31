@@ -143,6 +143,25 @@ fun SettingsScreen(
     var probeRunning by remember { mutableStateOf(false) }
     var probeResult by remember { mutableStateOf<String?>(null) }
 
+    // ===== 云端生成参数（仅云端生效；参照大众版「生成参数」区：留空/关闭=跟随模型商默认）=====
+    // 初值异步载入 DataStore；点独立「保存生成参数」按钮才落库。
+    var cloudMaxTokensText by remember { mutableStateOf("") }
+    var tempCustomEnabled by remember { mutableStateOf(false) }
+    var tempValue by remember { mutableStateOf(AppConfig.LLM.DEFAULT_TEMPERATURE) }
+    var foldIntervalText by remember { mutableStateOf(AppConfig.RollingSummary.DEFAULT_FOLD_BATCH.toString()) }
+    var cloudParamsSaved by remember { mutableStateOf(false) }
+    LaunchedEffect(cloudParamsSaved) {
+        if (cloudParamsSaved) { delay(2000); cloudParamsSaved = false }
+    }
+    LaunchedEffect(Unit) {
+        val repo = container.settingsRepository
+        val storedMax = repo.getCloudMaxTokensNow()
+        if (storedMax != null) cloudMaxTokensText = storedMax.toString()
+        val storedTemp = repo.getCloudTemperatureNow()
+        if (storedTemp != null) { tempCustomEnabled = true; tempValue = storedTemp }
+        foldIntervalText = repo.getRollingSummaryFoldBatchNow().toString()
+    }
+
     /**
      * 由当前 UI 编辑态组装 ApiConfig（预设=preset baseUrl/model，自定义=手动输入值；
      * 免费服务商 key 恒为空）。用于切换服务商时保存旧槽、以及保存按钮写入。
@@ -368,6 +387,74 @@ fun SettingsScreen(
             },
         )
 
+        // ===== 云端生成参数（仅云端 AI 生效；布局参照大众版同名区）=====
+        // 「留空/关闭=不带字段」直接映射请求层的可空注入：不发送 temperature/max_tokens，
+        // 由模型商决定默认值。上下文压缩节奏驱动滚动摘要（单聊云端），始终生效。
+        CollapsibleSection(title = "生成参数（仅云端 AI）", key = "gen_params", initiallyExpanded = false) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                FieldLabel("单次回复上限 max_tokens")
+                GlassInputField(
+                    value = cloudMaxTokensText,
+                    onValueChange = { cloudMaxTokensText = it.filter { c -> c.isDigit() }.take(6) },
+                    placeholder = "留空使用模型商默认",
+                )
+                Text(
+                    "限制模型单次回复的最大 token 数，防止单条回复过长；留空则由模型商决定。",
+                    color = scheme.onSurfaceVariant, fontSize = 10.sp,
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        if (tempCustomEnabled) String.format(java.util.Locale.US, "温度 %.2f", tempValue)
+                        else "温度：跟随模型商默认",
+                        color = scheme.onSurface, fontSize = 12.sp,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(checked = tempCustomEnabled, onCheckedChange = { tempCustomEnabled = it })
+                }
+                Slider(
+                    enabled = tempCustomEnabled,
+                    value = tempValue,
+                    onValueChange = { tempValue = it },
+                    valueRange = 0f..1.5f,
+                )
+                Text(
+                    "越高越有创造性、也越容易跑偏；角色扮演建议 0.7~0.9。区间 0~1.5。",
+                    color = scheme.onSurfaceVariant, fontSize = 10.sp,
+                )
+                FieldLabel("上下文压缩：每 N 条折叠一次")
+                GlassInputField(
+                    value = foldIntervalText,
+                    onValueChange = { foldIntervalText = it.filter { c -> c.isDigit() }.take(3) },
+                    placeholder = AppConfig.RollingSummary.DEFAULT_FOLD_BATCH.toString(),
+                )
+                Text(
+                    "每隔这么多条原文，把最旧一批连同旧摘要压成一段「前情提要」。" +
+                        "默认 ${AppConfig.RollingSummary.DEFAULT_FOLD_BATCH}；" +
+                        "范围 ${AppConfig.RollingSummary.MIN_FOLD_BATCH}~${AppConfig.RollingSummary.MAX_FOLD_BATCH}" +
+                        "（上限受历史存储约束）。留空恢复默认。",
+                    color = scheme.onSurfaceVariant, fontSize = 10.sp,
+                )
+                SaveButton(
+                    text = "保存生成参数",
+                    saved = cloudParamsSaved,
+                    onClick = {
+                        scope.launch {
+                            container.settingsRepository.setCloudMaxTokens(
+                                cloudMaxTokensText.toIntOrNull()?.takeIf { it > 0 },
+                            )
+                            container.settingsRepository.setCloudTemperature(
+                                if (tempCustomEnabled) Math.round(tempValue * 100) / 100f else null,
+                            )
+                            val parsedInterval = foldIntervalText.toIntOrNull()
+                                ?: AppConfig.RollingSummary.DEFAULT_FOLD_BATCH
+                            container.settingsRepository.setRollingSummaryFoldBatch(parsedInterval)
+                            cloudParamsSaved = true
+                        }
+                    },
+                )
+            }
+        }
+
         // ===== 免费对话提示弹窗 =====
         if (showFreeTip) {
             AlertDialog(
@@ -405,6 +492,7 @@ fun SettingsScreen(
 
         GreetingSection(container = container, scope = scope)
         GroupChatSection(container = container, scope = scope)
+        MomentsSection(container = container, scope = scope)
         WorldviewSection(container = container, scope = scope)
         LorebookSection(container = container, onNavigateToLorebook = onNavigateToLorebook)
         UserProfileSection(container = container, scope = scope)
@@ -611,7 +699,7 @@ fun SettingsScreen(
         CollapsibleSection(title = "关于", key = "about", summary = "版本 · 免责声明 · 主题") {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("罗德岛通讯终端", color = scheme.onSurface, fontSize = 16.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-                Text("Android 版 v1.0.0", color = scheme.onSurfaceVariant, fontSize = 12.sp)
+                Text("Android 版 ${com.rhodesisland.terminal.BuildConfig.VERSION_NAME}", color = scheme.onSurfaceVariant, fontSize = 12.sp)
                 Text("明日方舟同人 AI 角色扮演聊天应用", color = scheme.onSurfaceVariant, fontSize = 12.sp)
                 Spacer(Modifier.height(4.dp))
                 Text(
@@ -1784,6 +1872,156 @@ private const val PROBE_TIMEOUT_MS = 10_000L
  * （经 [SeedanceSceneStore] 校验并复制到内部存储）、可选场景描述、固定开启语音的只读说明。
  * 无 fps 选项。含「测试连接」按钮校验服务地址。
  */
+/**
+ * 朋友圈设置区：生图 API（OpenAI 聊天格式兼容中转站，与主 LLM 分离）+ 自动发圈（开关/间隔/角色）。
+ */
+@Composable
+private fun MomentsSection(container: AppContainer, scope: CoroutineScope) {
+    val scheme = MaterialTheme.colorScheme
+    val context = LocalContext.current
+    val settings = container.settingsRepository
+
+    // 生图 API 可编辑字段：进入组合后播种一次
+    var baseUrl by remember { mutableStateOf("") }
+    var apiKey by remember { mutableStateOf("") }
+    var showApiKey by remember { mutableStateOf(false) }
+    var model by remember { mutableStateOf("") }
+    var saved by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        val c = settings.getMomentImageGenConfigNow()
+        baseUrl = c.baseUrl
+        apiKey = c.apiKey
+        model = c.model
+    }
+    LaunchedEffect(saved) { if (saved) { delay(2000); saved = false } }
+
+    // 自动发圈
+    val autoEnabled by settings.momentAutoConfig.collectAsState(initial = com.rhodesisland.terminal.data.model.MomentAutoConfig())
+    val characters by container.characterRepository.characters.collectAsState(initial = emptyList())
+    var showCharPicker by remember { mutableStateOf(false) }
+    val provider by settings.activeProvider.collectAsState(initial = ChatProviderType.CLOUD)
+    val isCloud = provider == ChatProviderType.CLOUD
+
+    CollapsibleSection(
+        title = "朋友圈",
+        key = "moment",
+        summary = if (baseUrl.isNotBlank() && apiKey.isNotBlank() && model.isNotBlank()) "生图已配置" else "未配置生图 API",
+    ) {
+        GlassListRow(
+            title = "自动发圈",
+            subtitle = if (isCloud) "所选角色每隔一段时间自动发一条朋友圈（8-23 点）。"
+            else "仅云端 AI 模式可用，请先切换为云端 AI。",
+            trailing = {
+                Switch(
+                    checked = autoEnabled.enabled,
+                    onCheckedChange = { on ->
+                        scope.launch {
+                            settings.setMomentAutoConfig(autoEnabled.copy(enabled = on))
+                            com.rhodesisland.terminal.work.MomentScheduler.reschedule(context, settings)
+                        }
+                    },
+                )
+            },
+            showDivider = true,
+        )
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (autoEnabled.enabled && isCloud) {
+                Text(
+                    "发圈间隔：${autoEnabled.intervalHours} 小时（实际有 ±12% 随机抖动）",
+                    color = scheme.onSurfaceVariant, fontSize = 12.sp,
+                )
+                var sliderValue by remember(autoEnabled.intervalHours) {
+                    mutableStateOf(autoEnabled.intervalHours.toFloat())
+                }
+                androidx.compose.material3.Slider(
+                    value = sliderValue,
+                    onValueChange = { sliderValue = it },
+                    onValueChangeFinished = {
+                        scope.launch {
+                            settings.setMomentAutoConfig(
+                                autoEnabled.copy(
+                                    intervalHours = sliderValue.toInt()
+                                        .coerceIn(AppConfig.Moment.MIN_INTERVAL_HOURS, AppConfig.Moment.MAX_INTERVAL_HOURS),
+                                ),
+                            )
+                            com.rhodesisland.terminal.work.MomentScheduler.reschedule(context, settings)
+                        }
+                    },
+                    valueRange = AppConfig.Moment.MIN_INTERVAL_HOURS.toFloat()..AppConfig.Moment.MAX_INTERVAL_HOURS.toFloat(),
+                    steps = (AppConfig.Moment.MAX_INTERVAL_HOURS - AppConfig.Moment.MIN_INTERVAL_HOURS - 1),
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "发圈角色（已选 ${autoEnabled.characterIds.size} 个）",
+                        color = scheme.onSurface, fontSize = 13.sp,
+                    )
+                    TextButton(onClick = { showCharPicker = true }) { Text("选择", fontSize = 12.sp) }
+                }
+            }
+
+            Text(
+                "生图 API（OpenAI 聊天格式出图，支持中转站如 nano-banana / gpt-4o-image 类模型；生图与对话模型分开配置，留空则角色朋友圈为纯文字）。",
+                color = scheme.onSurfaceVariant, fontSize = 11.sp,
+            )
+            FieldLabel("生图服务地址")
+            GlassInputField(value = baseUrl, onValueChange = { baseUrl = it }, placeholder = "https://中转站.com/v1")
+            FieldLabel("生图模型")
+            GlassInputField(value = model, onValueChange = { model = it }, placeholder = "gemini-2.5-flash-image")
+            PasswordField("生图 API Key", apiKey, showApiKey, { apiKey = it }, { showApiKey = !showApiKey })
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Button(
+                    onClick = {
+                        scope.launch {
+                            settings.setMomentImageGenConfig(
+                                com.rhodesisland.terminal.data.model.MomentImageGenConfig(
+                                    baseUrl = baseUrl, apiKey = apiKey, model = model,
+                                ),
+                            )
+                            saved = true
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = scheme.primary.copy(alpha = 0.16f)),
+                ) { Text(if (saved) "✓ 已保存" else "保存生图配置", color = scheme.primary, fontSize = 13.sp) }
+            }
+        }
+    }
+
+    if (showCharPicker) {
+        AlertDialog(
+            onDismissRequest = { showCharPicker = false },
+            title = { Text("选择发圈角色（可多选）", color = scheme.onSurface) },
+            text = {
+                LazyColumn(modifier = Modifier.height(320.dp)) {
+                    items(characters.size) { index ->
+                        val char = characters[index]
+                        val checked = char.id in autoEnabled.characterIds
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    val next = autoEnabled.characterIds.toMutableSet()
+                                    if (checked) next.remove(char.id) else next.add(char.id)
+                                    scope.launch { settings.setMomentAutoConfig(autoEnabled.copy(characterIds = next)) }
+                                }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            androidx.compose.material3.Checkbox(checked = checked, onCheckedChange = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(char.name, color = scheme.onSurface, fontSize = 14.sp)
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showCharPicker = false }) { Text("完成") } },
+        )
+    }
+}
+
 @Composable
 private fun SeedanceSettingsSection(container: AppContainer, scope: CoroutineScope) {
     val scheme = MaterialTheme.colorScheme

@@ -170,6 +170,18 @@ class AffinityRepository(
         dao.updateGiftThankYouText(historyId, text.take(1_000))
     }
 
+    /**
+     * 删除礼物档案（自定义礼物下架）：事务内删定义行 + 库存行，返回被删档案的图片路径
+     * （供调用方随后删除图片文件；gift_history 冗余了名字/图片，历史墙不受影响）。
+     * 档案不存在返回 null。
+     */
+    suspend fun deleteGift(giftId: Long): String? = database.withTransaction {
+        val gift = dao.getGift(giftId) ?: return@withTransaction null
+        dao.deleteInventory(giftId)
+        dao.deleteGift(giftId)
+        gift.imagePath.takeIf { it.isNotBlank() }
+    }
+
     private suspend fun addReward(
         characterId: String,
         amount: Float,

@@ -346,6 +346,35 @@ class LorebookEngineTest {
         assertFalse(act.tailInjection.contains("低优先级"))
     }
 
+    @Test
+    fun budgetNeverDropsConstant_evenWhenBlueTotalExceedsCap() {
+        // 缓存+保真契约：constant 是世界观核心，装配顺序里天然居前——但多蓝灯总成本超上限时，
+        // 旧 break 逻辑会整块丢弃后排蓝灯（低 order 先丢），核心设定凭空消失且静态头缩水。
+        // 新契约：蓝灯豁免裁剪软超限保留；硬上限只约束动态条目。
+        val b = book(
+            entry(constant = true, content = "蓝大 " + "字".repeat(150), order = 900),
+            entry(constant = true, content = "蓝小必须活", order = 1),
+            entry(keys = listOf("低"), content = "绿灯 filler " + "字".repeat(60)),
+        )
+        val act = LorebookEngine.activate(listOf(b), config.copy(budgetCapTokens = 160), listOf(msg("低")))
+        assertTrue("后排蓝灯不得被预算整块丢弃", act.staticHead.contains("蓝小必须活"))
+        assertTrue(act.staticHead.contains("蓝大"))
+    }
+
+    @Test
+    fun budgetConstantsSoftExceedCap_whileDynamicsStayHardCapped() {
+        // 蓝灯自身总成本超上限：软超限保留（保缓存稳定 > 预算字面量）；绿灯全部出局。
+        val b = book(
+            entry(constant = true, content = "蓝一 " + "字".repeat(80)),
+            entry(constant = true, content = "蓝二 " + "字".repeat(80)),
+            entry(keys = listOf("低"), content = "绿灯 " + "字".repeat(60)),
+        )
+        val act = LorebookEngine.activate(listOf(b), config.copy(budgetCapTokens = 100), listOf(msg("低")))
+        assertTrue(act.staticHead.contains("蓝一"))
+        assertTrue(act.staticHead.contains("蓝二"))
+        assertFalse(act.tailInjection.contains("绿灯"))
+    }
+
     /** position 仅作排序语义：BEFORE_CHAR 排在动态尾更靠前，AFTER/@D 更靠后；不再产生独立通道。 */
     @Test
     fun positionOnlyAffectsTailOrdering() {

@@ -229,8 +229,10 @@ class GroupChatViewModel(
                 val nameToId = members.associate { it.name to it.id }
                 val mentionIds = GroupChatPromptBuilder.extractMentions(text, memberNames)
                     .mapNotNull { nameToId[it] }
-                val count = GroupSpeakerPicker.randomReplyCount(members.size, mentionIds.size)
-                val speakerIds = GroupSpeakerPicker.pickRandom(members.map { it.id }.toSet(), mentionIds, count)
+                // @ 谁谁答（按提及顺序，不随机补人）；无 @ 时随机 1..cap 人
+                val speakerIds = GroupSpeakerPicker.resolveReplySpeakers(
+                    members.map { it.id }.toSet(), mentionIds,
+                )
                 val speakers = speakerIds.mapNotNull { id -> members.firstOrNull { it.id == id } }
                 if (speakers.isEmpty()) throw Exception("请先到「设置 → 群聊」选择群成员")
                 _uiState.update { it.copy(typingCharacterId = speakers.first().id) }

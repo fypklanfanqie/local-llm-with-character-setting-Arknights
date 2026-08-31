@@ -17,6 +17,7 @@ import com.rhodesisland.terminal.util.ProcessName
 import com.rhodesisland.terminal.util.PrtsImageLoader
 import com.rhodesisland.terminal.work.GreetingScheduler
 import com.rhodesisland.terminal.work.GroupChatScheduler
+import com.rhodesisland.terminal.work.MomentScheduler
 import com.rhodesisland.terminal.ui.affinity.DailyCheckinBus
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -133,6 +134,11 @@ class RhodesApp : Application(), ImageLoaderFactory {
         appScope.launch {
             runCatching { GroupChatScheduler.ensureScheduled(this@RhodesApp, container.settingsRepository) }
                 .onFailure { CrashCapture.logEvent(this@RhodesApp, "startup", "groupchat schedule: ${it.stackTraceToString()}") }
+        }
+        // 朋友圈自动发圈：确保后台调度链存活（关闭/本地时由 ensureScheduled cancel）
+        appScope.launch {
+            runCatching { MomentScheduler.ensureScheduled(this@RhodesApp, container.settingsRepository) }
+                .onFailure { CrashCapture.logEvent(this@RhodesApp, "startup", "moment schedule: ${it.stackTraceToString()}") }
         }
         appScope.launch {
             runCatching { container.affinityRepository.shouldShowDailyCheckinPrompt() }

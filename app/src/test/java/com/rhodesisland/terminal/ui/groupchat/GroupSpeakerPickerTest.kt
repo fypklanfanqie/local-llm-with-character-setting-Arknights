@@ -49,54 +49,60 @@ class GroupSpeakerPickerTest {
         assertTrue(picked in ids)
     }
 
-    // ===== 随机多人答复（二轮）=====
+    // ===== 用户回合答复名单（二轮）=====
 
     @Test
-    fun randomReplyCount_noMentions_betweenOneAndCap() {
+    fun resolveReplySpeakers_withMentions_returnsOnlyMentionedInOrder() {
         val r = Random(42)
         repeat(30) {
-            val n = GroupSpeakerPicker.randomReplyCount(10, 0, r)
-            assertTrue("n=$n", n in 1..4)
+            val picked = GroupSpeakerPicker.resolveReplySpeakers(
+                setOf("a", "b", "c", "d", "e"), listOf("c", "a"), r,
+            )
+            assertEquals(listOf("c", "a"), picked)
         }
     }
 
     @Test
-    fun randomReplyCount_cappedByMemberCount() {
-        assertEquals(1, GroupSpeakerPicker.randomReplyCount(1, 0, Random(1)))
-        repeat(20) {
-            val n = GroupSpeakerPicker.randomReplyCount(2, 0, Random(it.toLong()))
-            assertTrue("n=$n", n in 1..2)
-        }
-    }
-
-    @Test
-    fun randomReplyCount_withMentions_atLeastMentionCount() {
+    fun resolveReplySpeakers_unknownMentionsFiltered_noRandomFill() {
         val r = Random(7)
         repeat(30) {
-            val n = GroupSpeakerPicker.randomReplyCount(10, 2, r)
-            assertTrue("n=$n", n in 2..4)
+            val picked = GroupSpeakerPicker.resolveReplySpeakers(setOf("a", "b"), listOf("gone"), r)
+            assertTrue("picked=$picked", picked.all { it in setOf("a", "b") } || picked.isEmpty())
+        }
+        // 全部提及无效 -> 走随机路径
+        val picked = GroupSpeakerPicker.resolveReplySpeakers(setOf("a", "b"), listOf("gone"), Random(9))
+        assertTrue(picked.isNotEmpty() && picked.size <= 2)
+    }
+
+    @Test
+    fun resolveReplySpeakers_duplicateMentionsDeduped() {
+        assertEquals(
+            listOf("b", "a"),
+            GroupSpeakerPicker.resolveReplySpeakers(setOf("a", "b"), listOf("b", "a", "b")),
+        )
+    }
+
+    @Test
+    fun resolveReplySpeakers_emptyMembersReturnsEmpty() {
+        assertTrue(GroupSpeakerPicker.resolveReplySpeakers(emptySet(), listOf("a")).isEmpty())
+    }
+
+    @Test
+    fun resolveReplySpeakers_noMentions_betweenOneAndCap() {
+        val r = Random(42)
+        repeat(30) {
+            val picked = GroupSpeakerPicker.resolveReplySpeakers(setOf("a", "b", "c", "d", "e"), emptyList(), r)
+            assertTrue("size=${picked.size}", picked.size in 1..4)
+            assertEquals(picked.size, picked.toSet().size)
         }
     }
 
     @Test
-    fun randomReplyCount_mentionsOverCapClampedToCap() {
-        assertEquals(4, GroupSpeakerPicker.randomReplyCount(10, 6, Random(3)))
-    }
-
-    @Test
-    fun pickRandom_targetsFirstThenRandomFill_noDuplicates() {
-        val r = Random(5)
-        val picked = GroupSpeakerPicker.pickRandom(setOf("a", "b", "c", "d", "e"), listOf("c", "a"), 4, r)
-        assertEquals(listOf("c", "a"), picked.take(2))
-        assertEquals(4, picked.size)
-        assertEquals(picked.size, picked.toSet().size)
-    }
-
-    @Test
-    fun pickRandom_unknownTargetIgnored_countShortfallFillsFromRest() {
-        val r = Random(9)
-        val picked = GroupSpeakerPicker.pickRandom(setOf("a", "b"), listOf("gone"), 2, r)
-        assertEquals(2, picked.size)
-        assertEquals(setOf("a", "b"), picked.toSet())
+    fun resolveReplySpeakers_noMentions_cappedByMemberCount() {
+        assertEquals(1, GroupSpeakerPicker.resolveReplySpeakers(setOf("a"), emptyList(), Random(1)).size)
+        repeat(20) {
+            val picked = GroupSpeakerPicker.resolveReplySpeakers(setOf("a", "b"), emptyList(), Random(it.toLong()))
+            assertTrue("size=${picked.size}", picked.size in 1..2)
+        }
     }
 }

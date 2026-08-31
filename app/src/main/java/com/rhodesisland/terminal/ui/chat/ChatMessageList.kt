@@ -71,7 +71,8 @@ fun ChatMessageList(
         }
     }
 
-    // 布局静止后按像素位置更新策略（拖拽/程序滚动进行中不判定，避免把程序滚动当用户意图）
+    // 布局静止后按像素位置更新策略（拖拽/程序滚动进行中不判定，避免把程序滚动当用户意图）。
+    // 确认在底部时记录跟随锚点（总项数），供跟随滚动前校验「旧末项仍在视口内」。
     LaunchedEffect(Unit) {
         snapshotFlow {
             val info = listState.layoutInfo
@@ -84,16 +85,27 @@ fun ChatMessageList(
             if (isScrolling) return@collect
             // !canScrollForward = 精确到底；否则距离在阈值内也算接近底部（负值=还有底部 padding）。
             val nearBottom = !canScrollForward || distanceToEnd <= thresholdPx
-            policy = ChatAutoScrollPolicy.onScrollSettled(policy, isNearBottom = nearBottom)
+            policy = ChatAutoScrollPolicy.onScrollSettled(
+                policy, isNearBottom = nearBottom, totalItems = listState.layoutInfo.totalItemsCount,
+            )
         }
     }
 
     // 流式内容增长：跟随底部。仅在策略允许（未离开底部）且无滚动进行中时执行。
+    // 额外锚点校验：视口内必须仍能看到「最近一次确认在底部时的旧末项」。
+    // 修复快速上翻被瞬间拉回底部的竞态——用户上翻的落定瞬间（isScrollInProgress 刚变 false、
+    // 策略尚未更新为暂停）恰逢流式 chunk 重启本效果时，旧逻辑会直接 scrollToItem 拉底；
+    // 现在旧末项已滚出视口则拒绝跟随，内容自然增长时旧末项必在视口内、正常跟随不受影响。
     val lastContent = state.messages.lastOrNull()?.content
     LaunchedEffect(state.messages.size, lastContent, state.showTyping, policy.followBottom) {
         if (state.messages.isEmpty()) return@LaunchedEffect
         if (!policy.followBottom) return@LaunchedEffect
         if (listState.isScrollInProgress) return@LaunchedEffect
+        val info = listState.layoutInfo
+        val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: return@LaunchedEffect
+        if (!ChatAutoScrollPolicy.shouldFollowBottom(policy, info.totalItemsCount, lastVisible)) {
+            return@LaunchedEffect
+        }
         // 等一帧让增长后的内容完成测量，再滚到真实末尾
         delay(FRAME_MEASURE_MS)
         val total = listState.layoutInfo.totalItemsCount

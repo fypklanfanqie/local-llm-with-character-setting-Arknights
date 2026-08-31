@@ -59,6 +59,7 @@ import com.rhodesisland.terminal.ui.glass.GlassNavItem
 import com.rhodesisland.terminal.ui.groupchat.GroupChatScreen
 import com.rhodesisland.terminal.ui.groupchat.GroupListScreen
 import com.rhodesisland.terminal.ui.groupchat.GroupNavigationBus
+import com.rhodesisland.terminal.ui.moment.MomentsScreen
 import com.rhodesisland.terminal.ui.models.ModelManagerScreen
 import com.rhodesisland.terminal.ui.music.MusicScreen
 import com.rhodesisland.terminal.ui.lorebook.LorebookDetailScreen
@@ -254,6 +255,16 @@ fun AppNavGraph(container: AppContainer, initialChatOpen: Boolean = false) {
                             onOpenGroupChat = {
                                 feedNavController.navigate(FeedRoute.GROUP_LIST) { launchSingleTop = true }
                             },
+                            onOpenMoments = {
+                                feedNavController.navigate(FeedRoute.MOMENTS) { launchSingleTop = true }
+                            },
+                        )
+                    }
+                    composable(FeedRoute.MOMENTS) {
+                        MomentsScreen(
+                            container = container,
+                            bottomBarHeight = bottomBarHeight,
+                            onBack = { feedNavController.popBackStack() },
                         )
                     }
                     composable(FeedRoute.CHAT) {

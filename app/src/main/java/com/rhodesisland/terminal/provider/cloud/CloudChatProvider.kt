@@ -7,6 +7,7 @@ import com.rhodesisland.terminal.data.remote.ChatMessageDto
 import com.rhodesisland.terminal.data.remote.DirectLlmClient
 import com.rhodesisland.terminal.data.remote.DirectLlmException
 import com.rhodesisland.terminal.data.remote.DirectLlmFailure
+import com.rhodesisland.terminal.data.remote.LlmTokenUsage
 import com.rhodesisland.terminal.data.repository.SettingsRepository
 import com.rhodesisland.terminal.provider.ChatProvider
 import kotlinx.serialization.json.JsonElement
@@ -31,6 +32,8 @@ import okhttp3.Call
 class CloudChatProvider(
     private val client: DirectLlmClient,
     private val settings: SettingsRepository,
+    /** 云端 token 用量回调（前缀缓存命中率观测；client 保证仅在拿到有效 usage 时回调）。 */
+    private val onUsage: ((LlmTokenUsage) -> Unit)? = null,
 ) : ChatProvider {
 
     override val type: ChatProviderType = ChatProviderType.CLOUD
@@ -64,6 +67,11 @@ class CloudChatProvider(
             onChunk = onChunk,
             onCall = { activeCall = it },
             deepThinking = settings.getDeepThinkingNow(),
+            onUsage = { usage -> onUsage?.invoke(usage ?: return@chatStream) },
+            // 自定义生成参数（设置页「生成参数（仅云端 AI）」区）：未自定义=null=请求体
+            // 不带字段、走模型商默认——与 DirectLlmClient 的可空注入语义直接对接。
+            temperature = settings.getCloudTemperatureNow(),
+            maxTokens = settings.getCloudMaxTokensNow(),
         )
         if (content.isBlank()) throw DirectLlmException(DirectLlmFailure.EMPTY_RESPONSE)
         return content

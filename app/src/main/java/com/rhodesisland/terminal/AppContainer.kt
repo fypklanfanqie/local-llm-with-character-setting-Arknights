@@ -8,8 +8,10 @@ import com.rhodesisland.terminal.config.AppConfig
 import com.rhodesisland.terminal.config.AssetPaths
 import com.rhodesisland.terminal.data.local.AppDatabase
 import com.rhodesisland.terminal.data.local.SettingsStore
+import com.rhodesisland.terminal.data.model.ChatProviderType
 import com.rhodesisland.terminal.data.model.SeedanceConfig
 import com.rhodesisland.terminal.data.model.SeedanceVideo
+import com.rhodesisland.terminal.data.remote.ChatMessageDto
 import com.rhodesisland.terminal.data.remote.CreateSeedanceTask
 import com.rhodesisland.terminal.data.remote.DirectLlmClient
 import com.rhodesisland.terminal.data.remote.RetrofitClient
@@ -22,6 +24,8 @@ import com.rhodesisland.terminal.data.repository.ChatRepository
 import com.rhodesisland.terminal.data.repository.ConversationRepository
 import com.rhodesisland.terminal.data.repository.DocumentRepository
 import com.rhodesisland.terminal.data.repository.GroupChatRepository
+import com.rhodesisland.terminal.data.repository.MomentRepository
+import com.rhodesisland.terminal.data.remote.MomentImageGenClient
 import com.rhodesisland.terminal.data.repository.MusicLibraryRepository
 import com.rhodesisland.terminal.data.repository.SeedanceVideoRepository
 import com.rhodesisland.terminal.data.repository.SettingsRepository
@@ -45,6 +49,7 @@ import com.rhodesisland.terminal.video.SeedanceVideoDownloader
 import com.rhodesisland.terminal.video.SeedanceVideoFileStore
 import com.rhodesisland.terminal.work.SeedanceVideoScheduler
 import com.rhodesisland.terminal.llm.CpuBoostController
+import com.rhodesisland.terminal.llm.RollingSummarizer
 import com.rhodesisland.terminal.llm.backend.BackendHealthCoordinator
 import com.rhodesisland.terminal.llm.backend.BackendHealthStore
 import com.rhodesisland.terminal.llm.backend.BackendManager
@@ -64,6 +69,7 @@ import com.rhodesisland.terminal.provider.local.LocalChatProvider
 import com.rhodesisland.terminal.tts.VolcTtsClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonPrimitive
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.ByteArrayOutputStream
@@ -104,6 +110,28 @@ class AppContainer(private val context: Context) {
     // 群聊：复用 conversation + chat_history（哨兵 characterId），仅云端可用。
     val groupChatRepository: GroupChatRepository by lazy {
         GroupChatRepository(conversationRepository, chatRepository)
+    }
+
+    // 朋友圈：帖子/评论/点赞落库 + 生图客户端（OpenAI 聊天格式出图，中转站兼容）。
+    val momentRepository: MomentRepository by lazy {
+        MomentRepository(database.momentDao())
+    }
+    val momentImageGenClient: MomentImageGenClient by lazy {
+        MomentImageGenClient(context, MomentImageGenClient.defaultHttpClient())
+    }
+
+    /** 朋友圈生成协调器（角色发帖 + 评论回复；UI 与后台 Worker 共用）。 */
+    val momentGenerationCoordinator: com.rhodesisland.terminal.work.MomentGenerationCoordinator by lazy {
+        com.rhodesisland.terminal.work.MomentGenerationCoordinator(
+            context = context,
+            settings = settingsRepository,
+            chatRepository = chatRepository,
+            conversationRepository = conversationRepository,
+            characterRepository = characterRepository,
+            momentRepository = momentRepository,
+            directLlmClient = directLlmClient,
+            imageGenClient = momentImageGenClient,
+        )
     }
 
     // 通讯界面背景：内置 PRTS 轮播 + 用户自定义图片（最多 20 张，复制到内部存储）。
@@ -428,7 +456,34 @@ class AppContainer(private val context: Context) {
 
     // ===== Chat Provider =====
     val cloudChatProvider: CloudChatProvider by lazy {
-        CloudChatProvider(directLlmClient, settingsRepository)
+        CloudChatProvider(directLlmClient, settingsRepository, onUsage = { usage ->
+            // 前缀缓存命中率观测：浮窗日志逐轮展示（详细历史存 LlmUsageStats 环形统计 + logcat）
+            performanceCollector.updateLog("云端缓存命中 ${usage.cachedTokens}/${usage.promptTokens} tok")
+        })
+    }
+
+    /**
+     * 滚动摘要折叠器（单聊云端，默认开启不可关）：未摘要原文超过阈值时，后台把最旧一批
+     * 原文连同旧摘要交给云端模型压成 ≤300 字新摘要写回会话行。
+     * 闸门：仅活跃 Provider 为云端时执行（切到本地模式期间暂停折叠、不发请求）。
+     * 模型调用走当前生效的 API 配置（用户切换服务商后自动跟随）。
+     */
+    val rollingSummarizer: RollingSummarizer by lazy {
+        RollingSummarizer(
+            conversationDao = database.conversationDao(),
+            chatDao = database.chatDao(),
+            canAttempt = { settingsRepository.getActiveProviderNow() == ChatProviderType.CLOUD },
+            foldBatchProvider = { settingsRepository.getRollingSummaryFoldBatchNow() },
+            completeSummary = { prompt ->
+                val cfg = settingsRepository.getApiConfigNow()
+                directLlmClient.chatOnce(
+                    baseUrl = cfg.baseUrl,
+                    apiKey = cfg.apiKey,
+                    model = cfg.model,
+                    messages = listOf(ChatMessageDto("user", JsonPrimitive(prompt))),
+                )
+            },
+        )
     }
     val localChatProvider: LocalChatProvider by lazy {
         LocalChatProvider(

@@ -66,19 +66,25 @@ class DirectLlmClient(
         onChunk: (String) -> Unit,
         onCall: ((Call) -> Unit)? = null,
         deepThinking: Boolean = false,
+        onUsage: ((LlmTokenUsage?) -> Unit)? = null,
+        temperature: Float? = null,
+        maxTokens: Int? = null,
     ): String = withContext(Dispatchers.IO) {
         // Anthropic 格式：/v1/messages + x-api-key 头 + content_block_delta 流式；
         // 其余端点一律 OpenAI 兼容格式。
         if (isAnthropicEndpoint(baseUrl)) {
-            chatStreamAnthropic(baseUrl, apiKey, model, messages, onChunk, onCall)
+            chatStreamAnthropic(baseUrl, apiKey, model, messages, onChunk, onCall, temperature, maxTokens, onUsage)
         } else {
             val request = buildRequest(
                 endpoint = buildEndpoint(baseUrl),
                 apiKey = apiKey,
-                body = buildBody(model, messages, stream = true, baseUrl = baseUrl, deepThinking = deepThinking),
+                body = buildBody(
+                    model, messages, stream = true, baseUrl = baseUrl, deepThinking = deepThinking,
+                    temperature = temperature, maxTokens = maxTokens,
+                ),
                 accept = "text/event-stream",
             )
-            executeStreaming(request, onChunk, onCall, deepThinking)
+            executeStreaming(request, onChunk, onCall, deepThinking, onUsage)
         }
     }
 
@@ -88,7 +94,10 @@ class DirectLlmClient(
         apiKey: String,
         model: String,
         messages: List<ChatMessageDto>,
-    ): String = chatOnceInternal(baseUrl, apiKey, model, messages, responseFormatJson = false)
+        onUsage: ((LlmTokenUsage?) -> Unit)? = null,
+        temperature: Float? = null,
+        maxTokens: Int? = null,
+    ): String = chatOnceInternal(baseUrl, apiKey, model, messages, responseFormatJson = false, onUsage = onUsage, temperature = temperature, maxTokens = maxTokens)
 
     /** 非流式一次性对话，可请求结构化 JSON 输出。
      *  仅当 [responseFormatJson]=true 且供应商在白名单内时才注入 response_format=json_object，
@@ -107,10 +116,13 @@ class DirectLlmClient(
         model: String,
         messages: List<ChatMessageDto>,
         responseFormatJson: Boolean,
+        onUsage: ((LlmTokenUsage?) -> Unit)? = null,
+        temperature: Float? = null,
+        maxTokens: Int? = null,
     ): String = withContext(Dispatchers.IO) {
         // Anthropic 端点：/v1/messages 非流式（Anthropic 无 response_format，忽略该参数）。
         if (isAnthropicEndpoint(baseUrl)) {
-            return@withContext chatOnceAnthropic(baseUrl, apiKey, model, messages)
+            return@withContext chatOnceAnthropic(baseUrl, apiKey, model, messages, onUsage, temperature, maxTokens)
         }
         val request = buildRequest(
             endpoint = buildEndpoint(baseUrl),
@@ -122,6 +134,8 @@ class DirectLlmClient(
                 baseUrl = baseUrl,
                 deepThinking = false,
                 responseFormatJson = responseFormatJson && supportsJsonObjectResponse(baseUrl, model),
+                temperature = temperature,
+                maxTokens = maxTokens,
             ),
             accept = null,
         )
@@ -133,6 +147,9 @@ class DirectLlmClient(
                 if (!response.isSuccessful) {
                     throw httpFailure(response.code, raw, "chatOnce/openai")
                 }
+                // 非流式响应自带 usage：解析入统计（命中率观测，不依赖任何请求开关）
+                rawUsageObject(raw)?.let { parseOpenAiUsage(it) }
+                    ?.let { reportUsage("chatOnce/openai", it, onUsage) }
                 parseFullContent(raw)
             }
         } catch (e: IOException) {
@@ -154,6 +171,7 @@ class DirectLlmClient(
         onChunk: (String) -> Unit,
         onCall: ((Call) -> Unit)?,
         deepThinking: Boolean,
+        onUsage: ((LlmTokenUsage?) -> Unit)? = null,
     ): String {
         val call = client.newCall(request)
         onCall?.invoke(call)
@@ -162,6 +180,7 @@ class DirectLlmClient(
         val reasoningBuf = StringBuilder()
         val contentBuf = StringBuilder()
         var contentStarted = false
+        var lastUsage: LlmTokenUsage? = null
         try {
             call.execute().use { response ->
                 val body = response.body
@@ -180,6 +199,13 @@ class DirectLlmClient(
                         if (!line.startsWith("data:", ignoreCase = true)) continue
                         val data = line.substringAfter("data:").trim()
                         if (data == "[DONE]") break
+                        // usage 尾块（include_usage 语义 / DeepSeek 官方默认）：快门控避免逐 chunk JSON 解析开销
+                        if (lastUsage == null && data.contains("\"usage\"")) {
+                            parseSseDataObject(data)?.get("usage")
+                                ?.let { runCatching { it.jsonObject }.getOrNull() }
+                                ?.let { parseOpenAiUsage(it) }
+                                ?.let { lastUsage = it }
+                        }
                         val (content, reasoning) = parseDelta(data)
                         if (!reasoning.isNullOrEmpty() && deepThinking) reasoningBuf.append(reasoning)
                         if (!content.isNullOrEmpty()) {
@@ -191,6 +217,7 @@ class DirectLlmClient(
                 } else {
                     // 个别供应商忽略 stream:true，返回整段 JSON
                     val raw = body.string()
+                    lastUsage = rawUsageObject(raw)?.let { parseOpenAiUsage(it) } ?: lastUsage
                     val content = parseFullContent(raw)
                     if (content.isNotEmpty()) {
                         contentStarted = true
@@ -211,6 +238,7 @@ class DirectLlmClient(
             handle?.dispose()
             call.cancel()
         }
+        reportUsage("stream/openai", lastUsage, onUsage)
         return renderAccumulated(reasoningBuf, contentBuf, contentStarted)
     }
 
@@ -239,6 +267,8 @@ class DirectLlmClient(
         baseUrl: String,
         deepThinking: Boolean,
         responseFormatJson: Boolean = false,
+        temperature: Float? = null,
+        maxTokens: Int? = null,
     ): String {
         val obj = buildJsonObject {
             // trim：粘贴带入的首尾空白会让模型名不匹配被上游拒 400。
@@ -252,6 +282,14 @@ class DirectLlmClient(
                 }
             })
             put("stream", stream)
+            // 生成参数（温度/单次输出上限）：OpenAI 标准字段全端点兼容，无需白名单；
+            // null = 不发该字段、走服务商默认（设置页「自定义生成参数」开关关闭语义）。
+            if (temperature != null) put("temperature", temperature)
+            if (maxTokens != null) put("max_tokens", maxTokens)
+            // 流式用量：白名单端点请求 include_usage（OpenAI 协议下 usage 附着在末尾空 delta chunk）。
+            if (stream && supportsStreamedUsage(baseUrl)) {
+                put("stream_options", buildJsonObject { put("include_usage", true) })
+            }
             // 深度思考：对支持开关的已知 Qwen/SiliconFlow 端点注入 enable_thinking（开=请求思考，
             // 关=显式停止）。自定义端点/中转站一律不注入，避免未知参数被上游拒收 400。
             if (supportsThinkingToggle(baseUrl, model)) {
@@ -315,12 +353,25 @@ class DirectLlmClient(
             .build()
     }
 
-    /** Anthropic 请求体：顶层 system（取首个 system 消息）+ max_tokens + messages（仅 user/assistant）。 */
-    private fun buildAnthropicBody(
+    /**
+     * 是否支持 prompt caching（显式 cache_control 断点）。
+     * 仅官方 api.anthropic.com 域注入——Claude 的前缀缓存必须显式断点，但第三方中转对
+     * 「块数组 system」的兼容性不一，保守白名单防未知端点拒收。
+     */
+    internal fun supportsAnthropicPromptCache(baseUrl: String): Boolean =
+        baseUrl.lowercase().contains("api.anthropic.com")
+
+    /** Anthropic 请求体：顶层 system（取首个 system 消息）+ max_tokens + messages（仅 user/assistant）。
+     *  [baseUrl] 仅用于缓存断点白名单判定（internal 可见性供 JVM 单测直测形态契约）：
+     *  官方域下 system 折叠为单 text 块数组并附 ephemeral 断点——稳定头（人设+世界书静态区）
+     *  逐轮复用；其余端点保持纯字符串 system、零 cache_control。 */
+    internal fun buildAnthropicBody(
         model: String,
         messages: List<ChatMessageDto>,
         stream: Boolean,
         maxTokens: Int,
+        baseUrl: String = "",
+        temperature: Float? = null,
     ): String {
         val system = messages.filter { it.role == "system" }
             .joinToString("\n") { anthropicTextOf(it.content) }
@@ -333,7 +384,20 @@ class DirectLlmClient(
         return buildJsonObject {
             put("model", model.trim())
             put("max_tokens", maxTokens)
-            if (system.isNotBlank()) put("system", system)
+            if (temperature != null) put("temperature", temperature)
+            if (system.isNotBlank()) {
+                if (supportsAnthropicPromptCache(baseUrl)) {
+                    put("system", buildJsonArray {
+                        add(buildJsonObject {
+                            put("type", "text")
+                            put("text", system)
+                            put("cache_control", buildJsonObject { put("type", "ephemeral") })
+                        })
+                    })
+                } else {
+                    put("system", system)
+                }
+            }
             put("messages", buildJsonArray { apiMessages.forEach { add(it) } })
             put("stream", stream)
         }.toString()
@@ -389,25 +453,35 @@ class DirectLlmClient(
         messages: List<ChatMessageDto>,
         onChunk: (String) -> Unit,
         onCall: ((Call) -> Unit)?,
+        temperature: Float? = null,
+        maxTokens: Int? = null,
+        onUsage: ((LlmTokenUsage?) -> Unit)? = null,
     ): String {
         val request = buildAnthropicRequest(
             endpoint = buildAnthropicEndpoint(baseUrl),
             apiKey = apiKey,
-            body = buildAnthropicBody(model, messages, stream = true, maxTokens = ANTHROPIC_MAX_TOKENS),
+            // 显式输出上限覆盖内置 8192；未设置（null）保持原行为
+            body = buildAnthropicBody(
+                model, messages, stream = true,
+                maxTokens = maxTokens ?: ANTHROPIC_MAX_TOKENS,
+                baseUrl = baseUrl, temperature = temperature,
+            ),
             accept = "text/event-stream",
         )
-        return executeAnthropicStreaming(request, onChunk, onCall)
+        return executeAnthropicStreaming(request, onChunk, onCall, onUsage)
     }
 
     private suspend fun executeAnthropicStreaming(
         request: Request,
         onChunk: (String) -> Unit,
         onCall: ((Call) -> Unit)?,
+        onUsage: ((LlmTokenUsage?) -> Unit)? = null,
     ): String {
         val call = client.newCall(request)
         onCall?.invoke(call)
         val handle = coroutineContext[Job]?.invokeOnCompletion { call.cancel() }
         val contentBuf = StringBuilder()
+        var startUsage: LlmTokenUsage? = null
         try {
             call.execute().use { response ->
                 val body = response.body
@@ -426,6 +500,19 @@ class DirectLlmClient(
                         if (!line.startsWith("data:", ignoreCase = true)) continue
                         val data = line.substringAfter("data:").trim()
                         if (data == "[DONE]") break
+                        val obj = parseSseDataObject(data)
+                        when (obj?.get("type")?.jsonPrimitive?.contentOrNull) {
+                            // message_start.usage 携带 input/cache_read/cache_creation（缓存命中观测核心）
+                            "message_start" -> obj["message"]?.jsonObject?.get("usage")
+                                ?.let { runCatching { it.jsonObject }.getOrNull() }
+                                ?.let { parseAnthropicUsage(it) }
+                                ?.let { startUsage = it }
+                            // message_delta.usage 携带最终 output_tokens，覆盖起始值
+                            "message_delta" -> obj?.get("usage")
+                                ?.let { runCatching { it.jsonObject }.getOrNull() }
+                                ?.let { parseAnthropicUsage(it) }
+                                ?.let { startUsage = mergeAnthropicProgress(startUsage, it) }
+                        }
                         val text = parseAnthropicDelta(data)
                         if (!text.isNullOrEmpty()) contentBuf.append(text)
                         onChunk(contentBuf.toString())
@@ -434,6 +521,7 @@ class DirectLlmClient(
                 } else {
                     // 个别供应商忽略 stream:true，返回整段 JSON
                     val raw = body.string()
+                    rawUsageObject(raw)?.let { parseAnthropicUsage(it) }?.let { startUsage = it }
                     val content = parseAnthropicContent(raw)
                     if (content.isNotEmpty()) {
                         contentBuf.append(content)
@@ -453,6 +541,7 @@ class DirectLlmClient(
             handle?.dispose()
             call.cancel()
         }
+        reportUsage("stream/anthropic", startUsage, onUsage)
         return contentBuf.toString()
     }
 
@@ -479,11 +568,18 @@ class DirectLlmClient(
         apiKey: String,
         model: String,
         messages: List<ChatMessageDto>,
+        onUsage: ((LlmTokenUsage?) -> Unit)? = null,
+        temperature: Float? = null,
+        maxTokens: Int? = null,
     ): String {
         val request = buildAnthropicRequest(
             endpoint = buildAnthropicEndpoint(baseUrl),
             apiKey = apiKey,
-            body = buildAnthropicBody(model, messages, stream = false, maxTokens = ANTHROPIC_MAX_TOKENS),
+            body = buildAnthropicBody(
+                model, messages, stream = false,
+                maxTokens = maxTokens ?: ANTHROPIC_MAX_TOKENS,
+                baseUrl = baseUrl, temperature = temperature,
+            ),
             accept = null,
         )
         val call = client.newCall(request)
@@ -494,6 +590,8 @@ class DirectLlmClient(
                 if (!response.isSuccessful) {
                     throw httpFailure(response.code, raw, "chatOnce/anthropic")
                 }
+                rawUsageObject(raw)?.let { parseAnthropicUsage(it) }
+                    ?.let { reportUsage("chatOnce/anthropic", it, onUsage) }
                 parseAnthropicContent(raw)
             }
         } catch (e: IOException) {
@@ -530,6 +628,45 @@ class DirectLlmClient(
         delta["content"]?.jsonPrimitive?.contentOrNull
     } catch (e: Exception) {
         null
+    }
+
+    /** 解析一条 SSE data 负载为 JSON 对象；解析失败返回 null（用途字段探测，绝不上抛）。 */
+    private fun parseSseDataObject(data: String): JsonObject? = runCatching {
+        json.parseToJsonElement(data).jsonObject
+    }.getOrNull()
+
+    /** 取原始响应 JSON 的顶层 usage 对象；快门控（不含字面量即免解析）+ 结构校验。 */
+    private fun rawUsageObject(raw: String): JsonObject? {
+        if (!raw.contains("\"usage\"")) return null
+        return runCatching { json.parseToJsonElement(raw).jsonObject["usage"] }
+            .getOrNull()
+            ?.let { runCatching { it.jsonObject }.getOrNull() }
+    }
+
+    /**
+     * 汇报一次用量：进程级环形统计 + logcat 观测行 + 可选回调。
+     * 全零/空值直接忽略——供应商不回 usage 时保持绝对静默、零污染。
+     */
+    private fun reportUsage(
+        tag: String,
+        usage: LlmTokenUsage?,
+        onUsage: ((LlmTokenUsage?) -> Unit)?,
+    ) {
+        if (usage == null || (usage.promptTokens <= 0 && usage.completionTokens <= 0)) return
+        Log.i(
+            TAG,
+            "$tag usage prompt=${usage.promptTokens} completion=${usage.completionTokens} " +
+                "cachedPrefix=${usage.cachedTokens} cacheWrite=${usage.cacheWriteTokens}",
+        )
+        LlmUsageStats.record(usage)
+        onUsage?.invoke(usage)
+    }
+
+    /** Anthropic 流式进度合并：message_delta 只带最终 output_tokens，其余字段保留 message_start 值。 */
+    private fun mergeAnthropicProgress(base: LlmTokenUsage?, later: LlmTokenUsage?): LlmTokenUsage? = when {
+        base == null -> later
+        later == null -> base
+        else -> base.copy(completionTokens = later.completionTokens.takeIf { it > 0 } ?: base.completionTokens)
     }
 
     /** 从一条 SSE data 负载解析 (content, reasoning)；DeepSeek/Qwen 用 reasoning_content，部分用 reasoning。 */
@@ -575,6 +712,20 @@ class DirectLlmClient(
      *  生成器对返回内容仍严格解析，不依赖本白名单兜底。internal 供 JVM 单测直测
      *  （MockWebServer 地址恒为 localhost，端到端无法覆盖正向白名单路径）。 */
     internal fun supportsJsonObjectResponse(baseUrl: String, model: String): Boolean {
+        val b = baseUrl.lowercase()
+        return b.contains("api.openai.com") ||
+            b.contains("deepseek") ||
+            b.contains("dashscope") ||
+            b.contains("siliconflow")
+    }
+
+    /**
+     * 是否支持 stream_options.include_usage（流式用量回传，前缀缓存命中率观测的前提）。
+     * 与 [supportsJsonObjectResponse] 同族白名单：仅已知 OpenAI 兼容官方端点注入，
+     * 未知端点/中转站不注入——未知参数可能被上游拒收 400。命中观测不依赖此开关：
+     * 响应里带 usage 就解析（DeepSeek 官方默认返回 usage 尾块）。
+     */
+    internal fun supportsStreamedUsage(baseUrl: String): Boolean {
         val b = baseUrl.lowercase()
         return b.contains("api.openai.com") ||
             b.contains("deepseek") ||
