@@ -14,13 +14,16 @@ object MomentPromptBuilder {
 
     /**
      * 发圈任务的 user 指令。要求模型输出严格 JSON：`{"caption": "...", "imagePrompt": "..."}`
-     * ——caption 是要发的朋友圈文字（第一人称、口语化、贴近人设与近期聊天）；
+     * ——caption 是要发的朋友圈文字（第一人称、口语化、纯日常分享，不围绕博士展开）；
      * imagePrompt 是给生图模型的英文提示词（描述一张该角色会发的照片）。
+     *
+     * [mentionTarget] = 本条要 @ 的人（其他角色名或用户昵称；null = 本条不 @，由调用方随机掷点决定）。
      */
     fun buildPostUserMessage(
         characterName: String,
         recentChat: String,
         imageCount: Int,
+        mentionTarget: String? = null,
     ): String = buildString {
         append("你现在是 $characterName 本人，要发一条朋友圈。")
         if (recentChat.isNotBlank()) {
@@ -28,13 +31,30 @@ object MomentPromptBuilder {
         }
         append("\n\n要求：")
         append("\n1. 先输出严格 JSON（不要代码围栏、不要多余解释）：{\"caption\": \"朋友圈正文\", \"imagePrompt\": \"英文照片描述\"}")
-        append("\n2. caption 是朋友圈正文：第一人称、口语化、符合你的人设与心情，1~3 句话，不要话题标签，不要 @ 任何人，不要出现「朋友圈」三个字或任何元叙述。")
-        if (imageCount > 0) {
-            append("\n3. imagePrompt 是给生图模型的英文生图提示词：描述一张适合配这条朋友圈的照片（场景/光线/构图，写实照片风格），不要出现人物面部特写以外的奇怪元素，不要文字水印。")
+        append("\n2. caption 是朋友圈正文：第一人称、口语化、符合你的人设与心情的日常分享（今天做的事、心情、见闻、吃喝、吐槽等），1~3 句话，不要话题标签，不要出现「朋友圈」三个字或任何元叙述；不要提「博士」，不要写任何和博士有关的事（@ 好友写出名字除外）。")
+        if (mentionTarget.isNullOrBlank()) {
+            append("\n3. 这条不要 @ 任何人。")
         } else {
-            append("\n3. imagePrompt 填空字符串。")
+            append("\n3. 在正文里自然地 @ 一次「@$mentionTarget」：@ 后紧跟名字（不要加空格），全条只 @ 这一个人。")
         }
-        append("\n4. caption 不超过 ${AppConfig.Moment.CAPTION_MAX_CHARS} 字。")
+        if (imageCount > 0) {
+            append("\n4. imagePrompt 是给生图模型的英文生图提示词：描述一张适合配这条朋友圈的照片（场景/光线/构图，写实照片风格），不要出现人物面部特写以外的奇怪元素，不要文字水印。")
+        } else {
+            append("\n4. imagePrompt 填空字符串。")
+        }
+        append("\n5. caption 不超过 ${AppConfig.Moment.CAPTION_MAX_CHARS} 字。")
+    }
+
+    /**
+     * 发圈 system 区追加的「日常基调 + @ 规则」指令块（纯函数，JVM 可测）。
+     * 基调：纯日常、与博士无关；@ 的唯一例外是写出好友名字。
+     * [mentionTarget] 非空时附加本条 @ 指令（与 [buildPostUserMessage] 的 user 区约束一致）。
+     */
+    fun buildPostSystemDirective(mentionTarget: String?): String = buildString {
+        append("\n\n[朋友圈基调] 这是你自己的日常分享（今天做的事、心情、见闻、吃喝、吐槽等），与博士无关：不要提「博士」，不要写任何和博士有关的事；唯一例外是 @ 好友时写出 TA 的名字。")
+        if (!mentionTarget.isNullOrBlank()) {
+            append("\n[@ 好友] 本条朋友圈要 @ 一个人：$mentionTarget。写法：直接在正文里写「@$mentionTarget」（@ 后紧跟名字），自然融入句子，全条只 @ 这一个。")
+        }
     }
 
     /**

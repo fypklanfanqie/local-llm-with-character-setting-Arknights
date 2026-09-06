@@ -28,6 +28,39 @@ class MomentPromptBuilderTest {
     }
 
     @Test
+    fun postUserMessage_noMention_forbidsMentionAndDoctorContent() {
+        val msg = MomentPromptBuilder.buildPostUserMessage("德克萨斯", "", imageCount = 0, mentionTarget = null)
+        // 默认（未掷中 @）：不许 @ 任何人，且正文不得提博士
+        assertTrue(msg.contains("不要 @ 任何人"))
+        assertTrue(msg.contains("不要提「博士」"))
+        assertTrue(msg.contains("日常分享"))
+    }
+
+    @Test
+    fun postUserMessage_withMention_directsSingleMention() {
+        val msg = MomentPromptBuilder.buildPostUserMessage("德克萨斯", "", imageCount = 0, mentionTarget = "拉普兰德")
+        assertTrue(msg.contains("@拉普兰德"))
+        assertTrue(msg.contains("只 @ 这一个"))
+        assertFalse(msg.contains("不要 @ 任何人"))
+    }
+
+    @Test
+    fun postSystemDirective_noMention_dailyToneOnly() {
+        val directive = MomentPromptBuilder.buildPostSystemDirective(null)
+        assertTrue(directive.contains("与博士无关"))
+        assertTrue(directive.contains("不要提「博士」"))
+        assertFalse(directive.contains("[@ 好友]"))
+    }
+
+    @Test
+    fun postSystemDirective_withMention_namesTarget() {
+        val directive = MomentPromptBuilder.buildPostSystemDirective("能天使")
+        assertTrue(directive.contains("[@ 好友]"))
+        assertTrue(directive.contains("@能天使"))
+        assertTrue(directive.contains("与博士无关"))
+    }
+
+    @Test
     fun imageGenMessage_mentionsCountAndReference() {
         val msg = MomentPromptBuilder.buildImageGenUserMessage("a sunny park", 2)
         assertTrue(msg.contains("2 张"))

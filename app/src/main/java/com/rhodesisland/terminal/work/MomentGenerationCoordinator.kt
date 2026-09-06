@@ -14,6 +14,7 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
+import kotlin.random.Random
 
 /**
  * 朋友圈生成协调器：角色发一条朋友圈的完整链路（UI 手动触发与后台 Worker 共用）。
@@ -61,7 +62,9 @@ class MomentGenerationCoordinator(
         val apiConfig = settings.getApiConfigNow()
         if (apiConfig.apiKey.isBlank()) throw IllegalStateException("请先在设置中配置云端 AI API")
 
-        val captionPrompt = buildCaptionPrompt(characterId, character.name, character.systemPrompt, imageCount)
+        // 有的时候随机 @ 一个人（其他角色或用户）；其余帖子不 @。内容一律纯日常、不提博士。
+        val mentionTarget = rollMentionTarget(character.name)
+        val captionPrompt = buildCaptionPrompt(characterId, character.name, character.systemPrompt, imageCount, mentionTarget)
         val raw = withTimeout(AppConfig.Moment.GENERATE_TIMEOUT_MS) {
             directLlmClient.chatOnce(
                 baseUrl = apiConfig.baseUrl,
@@ -69,7 +72,7 @@ class MomentGenerationCoordinator(
                 model = apiConfig.model,
                 messages = listOf(
                     ChatMessageDto(role = "system", content = JsonPrimitive(captionPrompt)),
-                    ChatMessageDto(role = "user", content = JsonPrimitive(MomentPromptBuilder.buildPostUserMessage(character.name, "", imageCount))),
+                    ChatMessageDto(role = "user", content = JsonPrimitive(MomentPromptBuilder.buildPostUserMessage(character.name, "", imageCount, mentionTarget))),
                 ),
             )
         }
@@ -94,6 +97,7 @@ class MomentGenerationCoordinator(
                 )
             } catch (e: Exception) {
                 degraded = true
+                android.util.Log.w("MomentGen", "生图失败，降级纯文字发圈", e)
                 emptyList()
             }
         } else if (imageCount > 0 && !imageGenConfig.isConfigured) {
@@ -178,12 +182,13 @@ class MomentGenerationCoordinator(
         return AssetPathsHolder.pictureOf(characterId)
     }
 
-    /** 组装发圈 caption 的 system 提示词：人设 + 博士档案 + 世界观。 */
+    /** 组装发圈 caption 的 system 提示词：人设 + 日常基调（不提博士）+ 本条 @ 规则。 */
     private suspend fun buildCaptionPrompt(
         characterId: String,
         characterName: String,
         systemPrompt: String,
         imageCount: Int,
+        mentionTarget: String?,
     ): String = buildString {
         append(systemPrompt)
         append("\n\n[任务] 你要发一条朋友圈（微信 Moments）。输出严格 JSON：{\"caption\": \"...\", \"imagePrompt\": \"...\"}。")
@@ -192,9 +197,21 @@ class MomentGenerationCoordinator(
         } else {
             append("本次不带图，imagePrompt 填空字符串。")
         }
-        append("caption 贴合人设与近期聊天话题，第一人称，1~3 句，不含话题标签。")
+        append("caption 贴合人设，第一人称，1~3 句，不含话题标签。")
+        append(MomentPromptBuilder.buildPostSystemDirective(mentionTarget))
         append("\n[备注] 角色名：$characterName")
         append(com.rhodesisland.terminal.llm.OutputLanguage.ZH_DIRECTIVE)
+    }
+
+    /**
+     * 掷点决定本条朋友圈是否 @ 一个人：以 [AppConfig.Moment.MENTION_PROBABILITY_PERCENT] 的概率
+     * 从「其他角色 + 用户（昵称，未设置则『博士』）」里均匀随机选一个；否则返回 null（本条不 @）。
+     */
+    private suspend fun rollMentionTarget(posterName: String): String? {
+        if (Random.nextInt(100) >= AppConfig.Moment.MENTION_PROBABILITY_PERCENT) return null
+        val candidates = characterRepository.getAllNamesNow(excludeName = posterName) +
+            settings.getUserProfileNow().displayName.trim().ifBlank { "博士" }
+        return candidates.distinct().randomOrNull()
     }
 }
 

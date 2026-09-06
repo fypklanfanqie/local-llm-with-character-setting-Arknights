@@ -21,7 +21,7 @@ object MomentImageExtractor {
     private val bareUrlRegex = Regex("https?://[^\\s`\"'<>\\)\\]]+")
     private val dataUriRegex = Regex("data:image/[a-zA-Z0-9.+-]+;base64,([A-Za-z0-9+/=]+)")
     private val jsonUrlKey = Regex("\"(?:url|image_url|imageUrl)\"\\s*:\\s*\"([^\"]+)\"")
-    private val jsonB64Key = Regex("\"(?:b64_json|b64|base64|image_base64)\"\\s*:\\s*\"([A-Za-z0-9+/=]{64,})\"")
+    private val jsonB64Key = Regex("\"(?:b64_json|b64|base64|image_base64|image_result|result)\"\\s*:\\s*\"([A-Za-z0-9+/=]{64,})\"")
 
     /** 从原始回复提取图片引用；找不到任何图片返回空列表。 */
     fun extract(raw: String): List<ImageRef> {

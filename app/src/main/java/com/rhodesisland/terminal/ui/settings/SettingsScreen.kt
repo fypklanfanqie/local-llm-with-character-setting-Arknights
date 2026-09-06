@@ -1905,6 +1905,11 @@ private fun MomentsSection(container: AppContainer, scope: CoroutineScope) {
     }
     LaunchedEffect(saved) { if (saved) { delay(2000); saved = false } }
 
+    // 测试连接：先保存当前填写的生图配置（未保存也测），再立刻让一位发圈角色真实发一条朋友圈，
+    // 全链路验证「云端 LLM 文案 + 生图 API 出图」。结果（含失败原因）当场显示在按钮下方。
+    var probeRunning by remember { mutableStateOf(false) }
+    var probeResult by remember { mutableStateOf<String?>(null) }
+
     // 自动发圈
     val autoEnabled by settings.momentAutoConfig.collectAsState(initial = com.rhodesisland.terminal.data.model.MomentAutoConfig())
     val characters by container.characterRepository.characters.collectAsState(initial = emptyList())
@@ -1974,7 +1979,7 @@ private fun MomentsSection(container: AppContainer, scope: CoroutineScope) {
             }
 
             Text(
-                "生图 API（OpenAI 聊天格式出图，支持中转站如 nano-banana / gpt-4o-image 类模型；生图与对话模型分开配置，留空则角色朋友圈为纯文字）。",
+                "生图 API（自动适配三类端点：OpenAI 聊天格式出图、gpt-image 类 Responses 端点、任务制媒体 API 如 lk888 的 /media/generate；Base URL 一般填到 /v1 或 /api/v1；生图与对话模型分开配置，留空则角色朋友圈为纯文字）。",
                 color = scheme.onSurfaceVariant, fontSize = 11.sp,
             )
             FieldLabel("生图服务地址")
@@ -1996,6 +2001,66 @@ private fun MomentsSection(container: AppContainer, scope: CoroutineScope) {
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = scheme.primary.copy(alpha = 0.16f)),
                 ) { Text(if (saved) "✓ 已保存" else "保存生图配置", color = scheme.primary, fontSize = 13.sp) }
+                // 测试连接：按一下 = 保存当前配置 + 立刻真实发一条朋友圈（验证云端连接）
+                TextButton(
+                    onClick = {
+                        if (!isCloud) {
+                            probeResult = "连接失败：仅云端 AI 模式可用，请先切换为云端 AI"
+                            return@TextButton
+                        }
+                        val charId = autoEnabled.characterIds.firstOrNull() ?: characters.firstOrNull()?.id
+                        if (charId == null) {
+                            probeResult = "连接失败：请先选择发圈角色"
+                            return@TextButton
+                        }
+                        val charName = characters.firstOrNull { it.id == charId }?.name ?: "角色"
+                        probeRunning = true
+                        probeResult = null
+                        scope.launch {
+                            try {
+                                settings.setMomentImageGenConfig(
+                                    com.rhodesisland.terminal.data.model.MomentImageGenConfig(
+                                        baseUrl = baseUrl, apiKey = apiKey, model = model,
+                                    ),
+                                )
+                                saved = true
+                                // 生图 API 齐全则带 1 张图（全链路验证）；留空则纯文字
+                                val imageCount = if (com.rhodesisland.terminal.data.model.MomentImageGenConfig(baseUrl, apiKey, model).isConfigured) 1 else 0
+                                val post = container.momentGenerationCoordinator.generateAndPost(charId, imageCount)
+                                probeResult = when {
+                                    imageCount > 0 && post.degradedToTextOnly ->
+                                        "连接成功：「$charName」已发一条朋友圈（生图失败已降级纯文字，请检查生图 API 配置）"
+                                    imageCount > 0 ->
+                                        "连接成功：「$charName」已发一条带图朋友圈，去朋友圈页看看吧"
+                                    else ->
+                                        "连接成功：「$charName」已发一条纯文字朋友圈，去朋友圈页看看吧"
+                                }
+                            } catch (e: kotlinx.coroutines.CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                android.util.Log.w("SettingsScreen", "朋友圈测试连接失败", e)
+                                probeResult = "连接失败：${e.toUserErrorMessage()}"
+                            } finally {
+                                probeRunning = false
+                            }
+                        }
+                    },
+                    enabled = !probeRunning,
+                ) { Text(if (probeRunning) "测试中…" else "测试连接", fontSize = 12.sp) }
+            }
+            if (probeResult == null) {
+                Text(
+                    "点「测试连接」会保存当前生图配置，并立刻让一位发圈角色真实发一条朋友圈（生图 API 已填则带图），当场验证连接是否可用。",
+                    color = scheme.onSurfaceVariant, fontSize = 11.sp,
+                )
+            }
+            probeResult?.let { result ->
+                Text(
+                    result,
+                    color = if (result.startsWith("连接成功")) scheme.tertiary else scheme.error,
+                    fontSize = 11.sp,
+                    lineHeight = 15.sp,
+                )
             }
         }
     }

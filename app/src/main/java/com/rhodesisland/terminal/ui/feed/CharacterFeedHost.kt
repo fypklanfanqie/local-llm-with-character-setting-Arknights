@@ -21,9 +21,6 @@ import com.rhodesisland.terminal.AppContainer
 import com.rhodesisland.terminal.ui.affinity.AffinityEventsScreen
 import com.rhodesisland.terminal.ui.affinity.AffinityGiftsScreen
 import com.rhodesisland.terminal.ui.affinity.AffinityScreen
-import com.rhodesisland.terminal.ui.novel.NovelEditorScreen
-import com.rhodesisland.terminal.ui.novel.NovelHomeScreen
-import com.rhodesisland.terminal.ui.novel.NovelStoryScreen
 
 private const val FEED_AFFINITY_ROUTE = "feed_affinity/{characterId}"
 private const val FEED_AFFINITY_GIFTS_ROUTE = "feed_affinity_gifts/{characterId}"
@@ -63,49 +60,6 @@ fun CharacterFeedHost(
                 onOpenNovel = onOpenNovel,
                 onOpenAffinity = { characterId -> navController.navigate(feedAffinityRoute(characterId)) },
             )
-        }
-        composable(FeedRoute.NOVEL_HOME) {
-            Box(Modifier.fillMaxSize().background(Color.Transparent).padding(bottom = bottomBarHeight)) {
-                NovelHomeScreen(
-                    container = container,
-                    bottomBarHeight = bottomBarHeight,
-                    onBack = { navController.popBackStack() },
-                    onOpenStory = { storyId ->
-                        navController.navigate(FeedRoute.novelStoryRoute(storyId)) { launchSingleTop = true }
-                    },
-                )
-            }
-        }
-        composable(
-            route = FeedRoute.NOVEL_STORY,
-            arguments = listOf(navArgument("storyId") { type = NavType.LongType }),
-        ) { entry ->
-            val storyId = entry.arguments?.getLong("storyId") ?: 0L
-            Box(Modifier.fillMaxSize().background(Color.Transparent).padding(bottom = bottomBarHeight)) {
-                NovelStoryScreen(
-                    container = container,
-                    storyId = storyId,
-                    bottomBarHeight = bottomBarHeight,
-                    onBack = { navController.popBackStack() },
-                    onOpenChapter = { chapterId ->
-                        navController.navigate(FeedRoute.novelEditorRoute(chapterId)) { launchSingleTop = true }
-                    },
-                )
-            }
-        }
-        composable(
-            route = FeedRoute.NOVEL_EDITOR,
-            arguments = listOf(navArgument("chapterId") { type = NavType.LongType }),
-        ) { entry ->
-            val chapterId = entry.arguments?.getLong("chapterId") ?: 0L
-            Box(Modifier.fillMaxSize().background(Color.Transparent).padding(bottom = bottomBarHeight)) {
-                NovelEditorScreen(
-                    container = container,
-                    chapterId = chapterId,
-                    bottomBarHeight = bottomBarHeight,
-                    onBack = { navController.popBackStack() },
-                )
-            }
         }
         composable(
             route = FEED_AFFINITY_ROUTE,

@@ -61,6 +61,9 @@ import com.rhodesisland.terminal.ui.groupchat.GroupListScreen
 import com.rhodesisland.terminal.ui.groupchat.GroupNavigationBus
 import com.rhodesisland.terminal.ui.moment.MomentsScreen
 import com.rhodesisland.terminal.ui.models.ModelManagerScreen
+import com.rhodesisland.terminal.ui.novel.NovelEditorScreen
+import com.rhodesisland.terminal.ui.novel.NovelHomeScreen
+import com.rhodesisland.terminal.ui.novel.NovelStoryScreen
 import com.rhodesisland.terminal.ui.music.MusicScreen
 import com.rhodesisland.terminal.ui.lorebook.LorebookDetailScreen
 import com.rhodesisland.terminal.ui.lorebook.LorebookEntryEditScreen
@@ -266,6 +269,43 @@ fun AppNavGraph(container: AppContainer, initialChatOpen: Boolean = false) {
                     composable(FeedRoute.MOMENTS) {
                         MomentsScreen(
                             container = container,
+                            bottomBarHeight = bottomBarHeight,
+                            onBack = { feedNavController.popBackStack() },
+                        )
+                    }
+                    composable(FeedRoute.NOVEL_HOME) {
+                        NovelHomeScreen(
+                            container = container,
+                            bottomBarHeight = bottomBarHeight,
+                            onBack = { feedNavController.popBackStack() },
+                            onOpenStory = { storyId ->
+                                feedNavController.navigate(FeedRoute.novelStoryRoute(storyId)) { launchSingleTop = true }
+                            },
+                        )
+                    }
+                    composable(
+                        route = FeedRoute.NOVEL_STORY,
+                        arguments = listOf(navArgument("storyId") { type = NavType.LongType }),
+                    ) { entry ->
+                        val storyId = entry.arguments?.getLong("storyId") ?: 0L
+                        NovelStoryScreen(
+                            container = container,
+                            storyId = storyId,
+                            bottomBarHeight = bottomBarHeight,
+                            onBack = { feedNavController.popBackStack() },
+                            onOpenChapter = { chapterId ->
+                                feedNavController.navigate(FeedRoute.novelEditorRoute(chapterId)) { launchSingleTop = true }
+                            },
+                        )
+                    }
+                    composable(
+                        route = FeedRoute.NOVEL_EDITOR,
+                        arguments = listOf(navArgument("chapterId") { type = NavType.LongType }),
+                    ) { entry ->
+                        val chapterId = entry.arguments?.getLong("chapterId") ?: 0L
+                        NovelEditorScreen(
+                            container = container,
+                            chapterId = chapterId,
                             bottomBarHeight = bottomBarHeight,
                             onBack = { feedNavController.popBackStack() },
                         )

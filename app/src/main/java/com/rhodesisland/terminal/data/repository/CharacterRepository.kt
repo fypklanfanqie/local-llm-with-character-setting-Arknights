@@ -25,6 +25,17 @@ class CharacterRepository(private val settings: SettingsRepository) {
         return settings.getCustomCharactersNow().firstOrNull { it.id == id }
     }
 
+    /**
+     * 全部角色名（预设 + 自定义，去重；[excludeName] 用于排除发帖者本人）。
+     * 朋友圈 @ 候选等社交场景用；纯查询，JVM 可测。
+     */
+    suspend fun getAllNamesNow(excludeName: String? = null): List<String> {
+        val names = settings.getCustomCharactersNow().map { it.name.trim() } +
+            Characters.getOrderedList().map { it.name.trim() }
+        val excluded = excludeName?.trim()
+        return names.filter { it.isNotEmpty() && it != excluded }.distinct()
+    }
+
     suspend fun addCustom(character: Character) {
         // 原子读-改-写，避免并发导入/新建时 lost update
         settings.updateCustomCharacters { current ->

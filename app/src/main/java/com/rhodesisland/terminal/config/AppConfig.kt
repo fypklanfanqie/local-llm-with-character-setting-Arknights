@@ -163,6 +163,8 @@ object AppConfig {
         const val MAX_IMAGES = 3
         /** 文案长度上限（提示词同步约束；存储再兜底截断）。 */
         const val CAPTION_MAX_CHARS = 500
+        /** 发圈随机 @ 概率（%）：约此比例的帖子会随机 @ 一个人（其他角色或用户），其余不 @。 */
+        const val MENTION_PROBABILITY_PERCENT = 30
         /** 生图输出最大字节数（Base64 落盘前的解码上限）。 */
         const val MAX_IMAGE_BYTES = 12L * 1024 * 1024
     }

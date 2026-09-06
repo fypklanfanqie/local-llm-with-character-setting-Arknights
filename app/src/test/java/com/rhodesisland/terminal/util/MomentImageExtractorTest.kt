@@ -40,6 +40,15 @@ class MomentImageExtractorTest {
     }
 
     @Test
+    fun extract_responsesResultField() {
+        // Responses API（gpt-image-* 类）的图片输出形态：output[].result 为 base64
+        val b64 = "iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg=="
+        val refs = MomentImageExtractor.extract("""{"output":[{"type":"image_generation_call","result":"$b64"}],"usage":{}}""")
+        assertEquals(1, refs.size)
+        assertEquals(b64, refs[0].base64)
+    }
+
+    @Test
     fun extract_dataUri() {
         val b64 = "iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg=="
         val refs = MomentImageExtractor.extract("结果：data:image/png;base64,$b64 请查收")
