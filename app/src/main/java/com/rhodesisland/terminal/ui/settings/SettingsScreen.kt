@@ -1516,8 +1516,9 @@ private fun UserProfileSection(container: AppContainer, scope: CoroutineScope) {
     val context = LocalContext.current
     val settings = container.settingsRepository
 
-    // 表单语义：头像选择/清除先挂起（pending），人设/关系文本本地编辑，全部在「保存」时原子落盘（仿 Seedance 分区）。
+    // 表单语义：头像选择/清除先挂起（pending），昵称/人设/关系文本本地编辑，全部在「保存」时原子落盘（仿 Seedance 分区）。
     var avatarUri by remember { mutableStateOf("") }
+    var displayName by remember { mutableStateOf("") }
     var persona by remember { mutableStateOf("") }
     var relationship by remember { mutableStateOf("") }
     var pendingAvatarUri by remember { mutableStateOf<Uri?>(null) }
@@ -1527,6 +1528,7 @@ private fun UserProfileSection(container: AppContainer, scope: CoroutineScope) {
     LaunchedEffect(Unit) {
         val p = settings.getUserProfileNow()
         avatarUri = p.avatarPath
+        displayName = p.displayName
         persona = p.persona
         relationship = p.relationship
     }
@@ -1590,6 +1592,13 @@ private fun UserProfileSection(container: AppContainer, scope: CoroutineScope) {
                 }
             }
             avatarError?.let { Text(it, color = scheme.error, fontSize = 10.sp) }
+            FieldLabel("显示昵称（朋友圈等社交场景）")
+            GlassInputField(
+                value = displayName,
+                onValueChange = { displayName = it },
+                placeholder = "留空则显示「我」",
+                singleLine = true,
+            )
             FieldLabel("人设（我是谁）")
             GlassInputField(
                 value = persona,
@@ -1635,6 +1644,7 @@ private fun UserProfileSection(container: AppContainer, scope: CoroutineScope) {
                 settings.setUserProfileConfig(
                     UserProfileConfig(
                         avatarPath = finalAvatar,
+                        displayName = displayName.trim(),
                         persona = persona.trim(),
                         relationship = relationship.trim(),
                     )

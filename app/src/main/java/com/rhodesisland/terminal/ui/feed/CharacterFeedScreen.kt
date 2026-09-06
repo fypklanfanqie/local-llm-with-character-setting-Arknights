@@ -68,6 +68,13 @@ object FeedRoute {
     const val GROUP_CHAT = "group_chat/{groupId}"
     /** 朋友圈（仿微信 Moments）。 */
     const val MOMENTS = "moments"
+    /** 小说模式：故事列表 / 章节管理 / 对白编辑器。 */
+    const val NOVEL_HOME = "novel_home"
+    const val NOVEL_STORY = "novel_story/{storyId}"
+    const val NOVEL_EDITOR = "novel_editor/{chapterId}"
+
+    fun novelStoryRoute(storyId: Long): String = "novel_story/$storyId"
+    fun novelEditorRoute(chapterId: Long): String = "novel_editor/$chapterId"
 
     fun groupChatRoute(groupId: Long): String = "group_chat/$groupId"
 }
@@ -89,6 +96,8 @@ fun CharacterFeedScreen(
     onOpenGroupChat: () -> Unit = {},
     /** 进入「朋友圈」（顶栏玻璃按钮，替代原「全部角色」入口；角色页仍可从底部 Tab 进）。 */
     onOpenMoments: () -> Unit = {},
+    /** 进入「小说」模式（卡片底部操作按钮，好感右侧）。 */
+    onOpenNovel: () -> Unit = {},
     /** 进入好感度独立页面（由 [CharacterFeedHost] 承载）。 */
     onOpenAffinity: (String) -> Unit = {},
     /** 当前落定立绘的主题色上报（供 dock 栏等全局着色）；页面销毁时应回传 null 复位。 */
@@ -194,6 +203,7 @@ fun CharacterFeedScreen(
                 },
                 onPersona = { showPersona = char },
                 onAffinity = { onOpenAffinity(char.id) },
+                onNovel = onOpenNovel,
                 onVoice = container.assetRepository.getVoice(char.id).takeIf { it.isNotBlank() }?.let { url ->
                     { scope.launch { container.audioManager.playVoice(url, volume) } }
                 },

@@ -166,4 +166,19 @@ object AppConfig {
         /** 生图输出最大字节数（Base64 落盘前的解码上限）。 */
         const val MAX_IMAGE_BYTES = 12L * 1024 * 1024
     }
+
+    // ===== 小说模式（仿猫箱：故事→章节→对白编辑器 + AI 续写，仅云端）=====
+    object Novel {
+        /** 续写时带入的已有正文行数窗口（最近 N 行）。 */
+        const val MAX_CONTEXT_LINES = 80
+        /** 单次续写行数下限/上限（写入提示词）。 */
+        const val CONTINUE_MIN_LINES = 6
+        const val CONTINUE_MAX_LINES = 10
+        /** 角色卡/主控人设写入 system 的截断长度。 */
+        const val PERSONA_MAX_CHARS = 300
+        /** 单行对白长度上限（存储兜底截断）。 */
+        const val LINE_MAX_CHARS = 2_000
+        /** 每话最多行数（防失控膨胀）。 */
+        const val MAX_LINES_PER_CHAPTER = 500
+    }
 }

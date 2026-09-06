@@ -25,6 +25,7 @@ import com.rhodesisland.terminal.data.repository.ConversationRepository
 import com.rhodesisland.terminal.data.repository.DocumentRepository
 import com.rhodesisland.terminal.data.repository.GroupChatRepository
 import com.rhodesisland.terminal.data.repository.MomentRepository
+import com.rhodesisland.terminal.data.repository.NovelRepository
 import com.rhodesisland.terminal.data.remote.MomentImageGenClient
 import com.rhodesisland.terminal.data.repository.MusicLibraryRepository
 import com.rhodesisland.terminal.data.repository.SeedanceVideoRepository
@@ -118,6 +119,11 @@ class AppContainer(private val context: Context) {
     }
     val momentImageGenClient: MomentImageGenClient by lazy {
         MomentImageGenClient(context, MomentImageGenClient.defaultHttpClient())
+    }
+
+    // 小说模式：故事/章节/脚本行落库（仅云端生成）。
+    val novelRepository: NovelRepository by lazy {
+        NovelRepository(database.novelDao())
     }
 
     /** 朋友圈生成协调器（角色发帖 + 评论回复；UI 与后台 Worker 共用）。 */

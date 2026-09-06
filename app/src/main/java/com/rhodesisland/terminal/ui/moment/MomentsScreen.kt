@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -100,8 +101,8 @@ fun MomentsScreen(
                 MomentsHeader(
                     coverPath = coverPath,
                     userAvatar = state.userAvatar,
+                    userDisplayName = state.userDisplayName,
                     onPickCover = viewModel::setCoverFromUri,
-                    onCameraClick = { showAiPostDialog = true },
                 )
             }
             item { Spacer(Modifier.height(8.dp)) }
@@ -120,6 +121,7 @@ fun MomentsScreen(
                 MomentPostCard(
                     post = post,
                     nowMs = state.nowMs,
+                    userDisplayName = state.userDisplayName,
                     isReplying = state.generating.replyingPostId == post.post.id,
                     onToggleLike = { viewModel.toggleLike(post.post.id) },
                     onComment = { text -> viewModel.commentOnPost(post.post, text) },
@@ -129,10 +131,11 @@ fun MomentsScreen(
             item { Spacer(Modifier.height(bottomBarHeight + 24.dp)) }
         }
 
-        // 顶栏（覆盖在封面上）
+        // 顶栏（覆盖在封面上；statusBarsPadding 防与系统状态栏时钟/图标重叠）
         Row(
             Modifier
                 .fillMaxWidth()
+                .statusBarsPadding()
                 .align(Alignment.TopCenter)
                 .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -188,13 +191,13 @@ fun MomentsScreen(
     }
 }
 
-/** 封面 + 右下角「我」头像；长按封面换图。 */
+/** 封面 + 右下角昵称头像；左下「更换封面」按钮 + 长按快捷。 */
 @Composable
 private fun MomentsHeader(
     coverPath: String,
     userAvatar: String,
+    userDisplayName: String,
     onPickCover: (Uri) -> Unit,
-    onCameraClick: () -> Unit,
 ) {
     val coverPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         uri?.let(onPickCover)
@@ -214,7 +217,7 @@ private fun MomentsHeader(
                 contentScale = ContentScale.Crop,
             )
         }
-        // 长按封面换图（微信同款交互）
+        // 长按封面换图（微信同款隐藏快捷）
         Box(
             Modifier
                 .fillMaxSize()
@@ -224,19 +227,41 @@ private fun MomentsHeader(
                     })
                 },
         )
+        // 左下角显式「更换封面」入口
+        Row(
+            Modifier
+                .align(Alignment.BottomStart)
+                .padding(start = 16.dp, bottom = 12.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(Color(0x66000000))
+                .clickable {
+                    coverPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                }
+                .padding(horizontal = 10.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Filled.PhotoCamera,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(13.dp),
+            )
+            Spacer(Modifier.width(4.dp))
+            Text("更换封面", color = Color.White.copy(alpha = 0.92f), fontSize = 11.sp)
+        }
         // 右下角：昵称 + 头像（微信位置）
         Row(
             Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("我", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Medium)
+            Text(userDisplayName, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Medium)
             Spacer(Modifier.width(12.dp))
             Box(
                 Modifier.size(64.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF2A303A)),
                 contentAlignment = Alignment.Center,
             ) {
                 if (userAvatar.isBlank()) {
-                    Text("我", color = Color.White, fontSize = 24.sp)
+                    Text(userDisplayName.take(1), color = Color.White, fontSize = 24.sp)
                 } else {
                     AsyncImage(
                         model = userAvatar,
@@ -255,6 +280,7 @@ private fun MomentsHeader(
 private fun MomentPostCard(
     post: PostUi,
     nowMs: Long,
+    userDisplayName: String,
     isReplying: Boolean,
     onToggleLike: () -> Unit,
     onComment: (String) -> Unit,
@@ -418,7 +444,7 @@ private fun MomentPostCard(
                             )
                         }
                         post.comments.forEach { comment ->
-                            val commenterName = if (comment.authorType == MomentRepository.AUTHOR_USER) "我" else comment.characterId?.let { post.authorName } ?: ""
+                            val commenterName = if (comment.authorType == MomentRepository.AUTHOR_USER) userDisplayName else comment.characterId?.let { post.authorName } ?: ""
                             Text(
                                 buildString {
                                     append(commenterName)

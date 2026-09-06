@@ -182,6 +182,7 @@ class SettingsStore(
 
         // ===== 博士档案（我的形象）=====
         val USER_AVATAR_PATH = stringPreferencesKey("user_avatar_path")
+        val USER_DISPLAY_NAME = stringPreferencesKey("user_display_name")
         val USER_PERSONA = stringPreferencesKey("user_persona")
         val USER_RELATIONSHIP = stringPreferencesKey("user_relationship")
 
@@ -1080,10 +1081,11 @@ class SettingsStore(
     }
 
     // ===== 博士档案（我的形象）=====
-    /** 博士档案聚合（头像路径/人设/关系）：单 map 读取，单次原子写回。 */
+    /** 博士档案聚合（昵称/头像路径/人设/关系）：单 map 读取，单次原子写回。 */
     val userProfile: Flow<UserProfileConfig> = dataStore.data.map { p ->
         UserProfileConfig(
             avatarPath = p[Keys.USER_AVATAR_PATH] ?: "",
+            displayName = p[Keys.USER_DISPLAY_NAME] ?: "",
             persona = p[Keys.USER_PERSONA] ?: "",
             relationship = p[Keys.USER_RELATIONSHIP] ?: "",
         )
@@ -1093,6 +1095,7 @@ class SettingsStore(
         dataStore.edit { p ->
             if (config.avatarPath.isBlank()) p.remove(Keys.USER_AVATAR_PATH)
             else p[Keys.USER_AVATAR_PATH] = config.avatarPath
+            p[Keys.USER_DISPLAY_NAME] = config.displayName.trim()
             p[Keys.USER_PERSONA] = config.persona
             p[Keys.USER_RELATIONSHIP] = config.relationship
         }

@@ -21,6 +21,7 @@ import com.rhodesisland.terminal.util.MarkdownParser
 import com.rhodesisland.terminal.util.PromptWindowAnchor
 import com.rhodesisland.terminal.util.toUserErrorMessage
 import com.rhodesisland.terminal.llm.LorebookEngine
+import com.rhodesisland.terminal.llm.OutputLanguage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -781,7 +782,7 @@ class ChatViewModel(
                 val lorebookStaticHead = lorebookActivation?.staticHead.orEmpty()
                 val lorebookTailText = lorebookActivation?.tailInjection.orEmpty()
                 val apiMessages = buildList {
-                    add(ChatMessage(role = "system", content = lorebookStaticHead + char.systemPrompt + worldviewDirective + eventDirective + userDirective))
+                    add(ChatMessage(role = "system", content = lorebookStaticHead + char.systemPrompt + worldviewDirective + eventDirective + userDirective + OutputLanguage.ZH_DIRECTIVE))
                     if (isCloudProvider && summaryText.isNotBlank()) {
                         // 【前情提要】独立第二段 system（滚动摘要，单聊云端）：插在人设之后、历史之前
                         // = 常驻稳定前缀的一部分；仅折叠那一刻变一次，其余轮次逐字节稳定 → 缓存锚。

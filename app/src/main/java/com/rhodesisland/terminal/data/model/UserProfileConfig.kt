@@ -4,6 +4,7 @@ package com.rhodesisland.terminal.data.model
  * 博士档案（「设置 → 我的形象」）。
  *
  * - [avatarPath]：博士头像内部存储路径（经 [com.rhodesisland.terminal.util.UserProfileImageStore] 落盘；空=未设置）。
+ * - [displayName]：显示昵称（朋友圈等社交场景用；空 = 回退「我」）。
  * - [persona]：博士的人设（一段文本）。
  * - [relationship]：博士与角色之间的关系（全局一段文本）。
  *
@@ -14,9 +15,13 @@ package com.rhodesisland.terminal.data.model
  */
 data class UserProfileConfig(
     val avatarPath: String = "",
+    val displayName: String = "",
     val persona: String = "",
     val relationship: String = "",
 ) {
+    /** 朋友圈等社交场景的显示名：自定义昵称优先，否则「我」。 */
+    val displayOrMe: String get() = displayName.trim().ifBlank { "我" }
+
     /**
      * 生成注入用指令块；全部字段为空时返回空串（调用方跳过注入）。
      * 纯函数，JVM 可测。
@@ -25,6 +30,7 @@ data class UserProfileConfig(
         if (persona.isBlank() && relationship.isBlank()) return ""
         return buildString {
             append("\n[用户信息] 用户是罗德岛的博士。")
+            if (displayName.isNotBlank()) append("博士的名字：", displayName.trim(), "。")
             if (persona.isNotBlank()) append("人设：", persona.trim(), "。")
             if (relationship.isNotBlank()) append("博士与你的关系：", relationship.trim(), "。")
             append("请在对话中自然体现以上设定。")

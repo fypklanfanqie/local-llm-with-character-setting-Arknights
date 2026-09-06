@@ -53,6 +53,8 @@ class MomentsViewModel(
     data class UiState(
         val posts: List<PostUi> = emptyList(),
         val userAvatar: String = "",
+        /** 朋友圈显示名（设置「我的形象」自定义昵称；空=「我」）。 */
+        val userDisplayName: String = "我",
         val isCloud: Boolean = true,
         val generating: Generating = Generating(),
         val errorMessage: String? = null,
@@ -89,7 +91,7 @@ class MomentsViewModel(
                     likedByUser = row.likes.any { it.characterId == null },
                     likeCharacterIds = row.likes.mapNotNull { it.characterId },
                     authorName = when {
-                        !isCharacter -> "我"
+                        !isCharacter -> profile.displayOrMe
                         char != null -> char.name
                         else -> "已注销角色"
                     },
@@ -104,6 +106,7 @@ class MomentsViewModel(
                 )
             },
             userAvatar = profile.avatarPath,
+            userDisplayName = profile.displayOrMe,
             isCloud = provider == ChatProviderType.CLOUD,
             generating = runtime.gen,
             errorMessage = runtime.err,

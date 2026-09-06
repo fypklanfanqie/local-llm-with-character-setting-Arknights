@@ -131,6 +131,7 @@ class MomentGenerationCoordinator(
         val system = buildString {
             append(character.systemPrompt)
             append(settings.getUserProfileNow().toDirectiveText())
+            append(com.rhodesisland.terminal.llm.OutputLanguage.ZH_DIRECTIVE)
         }
         val raw = withTimeout(AppConfig.Moment.GENERATE_TIMEOUT_MS) {
             directLlmClient.chatOnce(
@@ -193,6 +194,7 @@ class MomentGenerationCoordinator(
         }
         append("caption 贴合人设与近期聊天话题，第一人称，1~3 句，不含话题标签。")
         append("\n[备注] 角色名：$characterName")
+        append(com.rhodesisland.terminal.llm.OutputLanguage.ZH_DIRECTIVE)
     }
 }
 

@@ -289,8 +289,11 @@ interface ConversationDao {
         MomentPostEntity::class,
         MomentCommentEntity::class,
         MomentLikeEntity::class,
+        NovelStoryEntity::class,
+        NovelChapterEntity::class,
+        NovelLineEntity::class,
     ],
-    version = 14,
+    version = 15,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -300,6 +303,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun affinityDao(): AffinityDao
     abstract fun specialEventMemoryDao(): SpecialEventMemoryDao
     abstract fun momentDao(): MomentDao
+    abstract fun novelDao(): NovelDao
 
     companion object {
         @Volatile
@@ -658,6 +662,54 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v14 -> v15：小说模式（仿猫箱）。三张新表，纯新增、非破坏式：
+         *
+         * - novel_story：故事（成员/NPC/主控均为 JSON 列或文本列）；
+         * - novel_chapter：章节（话），orderIndex 排序；
+         * - novel_line：脚本行，lineOrder 排序，speakerType 三态。
+         */
+        val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `novel_story` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`title` TEXT NOT NULL, " +
+                        "`background` TEXT NOT NULL, " +
+                        "`memberIdsJson` TEXT NOT NULL, " +
+                        "`customNpcsJson` TEXT NOT NULL, " +
+                        "`protagonistName` TEXT NOT NULL, " +
+                        "`protagonistPersona` TEXT NOT NULL, " +
+                        "`createdAt` INTEGER NOT NULL, " +
+                        "`updatedAt` INTEGER NOT NULL)"
+                )
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `novel_chapter` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`storyId` INTEGER NOT NULL, " +
+                        "`orderIndex` INTEGER NOT NULL, " +
+                        "`title` TEXT NOT NULL, " +
+                        "`summary` TEXT NOT NULL, " +
+                        "`opening` TEXT NOT NULL, " +
+                        "`requirements` TEXT NOT NULL, " +
+                        "`createdAt` INTEGER NOT NULL, " +
+                        "`updatedAt` INTEGER NOT NULL)"
+                )
+                database.execSQL("CREATE INDEX IF NOT EXISTS `index_novel_chapter_storyId_orderIndex` ON `novel_chapter` (`storyId`, `orderIndex`)")
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `novel_line` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`chapterId` INTEGER NOT NULL, " +
+                        "`lineOrder` INTEGER NOT NULL, " +
+                        "`speakerType` TEXT NOT NULL, " +
+                        "`speakerName` TEXT NOT NULL, " +
+                        "`characterId` TEXT, " +
+                        "`content` TEXT NOT NULL)"
+                )
+                database.execSQL("CREATE INDEX IF NOT EXISTS `index_novel_line_chapterId_lineOrder` ON `novel_line` (`chapterId`, `lineOrder`)")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 // 双重检查锁定：避免两个并发首次调用各建一个 RoomDatabase 实例，
@@ -666,7 +718,7 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "rhodes_chat.db"
-                ).addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14).build().also { INSTANCE = it }
+                ).addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15).build().also { INSTANCE = it }
             }
         }
     }

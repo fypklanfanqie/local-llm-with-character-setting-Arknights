@@ -258,6 +258,9 @@ fun AppNavGraph(container: AppContainer, initialChatOpen: Boolean = false) {
                             onOpenMoments = {
                                 feedNavController.navigate(FeedRoute.MOMENTS) { launchSingleTop = true }
                             },
+                            onOpenNovel = {
+                                feedNavController.navigate(FeedRoute.NOVEL_HOME) { launchSingleTop = true }
+                            },
                         )
                     }
                     composable(FeedRoute.MOMENTS) {

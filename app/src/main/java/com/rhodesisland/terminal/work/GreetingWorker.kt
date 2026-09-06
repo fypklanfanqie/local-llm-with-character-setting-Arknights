@@ -351,6 +351,7 @@ class GreetingWorker(
             append(lorebookDirective)
             append(userDirective)
             append(instruction)
+            append(com.rhodesisland.terminal.llm.OutputLanguage.ZH_DIRECTIVE)
         }
         val messages = buildList {
             add(ChatMessageDto(role = "system", content = JsonPrimitive(systemContent)))

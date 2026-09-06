@@ -26,6 +26,7 @@ import androidx.compose.material.icons.automirrored.outlined.Chat
 import androidx.compose.material.icons.automirrored.outlined.VolumeUp
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -76,6 +77,7 @@ internal fun CharacterFeedPage(
     onChat: () -> Unit,
     onPersona: () -> Unit,
     onAffinity: () -> Unit,
+    onNovel: () -> Unit,
     onVoice: (() -> Unit)?,
     onDelete: (() -> Unit)?,
 ) {
@@ -257,6 +259,17 @@ internal fun CharacterFeedPage(
                         Icon(Icons.Filled.Favorite, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
                         Text("好感", fontWeight = FontWeight.SemiBold, maxLines = 1)
+                    }
+                    GlassButton(
+                        onClick = onNovel,
+                        style = GlassButtonStyle.Glass,
+                        modifier = Modifier.weight(1f),
+                        horizontalPadding = 8.dp,
+                        verticalPadding = 14.dp,
+                    ) {
+                        Icon(Icons.Outlined.MenuBook, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("小说", fontWeight = FontWeight.SemiBold, maxLines = 1)
                     }
                 }
             }
