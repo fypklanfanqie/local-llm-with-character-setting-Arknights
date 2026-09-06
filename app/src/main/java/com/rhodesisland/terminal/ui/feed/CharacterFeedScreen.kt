@@ -201,7 +201,6 @@ fun CharacterFeedScreen(
                         onOpenChat(char.id)
                     }
                 },
-                onPersona = { showPersona = char },
                 onAffinity = { onOpenAffinity(char.id) },
                 onNovel = onOpenNovel,
                 onVoice = container.assetRepository.getVoice(char.id).takeIf { it.isNotBlank() }?.let { url ->
