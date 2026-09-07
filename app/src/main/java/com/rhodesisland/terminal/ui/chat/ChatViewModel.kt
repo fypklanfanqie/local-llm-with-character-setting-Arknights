@@ -869,7 +869,12 @@ class ChatViewModel(
                     generatedTokens = localResult.generation?.generatedTokens ?: 0
                     localCompletionReason = localResult.generation?.completionReason
                 } else {
-                    displayResponse = provider.chat(apiMessages, onChunk)
+                    displayResponse = provider.chat(apiMessages, onChunk) { usage ->
+                        // Token 用量按角色记账（设置页「Token 用量」）
+                        container.settingsRepository.recordTokenUsage(
+                            _uiState.value.characterId, usage.promptTokens, usage.completionTokens,
+                        )
+                    }
                     modelText = null
                 }
 
@@ -1281,7 +1286,7 @@ class ChatViewModel(
                     }
                 }
             }
-            runCatching { provider.chat(messages) {} }
+            runCatching { provider.chat(messages, onChunk = {}) }
                 .onSuccess { response ->
                     container.affinityRepository.saveGiftThankYouText(gift.id, response)
                     val rowId = container.chatRepository.addMessage(char.id, convId, ChatMessage(role = "assistant", content = response))
@@ -1411,6 +1416,9 @@ class ChatViewModel(
             apiKey = apiConfig.apiKey,
             model = apiConfig.model,
             messages = messages,
+            onUsage = { usage ->
+                usage?.let { container.settingsRepository.recordTokenUsage(_uiState.value.characterId, it.promptTokens, it.completionTokens) }
+            },
         ).trim()
         if (translated.isBlank() || translated == text.trim()) {
             throw Exception("日语翻译失败，请检查云端对话 API 配置后重试")

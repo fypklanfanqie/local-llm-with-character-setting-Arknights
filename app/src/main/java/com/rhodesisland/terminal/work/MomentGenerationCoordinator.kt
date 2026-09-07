@@ -74,6 +74,9 @@ class MomentGenerationCoordinator(
                     ChatMessageDto(role = "system", content = JsonPrimitive(captionPrompt)),
                     ChatMessageDto(role = "user", content = JsonPrimitive(MomentPromptBuilder.buildPostUserMessage(character.name, "", imageCount, mentionTarget))),
                 ),
+                onUsage = { usage ->
+                    usage?.let { settings.recordTokenUsage(characterId, it.promptTokens, it.completionTokens) }
+                },
             )
         }
         val parsed = parseCaptionResponse(thinkRegex.replace(raw, "").trim())
@@ -146,6 +149,50 @@ class MomentGenerationCoordinator(
                     ChatMessageDto(role = "system", content = JsonPrimitive(system)),
                     ChatMessageDto(role = "user", content = JsonPrimitive(prompt)),
                 ),
+                onUsage = { usage ->
+                    usage?.let { settings.recordTokenUsage(characterId, it.promptTokens, it.completionTokens) }
+                },
+            )
+        }
+        return thinkRegex.replace(raw, "").trim().removeSurrounding("\"").take(AppConfig.Moment.CAPTION_MAX_CHARS)
+    }
+
+    /**
+     * 生成「角色评论用户朋友圈」的正文（用户发圈后随机互动角色评论；不落库，由调用方落库）。
+     * @throws Exception 生成失败（调用方静默降级，不影响发圈本身）
+     */
+    suspend fun generatePostComment(
+        characterId: String,
+        postCaption: String,
+        hasImages: Boolean,
+    ): String {
+        val character = characterRepository.getNow(characterId)
+            ?: throw IllegalStateException("角色不存在")
+        val apiConfig = settings.getApiConfigNow()
+        if (apiConfig.apiKey.isBlank()) throw IllegalStateException("请先在设置中配置云端 AI API")
+        val profile = settings.getUserProfileNow()
+        val system = buildString {
+            append(character.systemPrompt)
+            append(profile.toDirectiveText())
+            append(com.rhodesisland.terminal.llm.OutputLanguage.ZH_DIRECTIVE)
+        }
+        val prompt = MomentPromptBuilder.buildUserPostCommentPrompt(
+            userDisplayName = profile.displayOrMe,
+            postCaption = postCaption,
+            hasImages = hasImages,
+        )
+        val raw = withTimeout(AppConfig.Moment.GENERATE_TIMEOUT_MS) {
+            directLlmClient.chatOnce(
+                baseUrl = apiConfig.baseUrl,
+                apiKey = apiConfig.apiKey,
+                model = apiConfig.model,
+                messages = listOf(
+                    ChatMessageDto(role = "system", content = JsonPrimitive(system)),
+                    ChatMessageDto(role = "user", content = JsonPrimitive(prompt)),
+                ),
+                onUsage = { usage ->
+                    usage?.let { settings.recordTokenUsage(characterId, it.promptTokens, it.completionTokens) }
+                },
             )
         }
         return thinkRegex.replace(raw, "").trim().removeSurrounding("\"").take(AppConfig.Moment.CAPTION_MAX_CHARS)
@@ -193,7 +240,7 @@ class MomentGenerationCoordinator(
         append(systemPrompt)
         append("\n\n[任务] 你要发一条朋友圈（微信 Moments）。输出严格 JSON：{\"caption\": \"...\", \"imagePrompt\": \"...\"}。")
         if (imageCount > 0) {
-            append("imagePrompt 是英文生图提示词，描述你要配图的照片场景（写实风格）。")
+            append("imagePrompt 是英文生图提示词，描述你要配图的画面（明日方舟游戏美术风格：动画插画、赛璐璐上色，不要写实照片）。")
         } else {
             append("本次不带图，imagePrompt 填空字符串。")
         }

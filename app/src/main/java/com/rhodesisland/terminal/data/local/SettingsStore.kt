@@ -22,6 +22,7 @@ import com.rhodesisland.terminal.data.model.SeedanceRatio
 import com.rhodesisland.terminal.data.model.SeedanceResolution
 import com.rhodesisland.terminal.data.model.SystemVoiceTemplate
 import com.rhodesisland.terminal.data.model.ThemeMode
+import com.rhodesisland.terminal.data.model.TokenUsageSnapshot
 import com.rhodesisland.terminal.data.model.TtsConfig
 import com.rhodesisland.terminal.data.model.TtsEngine
 import com.rhodesisland.terminal.data.model.TtsLanguage
@@ -199,6 +200,11 @@ class SettingsStore(
         val MOMENT_AUTO_CHARACTER_IDS = stringSetPreferencesKey("moment_auto_character_ids")
         val MOMENT_NEXT_FIRE_AT = longPreferencesKey("moment_next_fire_at")
         val MOMENT_LAST_CHAR_ID = stringPreferencesKey("moment_last_char_id")
+        // 互动角色：用户发朋友圈后随机 1-3 个角色评论/点赞的候选集（可搜索多选）
+        val MOMENT_REPLY_CHARACTER_IDS = stringSetPreferencesKey("moment_reply_character_ids")
+
+        // Token 用量（JSON: TokenUsageSnapshot，按角色累计云端输入/输出 token）
+        val TOKEN_USAGE = stringPreferencesKey("token_usage")
 
         // ===== 配置变更检测（移植自 iFeng 的 hasConfigChanged/acknowledgeConfigChange）=====
         // 记录"上次成功加载模型时所用的"线程/上下文/后端/lookahead。当前值 != last_applied 即视为已变更，
@@ -357,6 +363,31 @@ class SettingsStore(
             p[Keys.MOMENT_AUTO_ENABLED] = config.enabled
             p[Keys.MOMENT_AUTO_INTERVAL_HOURS] = config.intervalHours
             p[Keys.MOMENT_AUTO_CHARACTER_IDS] = config.characterIds
+        }
+    }
+
+    // 互动角色：用户发朋友圈后随机评论/点赞的候选集
+    val momentReplyCharacterIds: Flow<Set<String>> =
+        dataStore.data.map { p -> p[Keys.MOMENT_REPLY_CHARACTER_IDS] ?: emptySet() }
+
+    suspend fun setMomentReplyCharacterIds(ids: Set<String>) {
+        dataStore.edit { it[Keys.MOMENT_REPLY_CHARACTER_IDS] = ids }
+    }
+
+    // Token 用量（按角色累计；容错空快照）
+    val tokenUsage: Flow<TokenUsageSnapshot> = dataStore.data.map { p ->
+        val raw = p[Keys.TOKEN_USAGE] ?: ""
+        if (raw.isBlank()) TokenUsageSnapshot()
+        else runCatching { voiceJson.decodeFromString<TokenUsageSnapshot>(raw) }.getOrDefault(TokenUsageSnapshot())
+    }
+
+    /** 原子更新 Token 用量（读-改-写单个 edit 事务，防并发丢失）。 */
+    suspend fun updateTokenUsage(transform: (TokenUsageSnapshot) -> TokenUsageSnapshot) {
+        dataStore.edit { p ->
+            val raw = p[Keys.TOKEN_USAGE] ?: ""
+            val current: TokenUsageSnapshot = if (raw.isBlank()) TokenUsageSnapshot()
+            else runCatching { voiceJson.decodeFromString<TokenUsageSnapshot>(raw) }.getOrDefault(TokenUsageSnapshot())
+            p[Keys.TOKEN_USAGE] = voiceJson.encodeToString(transform(current))
         }
     }
 

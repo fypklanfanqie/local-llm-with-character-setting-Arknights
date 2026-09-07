@@ -257,9 +257,9 @@ class NovelEditorViewModel(
                 }
 
                 val provider = container.chatProviderManager.getActiveProvider()
-                val raw = provider.chat(apiMessages) { accumulated ->
+                val raw = provider.chat(apiMessages, onChunk = { accumulated ->
                     generating.value = accumulated to true
-                }
+                })
                 val parsed = NovelScriptParser.parse(raw, speakerNames, protagonistName)
                 if (parsed.isEmpty()) throw IllegalStateException("AI 没有产出有效剧情，请重试")
                 // 解析行落库：已知角色名回填 characterId

@@ -16,8 +16,31 @@ class MomentPromptBuilderTest {
         assertTrue(msg.contains("{\"caption\""))
         assertTrue(msg.contains("imagePrompt"))
         assertTrue(msg.contains("早上好"))
-        // 带图要求
+        // 带图要求 + 明日方舟画风约束
         assertTrue(msg.contains("英文生图提示词"))
+        assertTrue(msg.contains("明日方舟"))
+        assertTrue(msg.contains("不要写实照片"))
+    }
+
+    @Test
+    fun imageGenMessage_arknightsStyle() {
+        val msg = MomentPromptBuilder.buildImageGenUserMessage("a sunny park", 1)
+        assertTrue(msg.contains("明日方舟"))
+        assertTrue(msg.contains("赛璐璐上色"))
+        assertTrue(msg.contains("不要写实照片"))
+        assertTrue(msg.contains("a sunny park"))
+    }
+
+    @Test
+    fun userPostCommentPrompt_directsSingleComment() {
+        val msg = MomentPromptBuilder.buildUserPostCommentPrompt("博士", "今天好累", hasImages = true)
+        assertTrue(msg.contains("博士发了一条朋友圈"))
+        assertTrue(msg.contains("今天好累"))
+        assertTrue(msg.contains("附了几张图片"))
+        assertTrue(msg.contains("只输出评论正文"))
+        assertFalse(msg.contains("附了几张照片"))
+        val noImg = MomentPromptBuilder.buildUserPostCommentPrompt("博士", "今天好累", hasImages = false)
+        assertFalse(noImg.contains("附了几张图片"))
     }
 
     @Test

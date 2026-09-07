@@ -190,10 +190,11 @@ class LocalChatProvider(
 
     override val type: ChatProviderType = ChatProviderType.LOCAL
 
-    /** ChatProvider 接口：返回展示文本（本地历史精确复用走 [chatTyped] 取 modelText）。 */
+    /** ChatProvider 接口：返回展示文本（本地历史精确复用走 [chatTyped] 取 modelText）。本地无 token 用量上报。 */
     override suspend fun chat(
         messages: List<ChatMessage>,
         onChunk: (String) -> Unit,
+        onUsage: (suspend (com.rhodesisland.terminal.data.remote.LlmTokenUsage) -> Unit)?,
     ): String = chatTyped(messages, onChunk).displayText
 
     /**

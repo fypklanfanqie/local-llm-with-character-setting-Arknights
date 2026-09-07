@@ -364,7 +364,12 @@ class GreetingWorker(
             }
         }
 
-        return client.chatOnce(apiConfig.baseUrl, apiConfig.apiKey, apiConfig.model, messages)
+        return client.chatOnce(
+            apiConfig.baseUrl, apiConfig.apiKey, apiConfig.model, messages,
+            onUsage = { usage ->
+                usage?.let { settings.recordTokenUsage(char.id, it.promptTokens, it.completionTokens) }
+            },
+        )
             .trim()
             .removeSurrounding("\"")
     }

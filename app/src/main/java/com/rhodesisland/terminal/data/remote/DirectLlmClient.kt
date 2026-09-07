@@ -66,7 +66,7 @@ class DirectLlmClient(
         onChunk: (String) -> Unit,
         onCall: ((Call) -> Unit)? = null,
         deepThinking: Boolean = false,
-        onUsage: ((LlmTokenUsage?) -> Unit)? = null,
+        onUsage: (suspend (LlmTokenUsage?) -> Unit)? = null,
         temperature: Float? = null,
         maxTokens: Int? = null,
     ): String = withContext(Dispatchers.IO) {
@@ -94,7 +94,7 @@ class DirectLlmClient(
         apiKey: String,
         model: String,
         messages: List<ChatMessageDto>,
-        onUsage: ((LlmTokenUsage?) -> Unit)? = null,
+        onUsage: (suspend (LlmTokenUsage?) -> Unit)? = null,
         temperature: Float? = null,
         maxTokens: Int? = null,
     ): String = chatOnceInternal(baseUrl, apiKey, model, messages, responseFormatJson = false, onUsage = onUsage, temperature = temperature, maxTokens = maxTokens)
@@ -116,7 +116,7 @@ class DirectLlmClient(
         model: String,
         messages: List<ChatMessageDto>,
         responseFormatJson: Boolean,
-        onUsage: ((LlmTokenUsage?) -> Unit)? = null,
+        onUsage: (suspend (LlmTokenUsage?) -> Unit)? = null,
         temperature: Float? = null,
         maxTokens: Int? = null,
     ): String = withContext(Dispatchers.IO) {
@@ -171,7 +171,7 @@ class DirectLlmClient(
         onChunk: (String) -> Unit,
         onCall: ((Call) -> Unit)?,
         deepThinking: Boolean,
-        onUsage: ((LlmTokenUsage?) -> Unit)? = null,
+        onUsage: (suspend (LlmTokenUsage?) -> Unit)? = null,
     ): String {
         val call = client.newCall(request)
         onCall?.invoke(call)
@@ -455,7 +455,7 @@ class DirectLlmClient(
         onCall: ((Call) -> Unit)?,
         temperature: Float? = null,
         maxTokens: Int? = null,
-        onUsage: ((LlmTokenUsage?) -> Unit)? = null,
+        onUsage: (suspend (LlmTokenUsage?) -> Unit)? = null,
     ): String {
         val request = buildAnthropicRequest(
             endpoint = buildAnthropicEndpoint(baseUrl),
@@ -475,7 +475,7 @@ class DirectLlmClient(
         request: Request,
         onChunk: (String) -> Unit,
         onCall: ((Call) -> Unit)?,
-        onUsage: ((LlmTokenUsage?) -> Unit)? = null,
+        onUsage: (suspend (LlmTokenUsage?) -> Unit)? = null,
     ): String {
         val call = client.newCall(request)
         onCall?.invoke(call)
@@ -568,7 +568,7 @@ class DirectLlmClient(
         apiKey: String,
         model: String,
         messages: List<ChatMessageDto>,
-        onUsage: ((LlmTokenUsage?) -> Unit)? = null,
+        onUsage: (suspend (LlmTokenUsage?) -> Unit)? = null,
         temperature: Float? = null,
         maxTokens: Int? = null,
     ): String {
@@ -647,10 +647,10 @@ class DirectLlmClient(
      * 汇报一次用量：进程级环形统计 + logcat 观测行 + 可选回调。
      * 全零/空值直接忽略——供应商不回 usage 时保持绝对静默、零污染。
      */
-    private fun reportUsage(
+    private suspend fun reportUsage(
         tag: String,
         usage: LlmTokenUsage?,
-        onUsage: ((LlmTokenUsage?) -> Unit)?,
+        onUsage: (suspend (LlmTokenUsage?) -> Unit)?,
     ) {
         if (usage == null || (usage.promptTokens <= 0 && usage.completionTokens <= 0)) return
         Log.i(

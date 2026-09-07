@@ -30,6 +30,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
@@ -46,6 +47,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import coil.compose.AsyncImage
 import com.rhodesisland.terminal.AppContainer
 import com.rhodesisland.terminal.data.remote.ChatMessageDto
+import com.rhodesisland.terminal.data.model.TokenUsageSnapshot
 import kotlinx.serialization.json.JsonPrimitive
 import com.rhodesisland.terminal.util.BackgroundSurvivalHelper
 import com.rhodesisland.terminal.util.RomDetector
@@ -493,6 +495,7 @@ fun SettingsScreen(
         GreetingSection(container = container, scope = scope)
         GroupChatSection(container = container, scope = scope)
         MomentsSection(container = container, scope = scope)
+        TokenUsageSection(container = container)
         WorldviewSection(container = container, scope = scope)
         LorebookSection(container = container, onNavigateToLorebook = onNavigateToLorebook)
         UserProfileSection(container = container, scope = scope)
@@ -1914,6 +1917,8 @@ private fun MomentsSection(container: AppContainer, scope: CoroutineScope) {
     val autoEnabled by settings.momentAutoConfig.collectAsState(initial = com.rhodesisland.terminal.data.model.MomentAutoConfig())
     val characters by container.characterRepository.characters.collectAsState(initial = emptyList())
     var showCharPicker by remember { mutableStateOf(false) }
+    var showReplyPicker by remember { mutableStateOf(false) }
+    val replyIds by container.settingsRepository.momentReplyCharacterIds.collectAsState(initial = emptySet())
     val provider by settings.activeProvider.collectAsState(initial = ChatProviderType.CLOUD)
     val isCloud = provider == ChatProviderType.CLOUD
 
@@ -1976,6 +1981,22 @@ private fun MomentsSection(container: AppContainer, scope: CoroutineScope) {
                     )
                     TextButton(onClick = { showCharPicker = true }) { Text("选择", fontSize = 12.sp) }
                 }
+            }
+
+            Text(
+                "互动角色（回复/点赞你的朋友圈）",
+                color = scheme.onSurface, fontSize = 13.sp,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "已选 ${replyIds.size} 个（发圈后随机 1~3 个评论、1~3 个点赞）",
+                    color = scheme.onSurfaceVariant, fontSize = 12.sp,
+                )
+                TextButton(onClick = { showReplyPicker = true }) { Text("选择", fontSize = 12.sp) }
             }
 
             Text(
@@ -2094,6 +2115,198 @@ private fun MomentsSection(container: AppContainer, scope: CoroutineScope) {
             },
             confirmButton = { TextButton(onClick = { showCharPicker = false }) { Text("完成") } },
         )
+    }
+
+    if (showReplyPicker) {
+        var search by remember { mutableStateOf("") }
+        val filtered = characters.filter { it.name.contains(search.trim(), ignoreCase = true) }
+        AlertDialog(
+            onDismissRequest = { showReplyPicker = false },
+            title = { Text("选择互动角色（可多选）", color = scheme.onSurface) },
+            text = {
+                Column {
+                    GlassInputField(value = search, onValueChange = { search = it }, placeholder = "搜索角色名")
+                    Spacer(Modifier.height(8.dp))
+                    if (filtered.isEmpty()) {
+                        Text(
+                            "没有匹配的角色",
+                            color = scheme.onSurfaceVariant, fontSize = 13.sp,
+                            modifier = Modifier.padding(vertical = 16.dp),
+                        )
+                    }
+                    LazyColumn(modifier = Modifier.height(300.dp)) {
+                        items(filtered.size) { index ->
+                            val char = filtered[index]
+                            val checked = char.id in replyIds
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        val next = if (checked) replyIds - char.id else replyIds + char.id
+                                        scope.launch { container.settingsRepository.setMomentReplyCharacterIds(next) }
+                                    }
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                androidx.compose.material3.Checkbox(checked = checked, onCheckedChange = null)
+                                Spacer(Modifier.width(8.dp))
+                                Text(char.name, color = scheme.onSurface, fontSize = 14.sp)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showReplyPicker = false }) { Text("完成") } },
+        )
+    }
+}
+
+/** Token 数缩写：1234 -> 1.2K，12345678 -> 12.35M。 */
+private fun formatTokens(v: Long): String = when {
+    v >= 1_000_000L -> String.format("%.2fM", v / 1_000_000.0)
+    v >= 1_000L -> String.format("%.1fK", v / 1_000.0)
+    else -> v.toString()
+}
+
+/**
+ * Token 用量区：总量数字 + 按角色堆叠条形图（输入蓝/输出橙，按总量降序，最多 12 条）
+ * + 搜索框过滤角色明细。归属口径见 [TokenUsageSnapshot]。
+ */
+@Composable
+private fun TokenUsageSection(container: AppContainer) {
+    val scheme = MaterialTheme.colorScheme
+    val usage by container.settingsRepository.tokenUsage.collectAsState(initial = TokenUsageSnapshot())
+    val characters by container.characterRepository.characters.collectAsState(initial = emptyList())
+    var query by remember { mutableStateOf("") }
+
+    CollapsibleSection(
+        title = "Token 用量",
+        key = "token_usage",
+        summary = "累计 ${usage.total.calls} 次调用 · ${formatTokens(usage.total.totalTokens)} tokens",
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            // 总量数字
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TokenStatTile("输入", formatTokens(usage.total.promptTokens), Modifier.weight(1f))
+                TokenStatTile("输出", formatTokens(usage.total.completionTokens), Modifier.weight(1f))
+                TokenStatTile("合计", formatTokens(usage.total.totalTokens), Modifier.weight(1f))
+                TokenStatTile("调用", "${usage.total.calls}", Modifier.weight(1f))
+            }
+
+            if (usage.chars.isEmpty()) {
+                Text(
+                    "还没有云端调用记录：和角色聊天、主动问候、群聊发言、朋友圈文案与评论都会按角色累计。",
+                    color = scheme.onSurfaceVariant, fontSize = 12.sp,
+                )
+                return@Column
+            }
+
+            val nameById = characters.associate { it.id to it.name }
+            val ranked = usage.chars.entries
+                .map { (id, entry) -> TokenRow(name = nameById[id] ?: "已注销角色", entry = entry) }
+                .sortedByDescending { it.entry.totalTokens }
+
+            // 条形图（Top 12；输入/输出双色堆叠）
+            val chartRows = ranked.take(12)
+            val maxTokens = chartRows.maxOf { it.entry.totalTokens }.coerceAtLeast(1L)
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                chartRows.forEach { row ->
+                    Column {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(
+                                row.name,
+                                color = scheme.onSurface, fontSize = 12.sp,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false),
+                            )
+                            Text(
+                                "${formatTokens(row.entry.totalTokens)} tok · ${row.entry.calls}次",
+                                color = scheme.onSurfaceVariant, fontSize = 11.sp,
+                            )
+                        }
+                        Spacer(Modifier.height(2.dp))
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .height(8.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(scheme.surfaceVariant),
+                        ) {
+                            Box(
+                                Modifier
+                                    .weight(row.entry.promptTokens.toFloat() / maxTokens)
+                                    .fillMaxHeight()
+                                    .background(scheme.primary.copy(alpha = 0.75f)),
+                            )
+                            Box(
+                                Modifier
+                                    .weight(row.entry.completionTokens.toFloat() / maxTokens)
+                                    .fillMaxHeight()
+                                    .background(scheme.tertiary.copy(alpha = 0.75f)),
+                            )
+                        }
+                    }
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                TokenLegend(scheme.primary.copy(alpha = 0.75f), "输入")
+                TokenLegend(scheme.tertiary.copy(alpha = 0.75f), "输出")
+            }
+
+            // 搜索 + 明细（全量，按总量降序）
+            GlassInputField(value = query, onValueChange = { query = it }, placeholder = "搜索角色名")
+            val filtered = ranked.filter { it.name.contains(query.trim(), ignoreCase = true) }
+            if (filtered.isEmpty()) {
+                Text("没有匹配的角色", color = scheme.onSurfaceVariant, fontSize = 12.sp)
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    filtered.forEach { row ->
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                row.name,
+                                color = scheme.onSurface, fontSize = 13.sp,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false),
+                            )
+                            Text(
+                                "入 ${formatTokens(row.entry.promptTokens)} · 出 ${formatTokens(row.entry.completionTokens)} · ${row.entry.calls}次",
+                                color = scheme.onSurfaceVariant, fontSize = 11.sp,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private data class TokenRow(val name: String, val entry: com.rhodesisland.terminal.data.model.TokenUsageEntry)
+
+@Composable
+private fun TokenStatTile(label: String, value: String, modifier: Modifier = Modifier) {
+    val scheme = MaterialTheme.colorScheme
+    Column(
+        modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(scheme.surfaceVariant.copy(alpha = 0.5f))
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(value, color = scheme.onSurface, fontSize = 15.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, maxLines = 1)
+        Text(label, color = scheme.onSurfaceVariant, fontSize = 11.sp)
+    }
+}
+
+@Composable
+private fun TokenLegend(color: androidx.compose.ui.graphics.Color, label: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(10.dp).clip(RoundedCornerShape(2.dp)).background(color))
+        Spacer(Modifier.width(4.dp))
+        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
     }
 }
 

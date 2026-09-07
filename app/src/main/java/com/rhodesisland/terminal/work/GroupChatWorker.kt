@@ -257,6 +257,7 @@ class GroupChatWorker(
                         worldviewDirective = worldviewDirective,
                         lorebookStaticHead = lorebookStaticHead,
                         lorebookTailMessages = lorebookTailMessages,
+                        settings = settings,
                     )
                     if (!content.isNullOrBlank()) {
                         container.groupChatRepository.sendMemberMessage(convId, char.id, content)
@@ -284,6 +285,7 @@ class GroupChatWorker(
                         worldviewDirective = worldviewDirective,
                         lorebookStaticHead = lorebookStaticHead,
                         lorebookTailMessages = lorebookTailMessages,
+                        settings = settings,
                     )
                     if (content.isNullOrBlank()) return@repeat
                     container.groupChatRepository.sendMemberMessage(convId, char.id, content)
@@ -322,6 +324,7 @@ class GroupChatWorker(
         worldviewDirective: String = "",
         lorebookStaticHead: String = "",
         lorebookTailMessages: List<ChatMessage> = emptyList(),
+        settings: SettingsRepository? = null,
     ): String? {
         val messages = GroupChatPromptBuilder.buildApiMessages(
             members, speaker, history, askUser,
@@ -333,7 +336,12 @@ class GroupChatWorker(
         ).map { ChatMessageDto(it.role, JsonPrimitive(it.content)) }
         return try {
             withTimeout(AppConfig.GroupChat.GENERATE_TIMEOUT_MS) {
-                client.chatOnce(apiConfig.baseUrl, apiConfig.apiKey, apiConfig.model, messages)
+                client.chatOnce(
+                    apiConfig.baseUrl, apiConfig.apiKey, apiConfig.model, messages,
+                    onUsage = { usage ->
+                        usage?.let { settings?.recordTokenUsage(speaker.id, it.promptTokens, it.completionTokens) }
+                    },
+                )
                     .let {
                         when (val normalized = normalizeGeneratedReply(
                             raw = it,

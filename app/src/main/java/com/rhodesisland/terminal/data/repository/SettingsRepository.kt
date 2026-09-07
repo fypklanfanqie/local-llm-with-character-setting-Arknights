@@ -16,6 +16,8 @@ import com.rhodesisland.terminal.data.model.SeedanceConfig
 import com.rhodesisland.terminal.data.model.UserProfileConfig
 import com.rhodesisland.terminal.data.model.SystemVoiceTemplate
 import com.rhodesisland.terminal.data.model.ThemeMode
+import com.rhodesisland.terminal.data.model.TokenUsageEntry
+import com.rhodesisland.terminal.data.model.TokenUsageSnapshot
 import com.rhodesisland.terminal.data.model.TtsConfig
 import com.rhodesisland.terminal.data.model.TtsEngine
 import com.rhodesisland.terminal.data.model.TtsLanguage
@@ -153,6 +155,37 @@ class SettingsRepository(private val store: SettingsStore) {
     /** 上次自动发圈的角色 id（轮换用）。 */
     suspend fun getMomentLastCharIdNow(): String? = store.getMomentLastCharIdNow()
     suspend fun setMomentLastCharId(id: String?) = store.setMomentLastCharId(id)
+
+    /** 互动角色（用户发朋友圈后随机评论/点赞的候选集，可搜索多选）。 */
+    val momentReplyCharacterIds: Flow<Set<String>> = store.momentReplyCharacterIds
+    suspend fun getMomentReplyCharacterIdsNow(): Set<String> = dataStoreFirst(momentReplyCharacterIds, emptySet())
+    suspend fun setMomentReplyCharacterIds(ids: Set<String>) = store.setMomentReplyCharacterIds(ids)
+
+    // ===== Token 用量（按角色累计云端输入/输出 token）=====
+    /** 全角色 Token 用量快照（设置页「Token 用量」图表与数字）。 */
+    val tokenUsage: Flow<TokenUsageSnapshot> = store.tokenUsage
+    suspend fun getTokenUsageNow(): TokenUsageSnapshot = dataStoreFirst(tokenUsage, TokenUsageSnapshot())
+
+    /**
+     * 累计一次云端调用的 token 用量到 [characterId] 名下（原子读改写；空角色/零用量忽略）。
+     * 归属口径：1:1 聊天、主动问候、群聊发言、朋友圈文案与评论回复。
+     */
+    suspend fun recordTokenUsage(characterId: String?, promptTokens: Int, completionTokens: Int) {
+        val id = characterId?.trim().takeUnless { it.isNullOrBlank() } ?: return
+        if (promptTokens <= 0 && completionTokens <= 0) return
+        store.updateTokenUsage { snapshot ->
+            val entry = snapshot.chars[id] ?: TokenUsageEntry()
+            snapshot.copy(
+                chars = snapshot.chars + (
+                    id to entry.copy(
+                        promptTokens = entry.promptTokens + promptTokens,
+                        completionTokens = entry.completionTokens + completionTokens,
+                        calls = entry.calls + 1,
+                    )
+                ),
+            )
+        }
+    }
 
     // ===== 群聊（仅云端可用）=====
     /** 群聊配置聚合快照（开关/成员/自动聊天）。 */

@@ -123,6 +123,7 @@ fun MomentsScreen(
                     nowMs = state.nowMs,
                     userDisplayName = state.userDisplayName,
                     isReplying = state.generating.replyingPostId == post.post.id,
+                    characterNameById = state.characterNameById,
                     onToggleLike = { viewModel.toggleLike(post.post.id) },
                     onComment = { text -> viewModel.commentOnPost(post.post, text) },
                     onDelete = { viewModel.deletePost(post.post.id) },
@@ -282,6 +283,7 @@ private fun MomentPostCard(
     nowMs: Long,
     userDisplayName: String,
     isReplying: Boolean,
+    characterNameById: Map<String, String>,
     onToggleLike: () -> Unit,
     onComment: (String) -> Unit,
     onDelete: () -> Unit,
@@ -363,16 +365,14 @@ private fun MomentPostCard(
                         fontSize = 12.sp,
                     )
                     Spacer(Modifier.weight(1f))
-                    if (isUserPost) {
-                        Text(
-                            "删除",
-                            color = Color(0xFF7FA8D9),
-                            fontSize = 12.sp,
-                            modifier = Modifier
-                                .clickable(onClick = onDelete)
-                                .padding(horizontal = 8.dp, vertical = 4.dp),
-                        )
-                    }
+                    Text(
+                        "删除",
+                        color = Color(0xFF7FA8D9),
+                        fontSize = 12.sp,
+                        modifier = Modifier
+                            .clickable(onClick = onDelete)
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                    )
                     Box(
                         Modifier
                             .background(Color(0xFF242B36), RoundedCornerShape(4.dp))
@@ -437,14 +437,21 @@ private fun MomentPostCard(
                         verticalArrangement = Arrangement.spacedBy(3.dp),
                     ) {
                         if (post.likeCharacterIds.isNotEmpty()) {
+                            val likerNames = post.likeCharacterIds.mapNotNull { characterNameById[it] }
                             Text(
-                                "❤ ${post.likeCharacterIds.size} 人觉得很赞",
+                                if (likerNames.isEmpty()) "❤ ${post.likeCharacterIds.size} 人觉得很赞"
+                                else "❤ ${likerNames.joinToString("、")} 觉得很赞",
                                 color = Color(0xFF7FA8D9),
                                 fontSize = 13.sp,
+                                lineHeight = 18.sp,
                             )
                         }
                         post.comments.forEach { comment ->
-                            val commenterName = if (comment.authorType == MomentRepository.AUTHOR_USER) userDisplayName else comment.characterId?.let { post.authorName } ?: ""
+                            val commenterName = when {
+                                comment.authorType == MomentRepository.AUTHOR_USER -> userDisplayName
+                                comment.characterId == null -> ""
+                                else -> characterNameById[comment.characterId] ?: "已注销角色"
+                            }
                             Text(
                                 buildString {
                                     append(commenterName)

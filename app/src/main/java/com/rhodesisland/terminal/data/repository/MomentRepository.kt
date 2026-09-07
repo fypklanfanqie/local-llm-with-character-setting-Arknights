@@ -73,6 +73,13 @@ class MomentRepository(
         }
     }
 
+    /** 角色点赞（幂等，重复插入被唯一索引忽略）。用户发圈后的随机互动用。 */
+    suspend fun addCharacterLike(postId: Long, characterId: String) {
+        dao.insertLike(
+            MomentLikeEntity(postId = postId, characterId = characterId, createdAt = System.currentTimeMillis()),
+        )
+    }
+
     /**
      * 用户评论并让发帖角色回复。
      * 先落用户评论；[reply] 由调用方生成后经 [addCharacterComment] 落库

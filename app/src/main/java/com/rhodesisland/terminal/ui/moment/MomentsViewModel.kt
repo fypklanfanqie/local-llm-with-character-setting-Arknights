@@ -13,6 +13,7 @@ import com.rhodesisland.terminal.data.model.UserProfileConfig
 import com.rhodesisland.terminal.data.repository.MomentRepository
 import com.rhodesisland.terminal.util.CharacterImageStore
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -59,6 +60,8 @@ class MomentsViewModel(
         val generating: Generating = Generating(),
         val errorMessage: String? = null,
         val nowMs: Long = 0L,
+        /** 角色 id -> 名字（评论者/点赞者名字解析；已删除角色回退「已注销角色」）。 */
+        val characterNameById: Map<String, String> = emptyMap(),
     )
 
     data class PostUi(
@@ -111,6 +114,7 @@ class MomentsViewModel(
             generating = runtime.gen,
             errorMessage = runtime.err,
             nowMs = now,
+            characterNameById = charById.mapValues { it.value.name },
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UiState())
 
@@ -164,7 +168,7 @@ class MomentsViewModel(
         }
     }
 
-    /** 用户自发朋友圈（文字 + 相册图片，不走 API）。 */
+    /** 用户自发朋友圈（文字 + 相册图片，不走 API）；云端模式下随机角色会来评论/点赞。 */
     fun postAsUser(content: String, imageUris: List<Uri>) {
         val text = content.trim()
         if (text.isEmpty() && imageUris.isEmpty()) return
@@ -174,7 +178,43 @@ class MomentsViewModel(
                     CharacterImageStore.save(app, uri)
                 }
             }
-            momentRepository.addUserPost(text, saved)
+            val postId = momentRepository.addUserPost(text, saved)
+            scheduleAutoInteraction(postId, text, saved.isNotEmpty())
+        }
+    }
+
+    /**
+     * 用户发圈后的随机互动：从设置选定的「互动角色」里随机 1~3 个评论、随机 1~3 个点赞
+     * （可与评论者重叠，像真实好友）；评论错峰生成落库，点赞错峰落库。仅云端 AI 模式启用；
+     * 未配置互动角色则不互动。生成失败静默降级（不打断发圈）。
+     */
+    private fun scheduleAutoInteraction(postId: Long, content: String, hasImages: Boolean) {
+        if (!uiState.value.isCloud) return
+        viewModelScope.launch {
+            val candidates = container.settingsRepository.getMomentReplyCharacterIdsNow().toList()
+            if (candidates.isEmpty()) return@launch
+
+            // 评论：随机 1..3 人（不超过候选数），每人错峰生成一句
+            val repliers = candidates.shuffled().take((1..3).random().coerceAtMost(candidates.size))
+            launch {
+                repliers.forEachIndexed { index, charId ->
+                    delay(2_000L + (0..4_000L).random() + index * 4_000L)
+                    runCatching {
+                        val comment = container.momentGenerationCoordinator.generatePostComment(charId, content, hasImages)
+                        if (comment.isNotBlank()) momentRepository.addCharacterComment(postId, charId, comment)
+                    }.onFailure {
+                        android.util.Log.w("Moments", "自动评论生成失败 char=$charId", it)
+                    }
+                }
+            }
+            // 点赞：随机 1..3 人，错峰落库
+            launch {
+                val likers = candidates.shuffled().take((1..3).random().coerceAtMost(candidates.size))
+                likers.forEach { charId ->
+                    delay(1_500L + (0..9_000L).random())
+                    runCatching { momentRepository.addCharacterLike(postId, charId) }
+                }
+            }
         }
     }
 

@@ -38,7 +38,7 @@ object MomentPromptBuilder {
             append("\n3. 在正文里自然地 @ 一次「@$mentionTarget」：@ 后紧跟名字（不要加空格），全条只 @ 这一个人。")
         }
         if (imageCount > 0) {
-            append("\n4. imagePrompt 是给生图模型的英文生图提示词：描述一张适合配这条朋友圈的照片（场景/光线/构图，写实照片风格），不要出现人物面部特写以外的奇怪元素，不要文字水印。")
+            append("\n4. imagePrompt 是给生图模型的英文生图提示词：描述一张适合配这条朋友圈的画面（明日方舟游戏美术风格：动画插画、干净线稿、赛璐璐上色、游戏 CG 质感，不要写实照片），不要出现人物面部特写以外的奇怪元素，不要文字水印。")
         } else {
             append("\n4. imagePrompt 填空字符串。")
         }
@@ -59,12 +59,28 @@ object MomentPromptBuilder {
 
     /**
      * 生图请求的 user 文本（与参考图一起发给生图模型）。
-     * 参考图 = 角色立绘（data URL），指令要求「以参考图为同一人物」生成场景照片。
+     * 参考图 = 角色立绘（data URL），指令要求「以参考图为同一人物」生成场景图。
+     * 风格固定为明日方舟游戏美术（动画插画/赛璐璐上色），不用写实照片。
      */
     fun buildImageGenUserMessage(imagePrompt: String, imageCount: Int): String = buildString {
-        append("请以参考图中的人物为同一角色（保持发型、服装风格与气质一致），生成 $imageCount 张写实现实照片：")
+        append("请以参考图中的人物为同一角色（保持发型、服装风格与气质一致），生成 $imageCount 张明日方舟（Arknights）游戏美术风格的插画：")
+        append("动画插画、干净线稿、赛璐璐上色、游戏 CG 质感，不要写实照片、不要真人质感。")
         append(imagePrompt)
         append("\n直接输出图片，不要文字说明。")
+    }
+
+    /**
+     * 角色评论用户朋友圈的单条 user 提示词：用户发圈后，随机选中的互动角色各评论一句。
+     * [userDisplayName] = 用户在社交场景的显示名（「我的形象」昵称，空则「博士」）。
+     */
+    fun buildUserPostCommentPrompt(
+        userDisplayName: String,
+        postCaption: String,
+        hasImages: Boolean,
+    ): String = buildString {
+        append("${userDisplayName}发了一条朋友圈：\"$postCaption\"${if (hasImages) "（附了几张图片）" else ""}")
+        append("\n请以你的身份评论这条朋友圈（一两句话，口语化，符合你的人设与心情，可以是共鸣、调侃或关心）。")
+        append("只输出评论正文，不要引号、不要前缀、不要 @ 任何人、不要解释。")
     }
 
     /**

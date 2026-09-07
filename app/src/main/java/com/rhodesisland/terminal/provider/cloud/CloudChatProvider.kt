@@ -43,6 +43,7 @@ class CloudChatProvider(
     override suspend fun chat(
         messages: List<ChatMessage>,
         onChunk: (String) -> Unit,
+        onUsage: (suspend (LlmTokenUsage) -> Unit)?,
     ): String {
         activeCall = null
 
@@ -67,7 +68,12 @@ class CloudChatProvider(
             onChunk = onChunk,
             onCall = { activeCall = it },
             deepThinking = settings.getDeepThinkingNow(),
-            onUsage = { usage -> onUsage?.invoke(usage ?: return@chatStream) },
+            onUsage = { usage ->
+                val valid = usage ?: return@chatStream
+                // 构造期回调 = 前缀缓存命中率观测；调用期回调 = Token 用量按角色记账（设置页）
+                this.onUsage?.invoke(valid)
+                onUsage?.invoke(valid)
+            },
             // 自定义生成参数（设置页「生成参数（仅云端 AI）」区）：未自定义=null=请求体
             // 不带字段、走模型商默认——与 DirectLlmClient 的可空注入语义直接对接。
             temperature = settings.getCloudTemperatureNow(),
