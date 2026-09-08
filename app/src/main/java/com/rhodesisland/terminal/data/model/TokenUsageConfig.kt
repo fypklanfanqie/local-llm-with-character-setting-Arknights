@@ -17,14 +17,20 @@ data class TokenUsageEntry(
     val promptTokens: Long = 0,
     val completionTokens: Long = 0,
     val calls: Int = 0,
+    /** 前缀缓存命中 token（prompt_tokens_details.cached_tokens / Anthropic cache_read）。 */
+    val cachedTokens: Long = 0,
 ) {
     /** 总 token（输入 + 输出）。 */
     val totalTokens: Long get() = promptTokens + completionTokens
+
+    /** 缓存命中率 = 命中 / 输入（无输入时 0）。 */
+    val cacheHitRate: Double get() = if (promptTokens > 0) cachedTokens.toDouble() / promptTokens else 0.0
 
     operator fun plus(other: TokenUsageEntry): TokenUsageEntry = TokenUsageEntry(
         promptTokens = promptTokens + other.promptTokens,
         completionTokens = completionTokens + other.completionTokens,
         calls = calls + other.calls,
+        cachedTokens = cachedTokens + other.cachedTokens,
     )
 }
 

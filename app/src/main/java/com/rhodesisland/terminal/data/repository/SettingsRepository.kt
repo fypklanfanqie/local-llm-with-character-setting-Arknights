@@ -161,6 +161,16 @@ class SettingsRepository(private val store: SettingsStore) {
     suspend fun getMomentReplyCharacterIdsNow(): Set<String> = dataStoreFirst(momentReplyCharacterIds, emptySet())
     suspend fun setMomentReplyCharacterIds(ids: Set<String>) = store.setMomentReplyCharacterIds(ids)
 
+    /**
+     * 云端 API 是否就绪（配置过 key；内置免费代理端点无需 key）。
+     * 朋友圈/问候/群聊等云端辅助功能据此判断，与聊天 Provider 切换（本地/云端）解耦——
+     * 用户聊天用本地模型时，这些功能仍直接调用已配置的云端 LLM。
+     */
+    suspend fun isCloudApiReady(): Boolean {
+        val cfg = getApiConfigNow()
+        return cfg.apiKey.isNotBlank() || com.rhodesisland.terminal.config.isFreeProxyBaseUrl(cfg.baseUrl)
+    }
+
     // ===== Token 用量（按角色累计云端输入/输出 token）=====
     /** 全角色 Token 用量快照（设置页「Token 用量」图表与数字）。 */
     val tokenUsage: Flow<TokenUsageSnapshot> = store.tokenUsage
@@ -170,7 +180,12 @@ class SettingsRepository(private val store: SettingsStore) {
      * 累计一次云端调用的 token 用量到 [characterId] 名下（原子读改写；空角色/零用量忽略）。
      * 归属口径：1:1 聊天、主动问候、群聊发言、朋友圈文案与评论回复。
      */
-    suspend fun recordTokenUsage(characterId: String?, promptTokens: Int, completionTokens: Int) {
+    suspend fun recordTokenUsage(
+        characterId: String?,
+        promptTokens: Int,
+        completionTokens: Int,
+        cachedTokens: Int = 0,
+    ) {
         val id = characterId?.trim().takeUnless { it.isNullOrBlank() } ?: return
         if (promptTokens <= 0 && completionTokens <= 0) return
         store.updateTokenUsage { snapshot ->
@@ -181,6 +196,7 @@ class SettingsRepository(private val store: SettingsStore) {
                         promptTokens = entry.promptTokens + promptTokens,
                         completionTokens = entry.completionTokens + completionTokens,
                         calls = entry.calls + 1,
+                        cachedTokens = entry.cachedTokens + cachedTokens,
                     )
                 ),
             )

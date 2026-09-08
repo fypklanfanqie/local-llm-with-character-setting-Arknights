@@ -92,7 +92,6 @@ fun GroupChatScreen(
             coverPath = state.groupCoverPath,
             memberCount = state.members.size,
             enabled = state.groupEnabled,
-            isCloud = state.isCloud,
             onBack = onBack,
             onEdit = { showInfo = true },
         )
@@ -122,20 +121,12 @@ fun GroupChatScreen(
             )
         }
 
-        // 本地 AI 下群聊不可用：给出明确指引，而不是只把按钮置灰
-        if (!state.isCloud) {
-            Text(
-                "群聊仅云端 AI 可用：请到聊天页顶栏把「本地」切换为「云端」后使用",
-                color = scheme.tertiary,
-                fontSize = 12.sp,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-            )
-        }
+        // 群聊发言直接调用已配置的云端 LLM，与聊天页的本地/云端切换解耦（未配置时发送会提示）
 
         GroupChatInputBar(
             text = state.inputText,
             isStreaming = state.isStreaming,
-            enabled = state.isCloud && state.members.isNotEmpty(),
+            enabled = state.members.isNotEmpty(),
             onTextChange = { new ->
                 val before = state.inputText.count { it == '@' }
                 val after = new.count { it == '@' }
@@ -191,7 +182,6 @@ private fun GroupChatTopBar(
     coverPath: String,
     memberCount: Int,
     enabled: Boolean,
-    isCloud: Boolean,
     onBack: () -> Unit,
     onEdit: () -> Unit,
 ) {
@@ -251,7 +241,6 @@ private fun GroupChatTopBar(
             )
             Text(
                 when {
-                    !isCloud -> "仅云端 AI 可用"
                     !enabled -> "未开启自动聊天（到设置开启）"
                     memberCount == 0 -> "尚未选择成员"
                     else -> "$memberCount 名成员 · 空闲时自动聊天"

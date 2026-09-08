@@ -75,7 +75,7 @@ class MomentGenerationCoordinator(
                     ChatMessageDto(role = "user", content = JsonPrimitive(MomentPromptBuilder.buildPostUserMessage(character.name, "", imageCount, mentionTarget))),
                 ),
                 onUsage = { usage ->
-                    usage?.let { settings.recordTokenUsage(characterId, it.promptTokens, it.completionTokens) }
+                    usage?.let { settings.recordTokenUsage(characterId, it.promptTokens, it.completionTokens, it.cachedTokens) }
                 },
             )
         }
@@ -150,7 +150,7 @@ class MomentGenerationCoordinator(
                     ChatMessageDto(role = "user", content = JsonPrimitive(prompt)),
                 ),
                 onUsage = { usage ->
-                    usage?.let { settings.recordTokenUsage(characterId, it.promptTokens, it.completionTokens) }
+                    usage?.let { settings.recordTokenUsage(characterId, it.promptTokens, it.completionTokens, it.cachedTokens) }
                 },
             )
         }
@@ -191,7 +191,7 @@ class MomentGenerationCoordinator(
                     ChatMessageDto(role = "user", content = JsonPrimitive(prompt)),
                 ),
                 onUsage = { usage ->
-                    usage?.let { settings.recordTokenUsage(characterId, it.promptTokens, it.completionTokens) }
+                    usage?.let { settings.recordTokenUsage(characterId, it.promptTokens, it.completionTokens, it.cachedTokens) }
                 },
             )
         }

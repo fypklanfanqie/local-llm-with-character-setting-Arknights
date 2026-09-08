@@ -70,6 +70,7 @@ import com.rhodesisland.terminal.config.ModelProvider
 import com.rhodesisland.terminal.config.PresetModel
 import com.rhodesisland.terminal.config.PRESET_PROVIDERS
 import com.rhodesisland.terminal.config.AppConfig
+import com.rhodesisland.terminal.config.isFreeProxyBaseUrl
 import com.rhodesisland.terminal.data.model.ChatProviderType
 import com.rhodesisland.terminal.data.model.GroupChatConfig
 import com.rhodesisland.terminal.data.model.SystemVoiceTemplate
@@ -1093,9 +1094,10 @@ private fun GreetingSection(container: AppContainer, scope: CoroutineScope) {
     val enabled by settings.greetingEnabled.collectAsState(initial = false)
     val charIds by settings.greetingCharacterIds.collectAsState(initial = emptySet())
     val dailyCount by settings.greetingDailyCount.collectAsState(initial = AppConfig.Greeting.DEFAULT_DAILY_COUNT)
-    val provider by settings.activeProvider.collectAsState(initial = ChatProviderType.CLOUD)
+    // 云端辅助功能与聊天 Provider 切换解耦：只看是否配置过云端 API
+    val apiCfg by settings.apiConfig.collectAsState(initial = ApiConfig())
+    val cloudReady = apiCfg.apiKey.isNotBlank() || isFreeProxyBaseUrl(apiCfg.baseUrl)
     val characters by container.characterRepository.characters.collectAsState(initial = emptyList())
-    val isCloud = provider == ChatProviderType.CLOUD
 
     var showCharPicker by remember { mutableStateOf(false) }
     var sliderValue by remember(dailyCount) { mutableStateOf(dailyCount.toFloat()) }
@@ -1147,16 +1149,16 @@ private fun GreetingSection(container: AppContainer, scope: CoroutineScope) {
     ) {
         GlassListRow(
             title = "角色主动问候",
-            subtitle = if (isCloud) "所选角色白天随机时间主动给你发消息。仅云端 AI 可用。"
-            else "仅云端 AI 模式可用，请先切换为云端 AI。",
+            subtitle = if (cloudReady) "所选角色白天随机时间主动给你发消息。"
+            else "请先在上方配置云端 AI API。",
             trailing = {
                 Switch(
                     checked = enabled,
-                    // 始终可点：本地下尝试开启时以 Toast 说明原因，而不是整条置灰让人以为坏了
+                    // 始终可点：未配置云端 API 时以 Toast 说明原因，而不是整条置灰让人以为坏了
                     enabled = true,
                     onCheckedChange = { on ->
-                        if (on && !isCloud) {
-                            Toast.makeText(context, "角色主动问候仅云端 AI 可用，请先切换到云端 AI", Toast.LENGTH_SHORT).show()
+                        if (on && !cloudReady) {
+                            Toast.makeText(context, "请先在设置中配置云端 AI API", Toast.LENGTH_SHORT).show()
                         } else {
                             scope.launch {
                                 settings.setGreetingEnabled(on)
@@ -1169,9 +1171,9 @@ private fun GreetingSection(container: AppContainer, scope: CoroutineScope) {
                     },
                 )
             },
-            showDivider = isCloud && enabled,
+            showDivider = cloudReady && enabled,
         )
-        if (enabled && isCloud && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !notifGranted) {
+        if (enabled && cloudReady && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !notifGranted) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -1192,7 +1194,7 @@ private fun GreetingSection(container: AppContainer, scope: CoroutineScope) {
                 }) { Text("去开启", color = scheme.primary, fontSize = 12.sp) }
             }
         }
-        if (isCloud) {
+        if (cloudReady) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Button(
                     onClick = {
@@ -1404,8 +1406,9 @@ private fun GroupChatSection(container: AppContainer, scope: CoroutineScope) {
 
     val config by settings.groupChatConfig.collectAsState(initial = GroupChatConfig())
     val dailyRounds by settings.groupDailyRounds.collectAsState(initial = AppConfig.GroupChat.DEFAULT_DAILY_ROUNDS)
-    val provider by settings.activeProvider.collectAsState(initial = ChatProviderType.CLOUD)
-    val isCloud = provider == ChatProviderType.CLOUD
+    // 云端辅助功能与聊天 Provider 切换解耦：只看是否配置过云端 API
+    val apiCfg by settings.apiConfig.collectAsState(initial = ApiConfig())
+    val cloudReady = apiCfg.apiKey.isNotBlank() || isFreeProxyBaseUrl(apiCfg.baseUrl)
 
     var roundsValue by remember(dailyRounds) { mutableStateOf(dailyRounds.toFloat()) }
     var testScheduled by remember { mutableStateOf(false) }
@@ -1422,16 +1425,16 @@ private fun GroupChatSection(container: AppContainer, scope: CoroutineScope) {
     ) {
         GlassListRow(
             title = "多人角色群聊",
-            subtitle = if (isCloud) "勾选角色同群聊天；空闲时自动互相聊天并可主动向你提问。仅云端 AI 可用。"
-            else "仅云端 AI 模式可用，请先切换为云端 AI。",
+            subtitle = if (cloudReady) "勾选角色同群聊天；空闲时自动互相聊天并可主动向你提问。"
+            else "请先在上方配置云端 AI API。",
             trailing = {
                 Switch(
                     checked = config.enabled,
-                    // 始终可点：本地下尝试开启时以 Toast 说明原因
+                    // 始终可点：未配置云端 API 时以 Toast 说明原因
                     enabled = true,
                     onCheckedChange = { on ->
-                        if (on && !isCloud) {
-                            Toast.makeText(context, "群聊仅云端 AI 可用，请先切换到云端 AI", Toast.LENGTH_SHORT).show()
+                        if (on && !cloudReady) {
+                            Toast.makeText(context, "请先在设置中配置云端 AI API", Toast.LENGTH_SHORT).show()
                         } else {
                             scope.launch {
                                 settings.setGroupChatConfig(config.copy(enabled = on))
@@ -1444,9 +1447,9 @@ private fun GroupChatSection(container: AppContainer, scope: CoroutineScope) {
                     },
                 )
             },
-            showDivider = isCloud && config.enabled,
+            showDivider = cloudReady && config.enabled,
         )
-        if (isCloud) {
+        if (cloudReady) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Button(
                     onClick = {
@@ -1919,8 +1922,9 @@ private fun MomentsSection(container: AppContainer, scope: CoroutineScope) {
     var showCharPicker by remember { mutableStateOf(false) }
     var showReplyPicker by remember { mutableStateOf(false) }
     val replyIds by container.settingsRepository.momentReplyCharacterIds.collectAsState(initial = emptySet())
-    val provider by settings.activeProvider.collectAsState(initial = ChatProviderType.CLOUD)
-    val isCloud = provider == ChatProviderType.CLOUD
+    // 云端辅助功能与聊天 Provider 切换解耦：只看是否配置过云端 API
+    val apiCfg by settings.apiConfig.collectAsState(initial = ApiConfig())
+    val cloudReady = apiCfg.apiKey.isNotBlank() || isFreeProxyBaseUrl(apiCfg.baseUrl)
 
     CollapsibleSection(
         title = "朋友圈",
@@ -1929,8 +1933,7 @@ private fun MomentsSection(container: AppContainer, scope: CoroutineScope) {
     ) {
         GlassListRow(
             title = "自动发圈",
-            subtitle = if (isCloud) "所选角色每隔一段时间自动发一条朋友圈（8-23 点）。"
-            else "仅云端 AI 模式可用，请先切换为云端 AI。",
+            subtitle = "所选角色每隔一段时间自动发一条朋友圈（8-23 点）。",
             trailing = {
                 Switch(
                     checked = autoEnabled.enabled,
@@ -1945,7 +1948,7 @@ private fun MomentsSection(container: AppContainer, scope: CoroutineScope) {
             showDivider = true,
         )
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (autoEnabled.enabled && isCloud) {
+            if (autoEnabled.enabled && cloudReady) {
                 Text(
                     "发圈间隔：${autoEnabled.intervalHours} 小时（实际有 ±12% 随机抖动）",
                     color = scheme.onSurfaceVariant, fontSize = 12.sp,
@@ -2025,8 +2028,8 @@ private fun MomentsSection(container: AppContainer, scope: CoroutineScope) {
                 // 测试连接：按一下 = 保存当前配置 + 立刻真实发一条朋友圈（验证云端连接）
                 TextButton(
                     onClick = {
-                        if (!isCloud) {
-                            probeResult = "连接失败：仅云端 AI 模式可用，请先切换为云端 AI"
+                        if (!cloudReady) {
+                            probeResult = "连接失败：请先在上方配置云端 AI API"
                             return@TextButton
                         }
                         val charId = autoEnabled.characterIds.firstOrNull() ?: characters.firstOrNull()?.id
@@ -2168,6 +2171,10 @@ private fun formatTokens(v: Long): String = when {
     else -> v.toString()
 }
 
+/** 缓存命中率百分比（无输入 token 时显示 —）。 */
+private fun formatCacheRate(entry: com.rhodesisland.terminal.data.model.TokenUsageEntry): String =
+    if (entry.promptTokens > 0) "${Math.round(entry.cacheHitRate * 100)}%" else "—"
+
 /**
  * Token 用量区：总量数字 + 按角色堆叠条形图（输入蓝/输出橙，按总量降序，最多 12 条）
  * + 搜索框过滤角色明细。归属口径见 [TokenUsageSnapshot]。
@@ -2182,7 +2189,7 @@ private fun TokenUsageSection(container: AppContainer) {
     CollapsibleSection(
         title = "Token 用量",
         key = "token_usage",
-        summary = "累计 ${usage.total.calls} 次调用 · ${formatTokens(usage.total.totalTokens)} tokens",
+        summary = "累计 ${usage.total.calls} 次调用 · ${formatTokens(usage.total.totalTokens)} tokens · 缓存命中 ${formatCacheRate(usage.total)}",
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             // 总量数字
@@ -2273,7 +2280,7 @@ private fun TokenUsageSection(container: AppContainer) {
                                 modifier = Modifier.weight(1f, fill = false),
                             )
                             Text(
-                                "入 ${formatTokens(row.entry.promptTokens)} · 出 ${formatTokens(row.entry.completionTokens)} · ${row.entry.calls}次",
+                                "入 ${formatTokens(row.entry.promptTokens)} · 出 ${formatTokens(row.entry.completionTokens)} · 命中 ${formatCacheRate(row.entry)} · ${row.entry.calls}次",
                                 color = scheme.onSurfaceVariant, fontSize = 11.sp,
                             )
                         }

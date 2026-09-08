@@ -41,7 +41,8 @@ class MomentWorker(
         // 1. 读门控状态（带重试）；读不到 -> 本周期跳过，等下个周期（保活语义）
         val state = readGatingState(settings) ?: return Result.success()
         if (!state.enabled) return Result.success()
-        if (settings.getActiveProviderNow() != ChatProviderType.CLOUD) return Result.success()
+        // 云端 API 未配置 -> 静默等待（与聊天 Provider 切换解耦：本地聊天也可自动发圈）
+        if (!settings.isCloudApiReady()) return Result.success()
         if (state.charIds.isEmpty()) return Result.success()
 
         val now = System.currentTimeMillis()

@@ -146,17 +146,17 @@ class MomentsViewModel(
 
     /**
      * 让角色发一条朋友圈（手动触发）。
+     * 云端 LLM 直接调用，与聊天页的本地/云端切换解耦；仅需已配置云端 API。
      * @param imageCount 0 = 纯文字；1..3 带图（生图失败自动降级纯文字）。
      */
     fun postAsCharacter(characterId: String, imageCount: Int) {
         if (generating.value.posting) return
-        if (!uiState.value.isCloud) {
-            errorMessage.value = "朋友圈生成仅云端 AI 可用"
-            return
-        }
-        generating.value = Generating(posting = true)
         viewModelScope.launch {
             try {
+                if (!container.settingsRepository.isCloudApiReady()) {
+                    errorMessage.value = "请先在设置中配置云端 AI API"
+                    return@launch
+                }
                 container.momentGenerationCoordinator.generateAndPost(characterId, imageCount)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
@@ -185,12 +185,13 @@ class MomentsViewModel(
 
     /**
      * 用户发圈后的随机互动：从设置选定的「互动角色」里随机 1~3 个评论、随机 1~3 个点赞
-     * （可与评论者重叠，像真实好友）；评论错峰生成落库，点赞错峰落库。仅云端 AI 模式启用；
-     * 未配置互动角色则不互动。生成失败静默降级（不打断发圈）。
+     * （可与评论者重叠，像真实好友）；评论错峰生成落库，点赞错峰落库。
+     * 云端 LLM 直接调用（与聊天 Provider 切换解耦），未配置云端 API 或互动角色则不互动；
+     * 生成失败静默降级（不打断发圈）。
      */
     private fun scheduleAutoInteraction(postId: Long, content: String, hasImages: Boolean) {
-        if (!uiState.value.isCloud) return
         viewModelScope.launch {
+            if (!container.settingsRepository.isCloudApiReady()) return@launch
             val candidates = container.settingsRepository.getMomentReplyCharacterIdsNow().toList()
             if (candidates.isEmpty()) return@launch
 

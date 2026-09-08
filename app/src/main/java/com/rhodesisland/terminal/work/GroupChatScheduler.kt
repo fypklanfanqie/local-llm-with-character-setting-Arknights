@@ -90,14 +90,15 @@ object GroupChatScheduler {
     }
 
     /**
-     * 读取「群聊开启 + 自动聊天开启 + 云端模式」。
+     * 读取「群聊开启 + 自动聊天开启 + 云端 API 就绪」。
      * @return true 符合；false 明确不符合；null 设置读取超时（未知）。
      */
     private suspend fun isActiveAndCloud(settings: SettingsRepository): Boolean? {
         val config = settings.getGroupChatConfigOrNull() ?: return null
         if (!config.enabled) return false
         if (!config.autoChat) return false
-        return settings.getActiveProviderNow() == ChatProviderType.CLOUD
+        // 与聊天 Provider 切换解耦：只要配置过云端 API，本地聊天下群聊自动轮也照常
+        return settings.isCloudApiReady()
     }
 
     private suspend fun remainingToday(settings: SettingsRepository): Int {

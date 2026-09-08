@@ -199,15 +199,16 @@ class NovelEditorViewModel(
     }
 
     /**
-     * AI 续写：门禁云端 → 流式生成（预览实时更新）→ 解析为脚本行逐条落库。
+     * AI 续写：直接调用已配置的云端 LLM（与聊天 Provider 切换解耦）→ 流式生成（预览实时更新）
+     * → 解析为脚本行逐条落库。
      */
     fun continuePlot() {
         if (generating.value.second) return
-        if (!isCloud.value) {
-            errorMessage.value = "AI 续写仅云端 AI 可用，请先在设置中切换到云端"
-            return
-        }
         generateJob = viewModelScope.launch {
+            if (!container.settingsRepository.isCloudApiReady()) {
+                errorMessage.value = "请先在设置中配置云端 AI API"
+                return@launch
+            }
             generating.value = "" to true
             try {
                 val chapter = repo.getChapter(chapterId)
@@ -256,7 +257,7 @@ class NovelEditorViewModel(
                     )
                 }
 
-                val provider = container.chatProviderManager.getActiveProvider()
+                val provider = container.cloudChatProvider
                 val raw = provider.chat(apiMessages, onChunk = { accumulated ->
                     generating.value = accumulated to true
                 })

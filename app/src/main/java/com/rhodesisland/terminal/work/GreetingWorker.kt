@@ -123,8 +123,8 @@ class GreetingWorker(
         if (state == null) return Result.success() // 读不到设置：等下个周期再读，保活
         if (!state.enabled) return Result.success() // 明确关闭 -> 由 ensureScheduled/reschedule cancel
 
-        // 本地模式 -> 静默等待（周期工作继续跑，切回云端即恢复）
-        if (settings.getActiveProviderNow() != ChatProviderType.CLOUD) return Result.success()
+        // 云端 API 未配置 -> 静默等待（与聊天 Provider 切换解耦：本地聊天也有角色问候）
+        if (!settings.isCloudApiReady()) return Result.success()
         if (state.charIds.isEmpty()) return Result.success() // 未选角色 -> 等用户选择
 
         val now = System.currentTimeMillis()
@@ -216,13 +216,13 @@ class GreetingWorker(
         else sorted[Random.nextInt(sorted.size)]
     }
 
-    /** 测试模式：仍需云端；从已选角色随机挑一个（无则用当前活跃角色），始终弹通知预览。 */
+    /** 测试模式：仍需云端 API；从已选角色随机挑一个（无则用当前活跃角色），始终弹通知预览。 */
     private suspend fun runTestGreeting(
         container: AppContainer,
         settings: SettingsRepository,
         context: Context,
     ): Result {
-        if (settings.getActiveProviderNow() != ChatProviderType.CLOUD) return Result.success()
+        if (!settings.isCloudApiReady()) return Result.success()
         val charIds = settings.getGreetingCharacterIdsNow()
         val charId = if (charIds.isNotEmpty()) {
             charIds.elementAt(Random.nextInt(charIds.size))
@@ -367,7 +367,7 @@ class GreetingWorker(
         return client.chatOnce(
             apiConfig.baseUrl, apiConfig.apiKey, apiConfig.model, messages,
             onUsage = { usage ->
-                usage?.let { settings.recordTokenUsage(char.id, it.promptTokens, it.completionTokens) }
+                usage?.let { settings.recordTokenUsage(char.id, it.promptTokens, it.completionTokens, it.cachedTokens) }
             },
         )
             .trim()

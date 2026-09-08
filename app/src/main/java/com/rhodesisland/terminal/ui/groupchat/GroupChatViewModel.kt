@@ -206,10 +206,6 @@ class GroupChatViewModel(
             _uiState.update { it.copy(errorMessage = "请先到「设置 → 群聊」选择群成员") }
             return
         }
-        if (state.activeProvider != ChatProviderType.CLOUD) {
-            _uiState.update { it.copy(errorMessage = "群聊仅云端 AI 可用") }
-            return
-        }
 
         _uiState.update {
             it.copy(
@@ -221,6 +217,11 @@ class GroupChatViewModel(
         }
 
         streamingJob = viewModelScope.launch {
+            // 云端 LLM 直接调用：与聊天 Provider 切换解耦（本地聊天也可用群聊），只要配置过云端 API
+            if (!container.settingsRepository.isCloudApiReady()) {
+                _uiState.update { it.copy(errorMessage = "请先在设置中配置云端 AI API", isStreaming = false, showTyping = false) }
+                return@launch
+            }
             var userMsgId = 0L
             var repliesOk = 0
             try {
@@ -242,7 +243,8 @@ class GroupChatViewModel(
                 container.settingsRepository.setGroupLastUserMessageAt(System.currentTimeMillis())
 
                 var history = container.chatRepository.getHistory(convId)
-                val provider = container.chatProviderManager.getActiveProvider()
+                // 群聊发言直接走云端 Provider（不跟随聊天页的本地/云端切换），token 按发言人记账
+                val provider = container.cloudChatProvider
                 val mentionIdSet = mentionIds.toSet()
                 // 自定义世界观（绑定到该群聊）注入：一次解析，全部发言共用
                 val worldviewDirective =
@@ -303,7 +305,11 @@ class GroupChatViewModel(
                         }
                     }
 
-                    val displayResponse = provider.chat(apiMessages, onChunk)
+                    val displayResponse = provider.chat(apiMessages, onChunk) { usage ->
+                        container.settingsRepository.recordTokenUsage(
+                            speaker.id, usage.promptTokens, usage.completionTokens, usage.cachedTokens,
+                        )
+                    }
                     val normalized = normalizeGeneratedReply(
                         raw = displayResponse,
                         expectedSpeakerName = speaker.name,

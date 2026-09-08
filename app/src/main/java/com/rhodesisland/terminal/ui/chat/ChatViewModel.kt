@@ -872,7 +872,7 @@ class ChatViewModel(
                     displayResponse = provider.chat(apiMessages, onChunk) { usage ->
                         // Token 用量按角色记账（设置页「Token 用量」）
                         container.settingsRepository.recordTokenUsage(
-                            _uiState.value.characterId, usage.promptTokens, usage.completionTokens,
+                            _uiState.value.characterId, usage.promptTokens, usage.completionTokens, usage.cachedTokens,
                         )
                     }
                     modelText = null
@@ -1417,7 +1417,7 @@ class ChatViewModel(
             model = apiConfig.model,
             messages = messages,
             onUsage = { usage ->
-                usage?.let { container.settingsRepository.recordTokenUsage(_uiState.value.characterId, it.promptTokens, it.completionTokens) }
+                usage?.let { container.settingsRepository.recordTokenUsage(_uiState.value.characterId, it.promptTokens, it.completionTokens, it.cachedTokens) }
             },
         ).trim()
         if (translated.isBlank() || translated == text.trim()) {

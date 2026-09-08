@@ -64,11 +64,12 @@ object MomentScheduler {
         )
     }
 
-    /** @return true 开启+云端；false 明确关闭/本地；null 设置读取失败（保活语义）。 */
+    /** @return true 开启+云端 API 就绪；false 明确关闭/未配置；null 设置读取失败（保活语义）。 */
     private suspend fun isEnabledAndCloud(settings: SettingsRepository): Boolean? {
         val config = runCatching { settings.getMomentAutoConfigNow() }.getOrNull() ?: return null
         if (!config.enabled) return false
-        return settings.getActiveProviderNow() == ChatProviderType.CLOUD
+        // 与聊天 Provider 切换解耦：只要配置过云端 API（key 或内置免费代理），本地聊天下也自动发圈
+        return settings.isCloudApiReady()
     }
 
     /**

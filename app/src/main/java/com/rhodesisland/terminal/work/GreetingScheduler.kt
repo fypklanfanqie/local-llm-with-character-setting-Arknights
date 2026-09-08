@@ -125,14 +125,14 @@ object GreetingScheduler {
     }
 
     /**
-     * 读取「问候已开启 + 云端模式」。
-     * @return true 符合；false 明确不符合（已关闭或本地）；null 设置读取超时（未知）。
+     * 读取「问候已开启 + 云端 API 就绪」。
+     * @return true 符合；false 明确不符合（已关闭或未配置云端 API）；null 设置读取超时（未知）。
      */
     private suspend fun isEnabledAndCloud(settings: SettingsRepository): Boolean? {
         val enabled = settings.getGreetingEnabledOrNull() ?: return null
         if (!enabled) return false
-        // provider 超时回退 CLOUD（安全默认：当作可用继续），不会误杀链条
-        return settings.getActiveProviderNow() == ChatProviderType.CLOUD
+        // 与聊天 Provider 切换解耦：只要配置过云端 API，本地聊天下也照常问候
+        return settings.isCloudApiReady()
     }
 
     /** 今日剩余配额 = 每日上限 - 今日已发（跨天则已发归零）。 */

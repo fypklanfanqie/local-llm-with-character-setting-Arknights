@@ -113,7 +113,8 @@ class GroupChatWorker(
         val config = readGatingState(settings)
         if (config == null) return Result.success()
         if (!config.enabled || !config.autoChat) return Result.success()
-        if (settings.getActiveProviderNow() != ChatProviderType.CLOUD) return Result.success()
+        // 云端 API 未配置 -> 静默等待（与聊天 Provider 切换解耦）
+        if (!settings.isCloudApiReady()) return Result.success()
         // 多群聊：目标 = 最近活跃的群；无群静默等待（PeriodicWork 保活）
         if (container.groupChatRepository.listGroups().isEmpty()) return Result.success()
 
@@ -184,7 +185,7 @@ class GroupChatWorker(
         settings: SettingsRepository,
         context: Context,
     ): Result {
-        if (settings.getActiveProviderNow() != ChatProviderType.CLOUD) return Result.success()
+        if (!settings.isCloudApiReady()) return Result.success()
         runRound(container, settings, context, isAskUser = true, alwaysNotify = true)
         return Result.success()
     }
@@ -339,7 +340,7 @@ class GroupChatWorker(
                 client.chatOnce(
                     apiConfig.baseUrl, apiConfig.apiKey, apiConfig.model, messages,
                     onUsage = { usage ->
-                        usage?.let { settings?.recordTokenUsage(speaker.id, it.promptTokens, it.completionTokens) }
+                        usage?.let { settings?.recordTokenUsage(speaker.id, it.promptTokens, it.completionTokens, it.cachedTokens) }
                     },
                 )
                     .let {
