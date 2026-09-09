@@ -1,5 +1,7 @@
 package com.rhodesisland.terminal.ui.music
 
+import com.rhodesisland.terminal.i18n.t
+
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -199,15 +201,15 @@ fun MusicScreen(container: AppContainer) {
             .background(Color.Transparent)
             .windowInsetsPadding(WindowInsets.statusBars)
     ) {
-        GlassLargeTitle("音乐") {
+        GlassLargeTitle(t("音乐")) {
             IconButton(onClick = { importPicker.launch(arrayOf("audio/*")) }) {
-                Icon(Icons.Filled.Add, contentDescription = "导入本地音乐", tint = scheme.onSurfaceVariant)
+                Icon(Icons.Filled.Add, contentDescription = t("导入本地音乐"), tint = scheme.onSurfaceVariant)
             }
             IconButton(onClick = {
                 showSearch = !showSearch
                 if (!showSearch) searchQuery = ""
             }) {
-                Icon(Icons.Filled.Search, contentDescription = "搜索", tint = if (showSearch) scheme.primary else scheme.onSurfaceVariant)
+                Icon(Icons.Filled.Search, contentDescription = t("搜索"), tint = if (showSearch) scheme.primary else scheme.onSurfaceVariant)
             }
         }
 
@@ -227,7 +229,7 @@ fun MusicScreen(container: AppContainer) {
                         if (coverUrl != null) {
                             AsyncImage(
                                 model = coverUrl,
-                                contentDescription = "专辑封面",
+                                contentDescription = t("专辑封面"),
                                 modifier = Modifier.size(72.dp).clip(RoundedCornerShape(14.dp)),
                                 contentScale = ContentScale.Crop,
                             )
@@ -244,14 +246,14 @@ fun MusicScreen(container: AppContainer) {
                     Column(Modifier.weight(1f)) {
                         Text("#${currentIndex + 1} / ${playlist.size}", color = scheme.onSurfaceVariant, fontSize = 11.sp)
                         Text(
-                            currentTrack?.name ?: "未在播放",
+                            currentTrack?.name ?: t("未在播放"),
                             color = scheme.onSurface,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             maxLines = 2,
                         )
                         Text(
-                            if (currentTrack?.neteaseId != null) "网易云音乐" else "本地资源",
+                            if (currentTrack?.neteaseId != null) t("网易云音乐") else t("本地资源"),
                             color = scheme.primary, fontSize = 10.sp,
                         )
                     }
@@ -300,11 +302,11 @@ fun MusicScreen(container: AppContainer) {
                     IconButton(onClick = {
                         scope.launch { container.settingsRepository.setMusicShuffle(!shuffle) }
                     }) {
-                        Icon(Icons.Filled.Shuffle, contentDescription = "随机播放", tint = if (shuffle) scheme.primary else scheme.onSurfaceVariant)
+                        Icon(Icons.Filled.Shuffle, contentDescription = t("随机播放"), tint = if (shuffle) scheme.primary else scheme.onSurfaceVariant)
                     }
                     IconButton(onClick = {
                         container.audioManager.prevTrack(playlist); container.audioManager.playMusic()
-                    }) { Icon(Icons.Filled.SkipPrevious, contentDescription = "上一曲", tint = scheme.onSurface, modifier = Modifier.size(28.dp)) }
+                    }) { Icon(Icons.Filled.SkipPrevious, contentDescription = t("上一曲"), tint = scheme.onSurface, modifier = Modifier.size(28.dp)) }
                     Box(
                         modifier = Modifier
                             .size(52.dp)
@@ -315,14 +317,14 @@ fun MusicScreen(container: AppContainer) {
                     ) {
                         Icon(
                             if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                            contentDescription = "播放/暂停",
+                            contentDescription = t("播放/暂停"),
                             tint = scheme.onPrimary,
                             modifier = Modifier.size(28.dp),
                         )
                     }
                     IconButton(onClick = {
                         container.audioManager.nextTrack(playlist); container.audioManager.playMusic()
-                    }) { Icon(Icons.Filled.SkipNext, contentDescription = "下一曲", tint = scheme.onSurface, modifier = Modifier.size(28.dp)) }
+                    }) { Icon(Icons.Filled.SkipNext, contentDescription = t("下一曲"), tint = scheme.onSurface, modifier = Modifier.size(28.dp)) }
                     IconButton(onClick = {
                         val newMode = (repeatMode + 1) % 3
                         scope.launch { container.settingsRepository.setMusicRepeatMode(newMode) }
@@ -330,14 +332,14 @@ fun MusicScreen(container: AppContainer) {
                     }) {
                         Icon(
                             if (repeatMode == 2) Icons.Filled.RepeatOne else Icons.Filled.Repeat,
-                            contentDescription = "播放模式",
+                            contentDescription = t("播放模式"),
                             tint = if (repeatMode != 0) scheme.primary else scheme.onSurfaceVariant,
                         )
                     }
                     IconButton(onClick = { showFavoritesOnly = !showFavoritesOnly }) {
                         Icon(
                             if (showFavoritesOnly) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                            contentDescription = "收藏",
+                            contentDescription = t("收藏"),
                             tint = if (showFavoritesOnly) scheme.primary else scheme.onSurfaceVariant,
                         )
                     }
@@ -348,7 +350,7 @@ fun MusicScreen(container: AppContainer) {
                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(Icons.Filled.VolumeUp, contentDescription = "音量", tint = scheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Filled.VolumeUp, contentDescription = t("音量"), tint = scheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                     Slider(
                         value = volumeSlider.coerceIn(0f, 100f),
                         onValueChange = {
@@ -377,7 +379,7 @@ fun MusicScreen(container: AppContainer) {
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                placeholder = { Text("搜索歌曲…", color = scheme.onSurfaceVariant, fontSize = 13.sp) },
+                placeholder = { Text(t("搜索歌曲…"), color = scheme.onSurfaceVariant, fontSize = 13.sp) },
                 shape = RoundedCornerShape(14.dp),
                 singleLine = true,
                 colors = TextFieldDefaults.colors(
@@ -403,11 +405,11 @@ fun MusicScreen(container: AppContainer) {
                     contentAlignment = Alignment.Center,
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("暂无音乐", style = MaterialTheme.typography.titleMedium, color = scheme.onSurfaceVariant)
+                        Text(t("暂无音乐"), style = MaterialTheme.typography.titleMedium, color = scheme.onSurfaceVariant)
                         Spacer(Modifier.height(6.dp))
-                        Text("导入本地音乐，或搜索网易云添加", fontSize = 12.sp, color = scheme.onSurfaceVariant)
+                        Text(t("导入本地音乐，或搜索网易云添加"), fontSize = 12.sp, color = scheme.onSurfaceVariant)
                         Spacer(Modifier.height(14.dp))
-                        Button(onClick = { importPicker.launch(arrayOf("audio/*")) }) { Text("导入本地音乐") }
+                        Button(onClick = { importPicker.launch(arrayOf("audio/*")) }) { Text(t("导入本地音乐")) }
                     }
                 }
             } else {
@@ -416,7 +418,7 @@ fun MusicScreen(container: AppContainer) {
                 ) {
                     if (searching) {
                         item {
-                            Text("搜索结果", color = scheme.onSurfaceVariant, fontSize = 12.sp, modifier = Modifier.padding(vertical = 6.dp))
+                            Text(t("搜索结果"), color = scheme.onSurfaceVariant, fontSize = 12.sp, modifier = Modifier.padding(vertical = 6.dp))
                         }
                         when {
                             searchLoading -> item {
@@ -427,7 +429,7 @@ fun MusicScreen(container: AppContainer) {
                                 )
                             }
                             searchResults.isEmpty() -> item {
-                                Text("未找到相关歌曲", color = scheme.onSurfaceVariant, fontSize = 12.sp, modifier = Modifier.padding(vertical = 8.dp))
+                                Text(t("未找到相关歌曲"), color = scheme.onSurfaceVariant, fontSize = 12.sp, modifier = Modifier.padding(vertical = 8.dp))
                             }
                             else -> items(searchResults, key = { "result_${it.id}" }) { song ->
                                 val already = playlist.any { it.key == "search_${song.id}" }
@@ -457,13 +459,13 @@ fun MusicScreen(container: AppContainer) {
                                 modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                             ) {
-                                Text("本地暂无音乐", color = scheme.onSurfaceVariant, fontSize = 13.sp)
+                                Text(t("本地暂无音乐"), color = scheme.onSurfaceVariant, fontSize = 13.sp)
                                 Spacer(Modifier.height(8.dp))
-                                Button(onClick = { importPicker.launch(arrayOf("audio/*")) }) { Text("导入本地音乐") }
+                                Button(onClick = { importPicker.launch(arrayOf("audio/*")) }) { Text(t("导入本地音乐")) }
                             }
                         }
                         displayList.isEmpty() -> item {
-                            Text("暂无收藏的歌曲", color = scheme.onSurfaceVariant, fontSize = 13.sp, modifier = Modifier.padding(vertical = 12.dp))
+                            Text(t("暂无收藏的歌曲"), color = scheme.onSurfaceVariant, fontSize = 13.sp, modifier = Modifier.padding(vertical = 12.dp))
                         }
                         else -> items(displayList, key = { it.key }) { track ->
                             val originalIndex = playlist.indexOf(track)
@@ -494,7 +496,7 @@ fun MusicScreen(container: AppContainer) {
                 Snackbar(
                     modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp),
                     action = {
-                        TextButton(onClick = { container.audioManager.clearError() }) { Text("知道了") }
+                        TextButton(onClick = { container.audioManager.clearError() }) { Text(t("知道了")) }
                     },
                 ) { Text(err, color = scheme.error, fontSize = 12.sp) }
             }
@@ -571,7 +573,7 @@ private fun LyricView(
     }
     if (lyrics.isEmpty()) {
         Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("暂无歌词", color = scheme.onSurfaceVariant, fontSize = 12.sp)
+            Text(t("暂无歌词"), color = scheme.onSurfaceVariant, fontSize = 12.sp)
         }
         return
     }
@@ -753,7 +755,7 @@ private fun PlaylistRow(
                 maxLines = 1,
             )
             Text(
-                if (track.neteaseId != null) "网易云" else "本地",
+                if (track.neteaseId != null) t("网易云") else t("本地"),
                 color = if (track.neteaseId != null) scheme.primary else scheme.onSurfaceVariant,
                 fontSize = 10.sp,
                 maxLines = 1,
@@ -762,7 +764,7 @@ private fun PlaylistRow(
         IconButton(onClick = onToggleFav, modifier = Modifier.size(30.dp)) {
             Icon(
                 if (isFav) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                contentDescription = "收藏",
+                contentDescription = t("收藏"),
                 tint = if (isFav) scheme.primary else scheme.onSurfaceVariant,
                 modifier = Modifier.size(16.dp),
             )
@@ -771,7 +773,7 @@ private fun PlaylistRow(
             IconButton(onClick = onRemove, modifier = Modifier.size(30.dp)) {
                 Icon(
                     Icons.Filled.DeleteOutline,
-                    contentDescription = "移除",
+                    contentDescription = t("移除"),
                     tint = scheme.onSurfaceVariant,
                     modifier = Modifier.size(16.dp),
                 )
@@ -811,7 +813,7 @@ private fun SearchResultRow(
                 Icon(Icons.Filled.Check, contentDescription = null, tint = scheme.primary, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
             }
-            Text(if (alreadyAdded) "已添加" else "添加", fontSize = 12.sp)
+            Text(if (alreadyAdded) t("已添加") else t("添加"), fontSize = 12.sp)
         }
     }
 }

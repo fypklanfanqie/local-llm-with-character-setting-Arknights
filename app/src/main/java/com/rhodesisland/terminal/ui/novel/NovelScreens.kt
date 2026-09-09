@@ -65,6 +65,8 @@ import com.rhodesisland.terminal.AppContainer
 import com.rhodesisland.terminal.data.local.NovelChapterEntity
 import com.rhodesisland.terminal.data.local.NovelLineEntity
 import com.rhodesisland.terminal.data.repository.NovelRepository
+import com.rhodesisland.terminal.i18n.t
+import com.rhodesisland.terminal.i18n.tf
 import com.rhodesisland.terminal.llm.NovelScriptParser
 import com.rhodesisland.terminal.util.RelativeTime
 
@@ -98,16 +100,16 @@ fun NovelHomeScreen(
     Box(Modifier.fillMaxSize().background(NOVEL_BG)) {
         LazyColumn(Modifier.fillMaxSize().statusBarsPadding()) {
             item {
-                NovelTopBar(title = "小说", onBack = onBack) {
+                NovelTopBar(title = t("小说"), onBack = onBack) {
                     IconButton(onClick = { showCreate = true }) {
-                        Icon(Icons.Filled.Add, contentDescription = "新建故事", tint = NOVEL_TEXT)
+                        Icon(Icons.Filled.Add, contentDescription = t("新建故事"), tint = NOVEL_TEXT)
                     }
                 }
             }
             if (stories.isEmpty()) {
                 item {
                     Text(
-                        "还没有故事\n点右上角 + 创建你的第一部小说",
+                        t("还没有故事\n点右上角 + 创建你的第一部小说"),
                         color = NOVEL_TEXT_DIM, fontSize = 13.sp, lineHeight = 20.sp,
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 48.dp),
                     )
@@ -131,7 +133,7 @@ fun NovelHomeScreen(
                             maxLines = 1, overflow = TextOverflow.Ellipsis,
                         )
                         IconButton(onClick = { deleteTarget = story.id }, modifier = Modifier.size(28.dp)) {
-                            Icon(Icons.Filled.Delete, contentDescription = "删除故事", tint = NOVEL_TEXT_DIM, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Filled.Delete, contentDescription = t("删除故事"), tint = NOVEL_TEXT_DIM, modifier = Modifier.size(16.dp))
                         }
                     }
                     if (story.background.isNotBlank()) {
@@ -143,7 +145,7 @@ fun NovelHomeScreen(
                     }
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "更新于 ${RelativeTime.format(story.updatedAt, System.currentTimeMillis())}",
+                        tf(t("更新于 {0}"), RelativeTime.format(story.updatedAt, System.currentTimeMillis())),
                         color = NOVEL_TEXT_DIM.copy(alpha = 0.7f), fontSize = 10.sp,
                     )
                 }
@@ -171,14 +173,14 @@ fun NovelHomeScreen(
     deleteTarget?.let { id ->
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
-            title = { Text("删除故事") },
-            text = { Text("删除后该故事的全部章节与正文都将移除，确定？") },
+            title = { Text(t("删除故事")) },
+            text = { Text(t("删除后该故事的全部章节与正文都将移除，确定？")) },
             confirmButton = {
                 TextButton(onClick = { deleteTarget = null; viewModel.deleteStory(id) }) {
-                    Text("删除", color = MaterialTheme.colorScheme.error)
+                    Text(t("删除"), color = MaterialTheme.colorScheme.error)
                 }
             },
-            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("取消") } },
+            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text(t("取消")) } },
         )
     }
 }
@@ -204,15 +206,15 @@ fun NovelStoryScreen(
     Box(Modifier.fillMaxSize().background(NOVEL_BG)) {
         LazyColumn(Modifier.fillMaxSize().statusBarsPadding()) {
             item {
-                NovelTopBar(title = state.story?.title ?: "小说", onBack = onBack) {
+                NovelTopBar(title = state.story?.title ?: t("小说"), onBack = onBack) {
                     IconButton(onClick = { viewModel.createChapter(onCreated = {}) }) {
-                        Icon(Icons.Filled.Add, contentDescription = "新建一话", tint = NOVEL_TEXT)
+                        Icon(Icons.Filled.Add, contentDescription = t("新建一话"), tint = NOVEL_TEXT)
                     }
                 }
             }
             item {
                 Text(
-                    "点击章节进入创作",
+                    t("点击章节进入创作"),
                     color = NOVEL_TEXT_DIM.copy(alpha = 0.7f), fontSize = 11.sp,
                     modifier = Modifier.padding(horizontal = 20.dp),
                 )
@@ -236,16 +238,16 @@ fun NovelStoryScreen(
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Text(
-                                chapter.title.ifBlank { "第 ${index + 1} 话" },
+                                chapter.title.ifBlank { tf("第 {0} 话", index + 1) },
                                 color = NOVEL_TEXT, fontSize = 15.sp, fontWeight = FontWeight.Medium,
                                 maxLines = 1, overflow = TextOverflow.Ellipsis,
                             )
                             val subtitle = buildList {
-                                if (chapter.summary.isNotBlank()) add("有设定")
-                                if (chapter.requirements.isNotBlank()) add("有要求")
+                                if (chapter.summary.isNotBlank()) add(t("有设定"))
+                                if (chapter.requirements.isNotBlank()) add(t("有要求"))
                             }.joinToString(" · ")
                             Text(
-                                subtitle.ifBlank { "尚未设定" },
+                                subtitle.ifBlank { t("尚未设定") },
                                 color = NOVEL_TEXT_DIM, fontSize = 11.sp,
                             )
                         }
@@ -259,7 +261,7 @@ fun NovelStoryScreen(
                                 modifier = Modifier.clickable { viewModel.moveChapter(chapter, +1) }.padding(6.dp))
                         }
                         IconButton(onClick = { viewModel.deleteChapter(chapter.id) }, modifier = Modifier.size(30.dp)) {
-                            Icon(Icons.Filled.Delete, contentDescription = "删除章节", tint = NOVEL_TEXT_DIM, modifier = Modifier.size(15.dp))
+                            Icon(Icons.Filled.Delete, contentDescription = t("删除章节"), tint = NOVEL_TEXT_DIM, modifier = Modifier.size(15.dp))
                         }
                     }
                 }
@@ -281,7 +283,7 @@ fun NovelStoryScreen(
                     ) {
                         Icon(Icons.Filled.Add, contentDescription = null, tint = NOVEL_ACCENT, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("新建一话", color = NOVEL_ACCENT, fontSize = 14.sp)
+                        Text(t("新建一话"), color = NOVEL_ACCENT, fontSize = 14.sp)
                     }
                 }
             }
@@ -318,7 +320,7 @@ fun NovelEditorScreen(
     val npcs = story?.let { container.novelRepository.decodeCustomNpcs(it) } ?: emptyList()
     val characters by container.characterRepository.characters.collectAsState(initial = emptyList())
     val speakerNames = buildList {
-        add("旁白" to Pair(NovelScriptParser.TYPE_NARRATION, null as String?))
+        add(t("旁白") to Pair(NovelScriptParser.TYPE_NARRATION, null as String?))
         story?.protagonistName?.takeIf { it.isNotBlank() }?.let {
             add(it to Pair(NovelScriptParser.TYPE_USER, null as String?))
         }
@@ -341,18 +343,18 @@ fun NovelEditorScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", tint = NOVEL_TEXT)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = t("返回"), tint = NOVEL_TEXT)
                 }
                 Column(Modifier.weight(1f)) {
                     Text(
-                        state.chapter?.title?.ifBlank { "未命名" } ?: "…",
+                        state.chapter?.title?.ifBlank { t("未命名") } ?: "…",
                         color = NOVEL_TEXT, fontSize = 16.sp, fontWeight = FontWeight.Bold,
                         maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
-                    Text("已自动保存到本机", color = NOVEL_TEXT_DIM.copy(alpha = 0.7f), fontSize = 10.sp)
+                    Text(t("已自动保存到本机"), color = NOVEL_TEXT_DIM.copy(alpha = 0.7f), fontSize = 10.sp)
                 }
                 IconButton(onClick = { showChapterSetting = true }) {
-                    Icon(Icons.Filled.Tune, contentDescription = "本话设定", tint = NOVEL_TEXT)
+                    Icon(Icons.Filled.Tune, contentDescription = t("本话设定"), tint = NOVEL_TEXT)
                 }
             }
 
@@ -374,10 +376,10 @@ fun NovelEditorScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = NOVEL_ACCENT, modifier = Modifier.size(14.dp))
                                 Spacer(Modifier.width(6.dp))
-                                Text("AI 正在续写…", color = NOVEL_TEXT_DIM, fontSize = 12.sp)
+                                Text(t("AI 正在续写…"), color = NOVEL_TEXT_DIM, fontSize = 12.sp)
                                 Spacer(Modifier.weight(1f))
                                 IconButton(onClick = { viewModel.stopGenerating() }, modifier = Modifier.size(28.dp)) {
-                                    Icon(Icons.Filled.Stop, contentDescription = "停止", tint = NOVEL_ACCENT, modifier = Modifier.size(16.dp))
+                                    Icon(Icons.Filled.Stop, contentDescription = t("停止"), tint = NOVEL_ACCENT, modifier = Modifier.size(16.dp))
                                 }
                             }
                             if (state.streamingText.isNotBlank()) {
@@ -428,7 +430,7 @@ fun NovelEditorScreen(
                         .padding(horizontal = 12.dp, vertical = 10.dp),
                     decorationBox = { inner ->
                         if (inputText.isEmpty()) {
-                            Text("$selLabel：输入对白或描写…", color = NOVEL_TEXT_DIM.copy(alpha = 0.6f), fontSize = 14.sp)
+                            Text(tf("{0}：输入对白或描写…", selLabel), color = NOVEL_TEXT_DIM.copy(alpha = 0.6f), fontSize = 14.sp)
                         }
                         inner()
                     },
@@ -480,15 +482,15 @@ fun NovelEditorScreen(
                 TextButton(onClick = {
                     viewModel.updateLine(line, editContent)
                     editTarget = null
-                }) { Text("保存") }
+                }) { Text(t("保存")) }
             },
             dismissButton = {
                 Row {
                     TextButton(onClick = {
                         viewModel.deleteLine(line.id)
                         editTarget = null
-                    }) { Text("删除", color = MaterialTheme.colorScheme.error) }
-                    TextButton(onClick = { editTarget = null }) { Text("取消") }
+                    }) { Text(t("删除"), color = MaterialTheme.colorScheme.error) }
+                    TextButton(onClick = { editTarget = null }) { Text(t("取消")) }
                 }
             },
         )
@@ -571,13 +573,13 @@ private fun ChapterSettingDialog(
     var requirements by remember { mutableStateOf(chapter.requirements) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("本话设定") },
+        title = { Text(t("本话设定")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                NovelSettingField("本话标题", title, 80) { title = it }
-                NovelSettingField("前情/本话摘要", summary, 500) { summary = it }
-                NovelSettingField("本话开场白（无正文时自动成为第一行）", opening, 500) { opening = it }
-                NovelSettingField("发生、发展、结果与写作要求", requirements, 2000) { requirements = it }
+                NovelSettingField(t("本话标题"), title, 80) { title = it }
+                NovelSettingField(t("前情/本话摘要"), summary, 500) { summary = it }
+                NovelSettingField(t("本话开场白（无正文时自动成为第一行）"), opening, 500) { opening = it }
+                NovelSettingField(t("发生、发展、结果与写作要求"), requirements, 2000) { requirements = it }
             }
         },
         confirmButton = {
@@ -590,9 +592,9 @@ private fun ChapterSettingDialog(
                         requirements = requirements.trim(),
                     ),
                 )
-            }) { Text("保存设定") }
+            }) { Text(t("保存设定")) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(t("取消")) } },
     )
 }
 
@@ -640,14 +642,14 @@ private fun CreateStoryDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("新建故事") },
+        title = { Text(t("新建故事")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                NovelSettingField("故事名 *", title, 60) { title = it }
-                NovelSettingField("故事背景（世界观/场景）", background, 1000) { background = it }
-                NovelSettingField("主控名字（选填，你的角色）", protagonistName, 30) { protagonistName = it }
-                NovelSettingField("主控性格与设定（选填）", protagonistPersona, 300) { protagonistPersona = it }
-                Text("选择参与角色（可多选）", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                NovelSettingField(t("故事名 *"), title, 60) { title = it }
+                NovelSettingField(t("故事背景（世界观/场景）"), background, 1000) { background = it }
+                NovelSettingField(t("主控名字（选填，你的角色）"), protagonistName, 30) { protagonistName = it }
+                NovelSettingField(t("主控性格与设定（选填）"), protagonistPersona, 300) { protagonistPersona = it }
+                Text(t("选择参与角色（可多选）"), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(4.dp))
                 LazyColumn(modifier = Modifier.height(180.dp)) {
                     items(characters.size) { index ->
@@ -669,7 +671,7 @@ private fun CreateStoryDialog(
                     }
                 }
                 Spacer(Modifier.height(8.dp))
-                Text("自定义 NPC（可选）", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(t("自定义 NPC（可选）"), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     BasicTextField(
                         value = npcName,
@@ -677,7 +679,7 @@ private fun CreateStoryDialog(
                         textStyle = TextStyle(fontSize = 13.sp),
                         modifier = Modifier.weight(0.35f).clip(RoundedCornerShape(6.dp))
                             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)).padding(6.dp),
-                        decorationBox = { inner -> if (npcName.isEmpty()) Text("名字", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant); inner() },
+                        decorationBox = { inner -> if (npcName.isEmpty()) Text(t("名字"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant); inner() },
                     )
                     BasicTextField(
                         value = npcPersona,
@@ -685,7 +687,7 @@ private fun CreateStoryDialog(
                         textStyle = TextStyle(fontSize = 13.sp),
                         modifier = Modifier.weight(0.45f).clip(RoundedCornerShape(6.dp))
                             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)).padding(6.dp),
-                        decorationBox = { inner -> if (npcPersona.isEmpty()) Text("设定", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant); inner() },
+                        decorationBox = { inner -> if (npcPersona.isEmpty()) Text(t("设定"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant); inner() },
                     )
                     TextButton(
                         enabled = npcName.isNotBlank(),
@@ -693,12 +695,12 @@ private fun CreateStoryDialog(
                             npcs = npcs + NovelRepository.CustomNpc(npcName.trim(), npcPersona.trim())
                             npcName = ""; npcPersona = ""
                         },
-                    ) { Text("添加") }
+                    ) { Text(t("添加")) }
                 }
                 npcs.forEach { npc ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("· ${npc.name}", fontSize = 13.sp, modifier = Modifier.weight(1f))
-                        Text("移除", fontSize = 11.sp, color = MaterialTheme.colorScheme.error,
+                        Text(t("移除"), fontSize = 11.sp, color = MaterialTheme.colorScheme.error,
                             modifier = Modifier.clickable { npcs = npcs - npc }.padding(4.dp))
                     }
                 }
@@ -708,9 +710,9 @@ private fun CreateStoryDialog(
             TextButton(
                 enabled = title.isNotBlank() && (selectedIds.isNotEmpty() || npcs.isNotEmpty()),
                 onClick = { onCreate(title, background, selectedIds.toList(), npcs, protagonistName, protagonistPersona) },
-            ) { Text("创建并进入") }
+            ) { Text(t("创建并进入")) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(t("取消")) } },
     )
 }
 
@@ -725,7 +727,7 @@ private fun NovelTopBar(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", tint = NOVEL_TEXT)
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = t("返回"), tint = NOVEL_TEXT)
         }
         Text(
             title, color = NOVEL_TEXT, fontSize = 18.sp, fontWeight = FontWeight.Bold,

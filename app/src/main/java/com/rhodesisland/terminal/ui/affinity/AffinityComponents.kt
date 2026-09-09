@@ -1,5 +1,7 @@
 package com.rhodesisland.terminal.ui.affinity
 
+import com.rhodesisland.terminal.i18n.t
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -87,7 +89,7 @@ fun ArchiveBackButton(onClick: () -> Unit) {
         onClick = onClick,
         modifier = Modifier.background(ArchiveSurfaceRaised, RoundedCornerShape(10.dp)),
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-    ) { Text("返回", color = ArchiveGold, fontSize = 13.sp) }
+    ) { Text(t("返回"), color = ArchiveGold, fontSize = 13.sp) }
 }
 
 @Composable
@@ -123,7 +125,7 @@ fun archiveSurfaceColor(): Color = ArchiveSurfaceRaised
 fun AffinityGiftImage(path: String, size: androidx.compose.ui.unit.Dp) {
     if (path.isBlank()) {
         Box(Modifier.size(size).background(ArchiveGold.copy(alpha = 0.16f), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-            Text("礼", color = ArchiveGold, fontWeight = FontWeight.Bold)
+            Text(t("礼"), color = ArchiveGold, fontWeight = FontWeight.Bold)
         }
     } else {
         coil.compose.AsyncImage(

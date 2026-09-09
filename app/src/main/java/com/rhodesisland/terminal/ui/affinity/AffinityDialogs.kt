@@ -1,5 +1,8 @@
 package com.rhodesisland.terminal.ui.affinity
 
+import com.rhodesisland.terminal.i18n.t
+import com.rhodesisland.terminal.i18n.tf
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -32,15 +35,15 @@ fun DailyCheckinDialog(
     if (!checkedIn) {
         androidx.compose.material3.AlertDialog(
             onDismissRequest = onDismiss,
-            title = { Text("每日签到") },
-            text = { Text("今日可领取 10,000 龙门币。现在领取，或稍后从角色页进入每日签到。") },
+            title = { Text(t("每日签到")) },
+            text = { Text(t("今日可领取 10,000 龙门币。现在领取，或稍后从角色页进入每日签到。")) },
             confirmButton = {
                 TextButton(onClick = {
                     scope.launch { container.affinityRepository.claimDailyCheckin() }
                     onDismiss()
-                }) { Text("领取") }
+                }) { Text(t("领取")) }
             },
-            dismissButton = { TextButton(onClick = onDismiss) { Text("稍后再说") } },
+            dismissButton = { TextButton(onClick = onDismiss) { Text(t("稍后再说")) } },
         )
     }
 }
@@ -55,11 +58,11 @@ fun GiftInventorySheet(
     com.rhodesisland.terminal.ui.glass.GlassSheet(onDismissRequest = onDismiss) {
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("赠送礼物", style = androidx.compose.material3.MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-                TextButton(onClick = onPickAttachment) { Text("添加附件") }
+                Text(t("赠送礼物"), style = androidx.compose.material3.MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                TextButton(onClick = onPickAttachment) { Text(t("添加附件")) }
             }
             if (gifts.none { it.inventory.quantity > 0 }) {
-                Text("没有可赠送的礼物，请先到每日签到与商店购买。", color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(t("没有可赠送的礼物，请先到每日签到与商店购买。"), color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
                 gifts.filter { it.inventory.quantity > 0 }.forEach { gift ->
                     androidx.compose.material3.Surface(
@@ -73,9 +76,9 @@ fun GiftInventorySheet(
                             androidx.compose.foundation.layout.Spacer(Modifier.size(10.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(gift.definition.name, style = androidx.compose.material3.MaterialTheme.typography.titleSmall)
-                                Text("库存 ${gift.inventory.quantity} · +${com.rhodesisland.terminal.affinity.formatAffinity(gift.definition.affinityGain)} 好感", fontSize = 12.sp)
+                                Text(tf("库存 {0} · +{1} 好感", gift.inventory.quantity, com.rhodesisland.terminal.affinity.formatAffinity(gift.definition.affinityGain)), fontSize = 12.sp)
                             }
-                            Icon(Icons.Filled.Redeem, contentDescription = "赠送", modifier = Modifier.size(20.dp))
+                            Icon(Icons.Filled.Redeem, contentDescription = t("赠送"), modifier = Modifier.size(20.dp))
                         }
                     }
                 }

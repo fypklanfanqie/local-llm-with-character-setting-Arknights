@@ -1,5 +1,9 @@
 package com.rhodesisland.terminal.ui.affinity
 
+import com.rhodesisland.terminal.i18n.t
+import com.rhodesisland.terminal.i18n.L10nRuntime
+import com.rhodesisland.terminal.i18n.tf
+
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -78,7 +82,7 @@ fun CheckinShopScreen(
     var deleteTarget by remember { mutableStateOf<OwnedGift?>(null) }
 
     AffinityArchivePage(
-        title = "每日供应与商店",
+        title = t("每日供应与商店"),
         code = "LOGISTICS / DAILY SUPPLY",
         onBack = onBack,
         scrollTag = CHECKIN_SCROLL_TAG,
@@ -90,8 +94,8 @@ fun CheckinShopScreen(
                 onClaim = {
                     scope.launch {
                         message = when (container.affinityRepository.claimDailyCheckin()) {
-                            is CheckinResult.Claimed -> "签到成功，获得 10,000 龙门币"
-                            is CheckinResult.AlreadyClaimed -> "今日已领取"
+                            is CheckinResult.Claimed -> L10nRuntime.t("签到成功，获得 10,000 龙门币")
+                            is CheckinResult.AlreadyClaimed -> L10nRuntime.t("今日已领取")
                         }
                     }
                 },
@@ -99,23 +103,23 @@ fun CheckinShopScreen(
         }
         item {
             Row(verticalAlignment = Alignment.Bottom) {
-                ArchiveSectionLabel("GIFT MARKET", "礼物商店", Modifier.weight(1f))
+                ArchiveSectionLabel("GIFT MARKET", t("礼物商店"), Modifier.weight(1f))
                 TextButton(onClick = { showCreate = true }) {
                     Icon(Icons.Filled.Add, contentDescription = null, tint = archivePrimaryColor(), modifier = Modifier.size(16.dp))
-                    Text("新建礼物", color = archivePrimaryColor())
+                    Text(t("新建礼物"), color = archivePrimaryColor())
                 }
             }
         }
         if (gifts.isEmpty()) {
-            item { EmptyArchiveCard("暂无礼物档案", "创建一份礼物，再用龙门币购买并赠送给干员。") }
+            item { EmptyArchiveCard(t("暂无礼物档案"), t("创建一份礼物，再用龙门币购买并赠送给干员。")) }
         } else {
             items(gifts.size, key = { gifts[it].definition.id }) { index ->
                 GiftShopCard(gifts[index], onBuy = {
                     scope.launch {
                         message = when (container.affinityRepository.buyGift(gifts[index].definition.id)) {
-                            is GiftPurchaseResult.Purchased -> "购买成功，已加入库存"
-                            GiftPurchaseResult.InsufficientFunds -> "龙门币不足"
-                            GiftPurchaseResult.GiftMissing -> "礼物档案不存在"
+                            is GiftPurchaseResult.Purchased -> L10nRuntime.t("购买成功，已加入库存")
+                            GiftPurchaseResult.InsufficientFunds -> L10nRuntime.t("龙门币不足")
+                            GiftPurchaseResult.GiftMissing -> L10nRuntime.t("礼物档案不存在")
                         }
                     }
                 }, onDelete = { deleteTarget = gifts[index] })
@@ -129,8 +133,8 @@ fun CheckinShopScreen(
             onCreate = { name, description, path, price ->
                 scope.launch {
                     runCatching { container.affinityRepository.createGift(name, description, path, price) }
-                        .onSuccess { message = "礼物档案已建立"; showCreate = false }
-                        .onFailure { message = it.message ?: "礼物创建失败" }
+                        .onSuccess { message = L10nRuntime.t("礼物档案已建立"); showCreate = false }
+                        .onFailure { message = it.message ?: L10nRuntime.t("礼物创建失败") }
                 }
             },
         )
@@ -138,10 +142,14 @@ fun CheckinShopScreen(
     deleteTarget?.let { target ->
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
-            title = { Text("删除礼物档案") },
+            title = { Text(t("删除礼物档案")) },
             text = {
                 Text(
-                    "确定删除「${target.definition.name}」？已购买未送出的库存（${target.inventory.quantity} 份）将一并删除，送礼历史保留。",
+                    tf(
+                        "确定删除「{0}」？已购买未送出的库存（{1} 份）将一并删除，送礼历史保留。",
+                        target.definition.name,
+                        target.inventory.quantity,
+                    ),
                 )
             },
             confirmButton = {
@@ -150,11 +158,11 @@ fun CheckinShopScreen(
                     scope.launch {
                         val imagePath = container.affinityRepository.deleteGift(target.definition.id)
                         if (imagePath != null) GiftImageStore.deleteDefinitionImage(context, imagePath)
-                        message = "礼物档案已删除"
+                        message = L10nRuntime.t("礼物档案已删除")
                     }
-                }) { Text("删除", color = MaterialTheme.colorScheme.error) }
+                }) { Text(t("删除"), color = MaterialTheme.colorScheme.error) }
             },
-            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("取消") } },
+            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text(t("取消")) } },
         )
     }
 }
@@ -168,12 +176,12 @@ private fun CheckinHero(wallet: LungmenWallet, checkedIn: Boolean, onClaim: () -
             Column(Modifier.weight(1f)) {
                 Text("LMD BALANCE", color = archiveSecondaryColor(), fontSize = 9.sp, fontWeight = FontWeight.Bold)
                 Text("${wallet.balance}", color = Color(0xFFF2F0EA), fontSize = 30.sp, fontWeight = FontWeight.Bold)
-                Text("每日补给 · +10,000 龙门币", color = Color(0xFFB6BEC9), fontSize = 12.sp)
+                Text(t("每日补给 · +10,000 龙门币"), color = Color(0xFFB6BEC9), fontSize = 12.sp)
             }
             Text(if (checkedIn) "CLAIMED" else "READY", color = if (checkedIn) Color(0xFF76C9D6) else archivePrimaryColor(), fontSize = 10.sp, fontWeight = FontWeight.Bold)
         }
         Button(onClick = onClaim, enabled = !checkedIn, modifier = Modifier.fillMaxWidth()) {
-            Text(if (checkedIn) "今日补给已领取" else "领取今日补给")
+            Text(if (checkedIn) t("今日补给已领取") else t("领取今日补给"))
         }
     }
 }
@@ -188,14 +196,14 @@ private fun GiftShopCard(gift: OwnedGift, onBuy: () -> Unit, onDelete: (() -> Un
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text(gift.definition.name, color = Color(0xFFF2F0EA), fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     if (gift.definition.description.isNotBlank()) Text(gift.definition.description, color = Color(0xFFAAB4C1), fontSize = 12.sp, maxLines = 2)
-                    Text("${gift.definition.price} LMD  ·  +${formatAffinity(gift.definition.affinityGain)} 好感  ·  库存 ${gift.inventory.quantity}", color = archivePrimaryColor(), fontSize = 11.sp)
+                    Text(tf("{0} LMD  ·  +{1} 好感  ·  库存 {2}", gift.definition.price, formatAffinity(gift.definition.affinityGain), gift.inventory.quantity), color = archivePrimaryColor(), fontSize = 11.sp)
                 }
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                 if (onDelete != null) {
-                    TextButton(onClick = onDelete) { Text("删除", color = Color(0xFFE57373), fontSize = 13.sp) }
+                    TextButton(onClick = onDelete) { Text(t("删除"), color = Color(0xFFE57373), fontSize = 13.sp) }
                 }
-                TextButton(onClick = onBuy) { Text("采购", color = archivePrimaryColor()) }
+                TextButton(onClick = onBuy) { Text(t("采购"), color = archivePrimaryColor()) }
             }
         }
     }
@@ -229,7 +237,7 @@ private fun GiftImage(path: String, size: androidx.compose.ui.unit.Dp) {
 @Composable
 private fun LungmenCoinIcon() {
     Box(Modifier.size(52.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xFFF0B93F)), contentAlignment = Alignment.Center) {
-        Icon(Icons.Filled.CurrencyYen, contentDescription = "龙门币", tint = Color(0xFF412F00), modifier = Modifier.size(28.dp))
+        Icon(Icons.Filled.CurrencyYen, contentDescription = t("龙门币"), tint = Color(0xFF412F00), modifier = Modifier.size(28.dp))
     }
 }
 
@@ -255,18 +263,18 @@ private fun CreateGiftDialog(onDismiss: () -> Unit, onCreate: (String, String, S
     val gain = price?.let(::affinityGainForGiftPrice)
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("建立礼物档案") },
+        title = { Text(t("建立礼物档案")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                ArchiveInput("礼物名称 *", name) { name = it }
-                ArchiveInput("礼物描述（可选）", description) { description = it }
-                ArchiveInput("价格 5000–20000", priceText) { priceText = it.filter(Char::isDigit) }
-                Text(gain?.let { "对应关系增益：+${formatAffinity(it)}" } ?: "价格必须落在有效档位", color = if (gain == null) MaterialTheme.colorScheme.error else archivePrimaryColor(), fontSize = 12.sp)
-                OutlinedButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, enabled = !savingImage) { Text(if (imagePath.isBlank()) "选择档案图片 *" else "更换档案图片") }
+                ArchiveInput(t("礼物名称 *"), name) { name = it }
+                ArchiveInput(t("礼物描述（可选）"), description) { description = it }
+                ArchiveInput(t("价格 5000–20000"), priceText) { priceText = it.filter(Char::isDigit) }
+                Text(gain?.let { tf("对应关系增益：+{0}", formatAffinity(it)) } ?: t("价格必须落在有效档位"), color = if (gain == null) MaterialTheme.colorScheme.error else archivePrimaryColor(), fontSize = 12.sp)
+                OutlinedButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, enabled = !savingImage) { Text(if (imagePath.isBlank()) t("选择档案图片 *") else t("更换档案图片")) }
             }
         },
-        confirmButton = { TextButton(enabled = name.isNotBlank() && imagePath.isNotBlank() && price != null && gain != null && !savingImage, onClick = { onCreate(name, description, imagePath, price!!) }) { Text("建立") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        confirmButton = { TextButton(enabled = name.isNotBlank() && imagePath.isNotBlank() && price != null && gain != null && !savingImage, onClick = { onCreate(name, description, imagePath, price!!) }) { Text(t("建立")) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(t("取消")) } },
     )
 }
 

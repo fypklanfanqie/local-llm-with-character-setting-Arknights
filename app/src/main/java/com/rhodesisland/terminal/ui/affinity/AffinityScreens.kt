@@ -1,5 +1,8 @@
 package com.rhodesisland.terminal.ui.affinity
 
+import com.rhodesisland.terminal.i18n.t
+import com.rhodesisland.terminal.i18n.tf
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -75,7 +78,7 @@ fun AffinityScreen(
     val unread = events.count { !it.isRead }
 
     AffinityArchivePage(
-        title = "${character.name} · 关系档案",
+        title = tf("{0} · 关系档案", character.name),
         code = "RELATION FILE / ${character.code.ifBlank { character.id.uppercase() }}",
         onBack = onBack,
         scrollTag = AFFINITY_SCROLL_TAG,
@@ -87,14 +90,14 @@ fun AffinityScreen(
             AffinityMeterCard(affinity.value)
         }
         item {
-            ArchiveSectionLabel("ARCHIVE INDEX", "关系记录")
+            ArchiveSectionLabel("ARCHIVE INDEX", t("关系记录"))
         }
         item {
             ArchiveRouteCard(
                 icon = Icons.Filled.CardGiftcard,
                 code = "GIFT LOG",
-                title = "礼物墙",
-                subtitle = if (giftHistory.isEmpty()) "尚无收礼记录" else "已收 ${giftHistory.size} 件礼物 · 查看完整记录",
+                title = t("礼物墙"),
+                subtitle = if (giftHistory.isEmpty()) t("尚无收礼记录") else tf("已收 {0} 件礼物 · 查看完整记录", giftHistory.size),
                 onClick = onOpenGifts,
             )
         }
@@ -102,14 +105,14 @@ fun AffinityScreen(
             ArchiveRouteCard(
                 icon = Icons.Filled.Event,
                 code = "EVENT ARCHIVE",
-                title = "特殊邂逅",
-                subtitle = if (unread > 0) "$unread 个新事件等待回忆" else "${events.size} / ${AFFINITY_EVENT_THRESHOLDS.size} 个阶段已解锁",
+                title = t("特殊邂逅"),
+                subtitle = if (unread > 0) tf("{0} 个新事件等待回忆", unread) else tf("{0} / {1} 个阶段已解锁", events.size, AFFINITY_EVENT_THRESHOLDS.size),
                 hasBadge = unread > 0,
                 onClick = onOpenEvents,
             )
         }
         if (giftHistory.isNotEmpty()) {
-            item { ArchiveSectionLabel("LATEST ENTRY", "最近动态") }
+            item { ArchiveSectionLabel("LATEST ENTRY", t("最近动态")) }
             item { GiftHistoryCard(giftHistory.first()) }
         }
     }
@@ -123,14 +126,14 @@ fun AffinityGiftsScreen(
 ) {
     val history by container.affinityRepository.observeGiftHistory(character.id).collectAsState(initial = emptyList())
     AffinityArchivePage(
-        title = "${character.name} · 礼物墙",
+        title = tf("{0} · 礼物墙", character.name),
         code = "GIFT LOG / ${character.code.ifBlank { character.id.uppercase() }}",
         onBack = onBack,
         scrollTag = "affinity_gifts_scroll",
     ) {
-        item { ArchiveSectionLabel("PRESENT HISTORY", "收到的礼物") }
+        item { ArchiveSectionLabel("PRESENT HISTORY", t("收到的礼物")) }
         if (history.isEmpty()) {
-            item { EmptyArchiveCard("礼物墙为空", "在每日供应与商店采购礼物，再回到聊天中赠送给这名干员。") }
+            item { EmptyArchiveCard(t("礼物墙为空"), t("在每日供应与商店采购礼物，再回到聊天中赠送给这名干员。")) }
         } else {
             items(history.size, key = { history[it].id }) { index -> GiftHistoryCard(history[index]) }
         }
@@ -151,12 +154,12 @@ fun AffinityEventsScreen(
     var memorySheetEvent by remember { mutableStateOf<SpecialEvent?>(null) }
 
     AffinityArchivePage(
-        title = "${character.name} · 特殊邂逅",
+        title = tf("{0} · 特殊邂逅", character.name),
         code = "EVENT ARCHIVE / ${character.code.ifBlank { character.id.uppercase() }}",
         onBack = onBack,
         scrollTag = "affinity_events_scroll",
     ) {
-        item { ArchiveSectionLabel("RELATION MILESTONES", "阶段记录") }
+        item { ArchiveSectionLabel("RELATION MILESTONES", t("阶段记录")) }
         items(AFFINITY_EVENT_THRESHOLDS.size) { index ->
             val threshold = AFFINITY_EVENT_THRESHOLDS[index]
             val event = events.firstOrNull { it.threshold == threshold }
@@ -219,14 +222,14 @@ private fun SpecialEventMemorySheet(
             modifier = Modifier.padding(top = 4.dp),
         )
         Text(
-            text = "特殊邂逅回忆 · 永久保存",
+            text = t("特殊邂逅回忆 · 永久保存"),
             color = archiveSecondaryColor(),
             fontSize = 11.sp,
             modifier = Modifier.padding(top = 3.dp, bottom = 10.dp),
         )
         if (messages.isEmpty()) {
             Text(
-                text = "这段回忆暂时没有可显示的内容。",
+                text = t("这段回忆暂时没有可显示的内容。"),
                 color = Color(0xFFAAB4C1),
                 fontSize = 13.sp,
                 modifier = Modifier.padding(vertical = 24.dp),
@@ -251,14 +254,14 @@ private fun SpecialEventMemorySheet(
                             .padding(horizontal = 12.dp, vertical = 9.dp),
                     ) {
                         Text(
-                            text = if (message.role == "user") "博士" else character.name,
+                            text = if (message.role == "user") t("博士") else character.name,
                             color = if (message.role == "user") archivePrimaryColor() else Color(0xFFD2D8E0),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                         )
                         Text(
                             text = com.rhodesisland.terminal.util.MarkdownParser.stripThink(message.content)
-                                .ifBlank { "（空消息）" },
+                                .ifBlank { t("（空消息）") },
                             color = Color(0xFFF2F0EA),
                             fontSize = 13.sp,
                             modifier = Modifier.padding(top = 3.dp),
@@ -273,7 +276,7 @@ private fun SpecialEventMemorySheet(
                 .fillMaxWidth()
                 .padding(top = 10.dp),
         ) {
-            Text("继续聊天", color = archivePrimaryColor(), fontSize = 14.sp)
+            Text(t("继续聊天"), color = archivePrimaryColor(), fontSize = 14.sp)
         }
     }
 }
@@ -286,7 +289,7 @@ private fun AffinityHero(character: Character, imageUrl: String) {
         Column(Modifier.align(Alignment.BottomStart).padding(16.dp)) {
             Text("RELATION FILE", color = archivePrimaryColor(), fontSize = 9.sp, fontWeight = FontWeight.Bold)
             Text(character.name, color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Bold)
-            Text(character.role.ifBlank { "罗德岛干员" }, color = Color(0xFFD2D8E0), fontSize = 12.sp)
+            Text(character.role.ifBlank { t("罗德岛干员") }, color = Color(0xFFD2D8E0), fontSize = 12.sp)
         }
     }
 }
@@ -297,7 +300,7 @@ private fun AffinityMeterCard(value: Float) {
         Row(verticalAlignment = Alignment.Bottom) {
             Column(Modifier.weight(1f)) {
                 Text("RELATION LEVEL", color = archiveSecondaryColor(), fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                Text("好感度 ${formatAffinity(value)}", color = Color(0xFFF2F0EA), fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                Text(tf("好感度 {0}", formatAffinity(value)), color = Color(0xFFF2F0EA), fontSize = 24.sp, fontWeight = FontWeight.Bold)
             }
             Text("/ 200", color = Color(0xFFAAB4C1), fontSize = 13.sp)
         }
@@ -332,10 +335,10 @@ private fun EventArchiveNode(threshold: Int, event: SpecialEvent?, enabled: Bool
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(event?.title ?: "$threshold 好感阶段", color = Color(0xFFF2F0EA), fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                Text(if (!enabled) "尚未达到解锁条件" else if (event?.conversationId != null) "已开始 · 可继续回忆" else "已解锁 · 等待开始", color = Color(0xFFAAB4C1), fontSize = 12.sp)
+                Text(event?.title ?: tf("{0} 好感阶段", threshold), color = Color(0xFFF2F0EA), fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text(if (!enabled) t("尚未达到解锁条件") else if (event?.conversationId != null) t("已开始 · 可继续回忆") else t("已解锁 · 等待开始"), color = Color(0xFFAAB4C1), fontSize = 12.sp)
             }
-            if (enabled) TextButton(onClick = onOpen) { Text(if (event?.conversationId != null) "回忆" else "开始", color = archivePrimaryColor()) }
+            if (enabled) TextButton(onClick = onOpen) { Text(if (event?.conversationId != null) t("回忆") else t("开始"), color = archivePrimaryColor()) }
         }
     }
 }
@@ -348,7 +351,7 @@ private fun GiftHistoryCard(history: GiftHistory) {
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(history.giftName, color = Color(0xFFF2F0EA), fontWeight = FontWeight.Bold)
-                Text("+${formatAffinity(history.affinityGain)} 好感  ·  ${formatGiftTime(history.sentAt)}", color = archivePrimaryColor(), fontSize = 11.sp)
+                Text(tf("+{0} 好感  ·  {1}", formatAffinity(history.affinityGain), formatGiftTime(history.sentAt)), color = archivePrimaryColor(), fontSize = 11.sp)
             }
         }
         if (history.giftDescription.isNotBlank()) Text(history.giftDescription, color = Color(0xFFAAB4C1), fontSize = 12.sp)

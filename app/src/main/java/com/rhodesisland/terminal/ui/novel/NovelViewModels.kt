@@ -1,5 +1,8 @@
 package com.rhodesisland.terminal.ui.novel
 
+import com.rhodesisland.terminal.i18n.t
+import com.rhodesisland.terminal.i18n.L10nRuntime
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rhodesisland.terminal.AppContainer
@@ -48,7 +51,7 @@ class NovelHomeViewModel(
                 val id = repo.createStory(title, background, memberIds, npcs, protagonistName, protagonistPersona)
                 onCreated(id)
             } catch (e: Exception) {
-                errorMessage.value = e.message ?: "创建失败"
+                errorMessage.value = e.message ?: L10nRuntime.t("创建失败")
             }
         }
     }
@@ -206,15 +209,15 @@ class NovelEditorViewModel(
         if (generating.value.second) return
         generateJob = viewModelScope.launch {
             if (!container.settingsRepository.isCloudApiReady()) {
-                errorMessage.value = "请先在设置中配置云端 AI API"
+                errorMessage.value = L10nRuntime.t("请先在设置中配置云端 AI API")
                 return@launch
             }
             generating.value = "" to true
             try {
                 val chapter = repo.getChapter(chapterId)
-                    ?: throw IllegalStateException("章节不存在")
+                    ?: throw IllegalStateException(L10nRuntime.t("章节不存在"))
                 val story = repo.getStory(chapter.storyId)
-                    ?: throw IllegalStateException("故事不存在")
+                    ?: throw IllegalStateException(L10nRuntime.t("故事不存在"))
                 val (protagonistName, speakerNames) = speakersOf(story)
 
                 val memberIds = repo.decodeMemberIds(story)
@@ -262,7 +265,7 @@ class NovelEditorViewModel(
                     generating.value = accumulated to true
                 })
                 val parsed = NovelScriptParser.parse(raw, speakerNames, protagonistName)
-                if (parsed.isEmpty()) throw IllegalStateException("AI 没有产出有效剧情，请重试")
+                if (parsed.isEmpty()) throw IllegalStateException(L10nRuntime.t("AI 没有产出有效剧情，请重试"))
                 // 解析行落库：已知角色名回填 characterId
                 val entities = parsed.map { line ->
                     NovelLineEntity(
@@ -279,7 +282,7 @@ class NovelEditorViewModel(
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                errorMessage.value = e.message ?: "生成失败，请稍后再试"
+                errorMessage.value = e.message ?: L10nRuntime.t("生成失败，请稍后再试")
             } finally {
                 generating.value = "" to false
             }
