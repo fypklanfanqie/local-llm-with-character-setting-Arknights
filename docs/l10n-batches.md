@@ -9,17 +9,18 @@
 | 1A | `ui/settings/SettingsScreen.kt` | 284 | `01SettingsA` | ✅ 已完成（272 处 + 239 词条） |
 | 1B | `ui/settings/BackendSettingsScreen.kt` | 198 | `01SettingsB` | ✅ 已完成（199 处 + 167 词条） |
 | 1C | `ui/settings/LorebookSection.kt` + `WorldviewSection.kt` + `TargetPickers.kt` | 85 | `01SettingsC` | ✅ 已完成（84 处 + 62 词条） |
-| 2 | `ui/chat/*` | 130 | `02Chat` | 🔄 进行中 |
-| 3A | `ui/guide/GuideContent.kt`（数据层词条）+ `ui/settings/GuideDialog.kt`（渲染处） | 617 | `03Guide` | 🔄 进行中 |
-| 3B | `ui/guide/GuideQuiz.kt` | 68 | `03GuideB` | ⏳ |
-| 4 | `ui/video/*` + `ui/models/*` | 104 | `04Video` | ⏳ |
+| 2 | `ui/chat/*` | 130 | `02Chat` | ✅ 已完成（122 处 + 94 词条） |
+| 3A | `ui/guide/GuideContent.kt` + `ui/settings/GuideDialog.kt` | 617 | `03Guide` | ✅ 已完成（568 词条 + 渲染处包装） |
+| 3B | `ui/guide/GuideQuiz.kt` | 68 | `03GuideB` | ✅ 已完成（58 词条 + 10 条 note 豁免） |
+| 4 | `ui/video/*` + `ui/models/*` | 120 | `04Video` | ✅ 已完成（120 处 + 65 词条） |
 | 5 | `ui/groupchat/*` | 61 | `05GroupChat` | ✅ 已完成（60 处 + 38 词条） |
-| 6 | `ui/lorebook/*` + `ui/glass/*` | 82 | `06Lorebook` | ⏳ |
-| 7 | `ui/moment/*` + `ui/feed/*` + `ui/navigation/*` + `ui/characters/*` | 104 | `07Moment` | ⏳ |
-| 8 | `ui/novel/*` + `ui/affinity/*` + `ui/music/*` + `ui/theme/*` | 162 | `08Novel` | ⏳ |
-| 9 | `work/*` + `notification/*` + `provider/*` + `util/*` + `data/*` 错误提示 | ~180 | `09System` | ⏳ |
+| 6 | `ui/lorebook/*` + `ui/glass/*` | 99 | `06Lorebook` | ✅ 已完成（99 处 + 75 词条） |
+| 7 | `ui/moment/*` + `ui/feed/*` + `ui/navigation/*` + `ui/characters/*` | ~65 | `07Moment` | 🔄 进行中 |
+| 8 | `ui/novel/*` + `ui/affinity/*` + `ui/music/*` + `ui/theme/*` | ~130 | `08Novel` | 🔄 进行中 |
+| 9A | `util/*` + `notification/*` + `work/*` + `provider/*` + `tts/*` + `service/*` + `perfmon/*` | ~100 | `09System` | 🔄 进行中 |
+| 9B | `data/remote` + `data/model` + `data/repository` + `data/lorebook` | ~108 | `09SystemB` | ⏳ |
 | 10 | `conversationexport/*` + `manager/*` | 37 | `10Export` | ✅ 已完成（37 处 + 30 词条） |
-| 11 | `llm/benchmark` 等诊断层文案（1B 报告发现，脚本默认排除 `llm/`） | ~? | 待定 | ⏳ 收尾评估 |
+| 11 | `llm/` 诊断层文案（提示词除外） | ~150 | `11Diagnostics` | ⏳ |
 
 ## 约定
 
