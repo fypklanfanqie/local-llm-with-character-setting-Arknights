@@ -9,6 +9,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import com.rhodesisland.terminal.data.repository.AssetRepository
 import com.rhodesisland.terminal.data.repository.BgmTrack
 import com.rhodesisland.terminal.data.repository.SettingsRepository
+import com.rhodesisland.terminal.i18n.L10nRuntime
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -189,7 +190,7 @@ class AudioManager(
             bgmPlayer?.addListener(object : Player.Listener {
                 override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                     Log.w(TAG, "BGM play error: ${error.message}")
-                    _error.value = "播放失败，请检查音频资源或网络"
+                    _error.value = L10nRuntime.t("播放失败，请检查音频资源或网络")
                 }
 
                 override fun onIsPlayingChanged(playing: Boolean) {
@@ -209,7 +210,7 @@ class AudioManager(
     fun loadTrack(index: Int, playlist: List<BgmTrack>): BgmTrack? {
         bgmPlaylist = playlist
         if (playlist.isEmpty()) {
-            _error.value = "播放列表为空"
+            _error.value = L10nRuntime.t("播放列表为空")
             return null
         }
         val actualIndex = ((index % playlist.size) + playlist.size) % playlist.size
@@ -217,7 +218,10 @@ class AudioManager(
         _currentIndex.value = actualIndex
         val track = playlist[actualIndex]
         if (track.file.isBlank()) {
-            _error.value = "音频资源缺失：${track.name} 暂无可用音频源，请在音乐页导入本地文件或检查网络"
+            _error.value = L10nRuntime.format(
+                "音频资源缺失：{0} 暂无可用音频源，请在音乐页导入本地文件或检查网络",
+                track.name,
+            )
             return null
         }
 
@@ -228,7 +232,7 @@ class AudioManager(
             }
         } catch (e: Exception) {
             Log.w(TAG, "Load track failed: ${e.message}")
-            _error.value = "音频加载失败：${track.name}"
+            _error.value = L10nRuntime.format("音频加载失败：{0}", track.name)
             return null
         }
         return track

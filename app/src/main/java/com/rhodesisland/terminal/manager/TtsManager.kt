@@ -10,6 +10,7 @@ import com.rhodesisland.terminal.data.model.TtsEngine
 import com.rhodesisland.terminal.data.model.TtsLanguage
 import com.rhodesisland.terminal.data.model.speakerIdForLanguage
 import com.rhodesisland.terminal.data.repository.SettingsRepository
+import com.rhodesisland.terminal.i18n.L10nRuntime
 import com.rhodesisland.terminal.tts.SystemTtsEngine
 import com.rhodesisland.terminal.tts.VolcTtsClient
 import kotlinx.coroutines.Dispatchers
@@ -65,7 +66,7 @@ class TtsManager(
      * 语言跟随已保存设置；不触碰云端凭据。
      */
     suspend fun previewSystem(text: String, template: SystemVoiceTemplate) = mutex.withLock {
-        if (text.isBlank()) throw Exception("没有可朗读的文本")
+        if (text.isBlank()) throw Exception(L10nRuntime.t("没有可朗读的文本"))
         if (playing) stopAll()
         val language = settings.getTtsLanguageNow()
         systemTts.speak(cleanTtsTextForLanguage(text, language), language, template)
@@ -77,7 +78,7 @@ class TtsManager(
      * @param characterId 角色 ID（云端引擎用于选择音色；系统引擎忽略）
      */
     suspend fun speak(text: String, characterId: String) = mutex.withLock {
-        if (text.isBlank()) throw Exception("没有可朗读的文本")
+        if (text.isBlank()) throw Exception(L10nRuntime.t("没有可朗读的文本"))
         if (playing) stopAll()
 
         val language = settings.getTtsLanguageNow()
@@ -221,8 +222,8 @@ class TtsManager(
         val cleaned = cleanTtsText(text)
         return if (language == TtsLanguage.ZH) {
             cleaned
-                .replace("ドクター", "博士")
-                .replace("ドクタ－", "博士") // 全角长音符的常见输入变体
+                .replace("ドクター", "博士") // l10n:ignore 语音文本规范化（非界面文案）
+                .replace("ドクタ－", "博士") // l10n:ignore 全角长音符的常见输入变体
         } else {
             cleaned
         }

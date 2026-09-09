@@ -1,5 +1,7 @@
 package com.rhodesisland.terminal.conversationexport
 
+import com.rhodesisland.terminal.i18n.L10nRuntime
+
 const val EXPORT_MESSAGE_GAP_PX = 14
 
 // ===== 头像 + 气泡占宽（渲染器与布局共用，保证换行/高度一致）=====
@@ -19,7 +21,7 @@ const val EXPORT_BUBBLE_CONTENT_WIDTH = EXPORT_BUBBLE_WIDTH - EXPORT_BUBBLE_PADD
 const val EXPORT_AVATAR_CENTER_Y = 44
 
 class LongImageTooTallException(val height: Int) : IllegalStateException(
-    "当前对话过长，无法安全生成单张长图；请改用“自动分页多张图”或 TXT（预计高度 ${height}px）",
+    L10nRuntime.format("当前对话过长，无法安全生成单张长图；请改用“自动分页多张图”或 TXT（预计高度 {0}px）", height),
 )
 
 data class ImageRenderPlan(
@@ -51,7 +53,12 @@ object ConversationImageLayout {
     }
 
     internal fun messageHeight(message: ConversationExportMessage): Int {
-        val bodyLines = textLineCount(message.content.ifBlank { "（无文本内容）" }, CONTENT_WIDTH, 30f).coerceAtLeast(1)
+        // 空内容占位符要用当前语言：渲染时画的是译文，估算行数必须一致，否则页高会偏
+        val bodyLines = textLineCount(
+            message.content.ifBlank { L10nRuntime.t("（无文本内容）") },
+            CONTENT_WIDTH,
+            30f,
+        ).coerceAtLeast(1)
         return MESSAGE_PADDING * 2 + META_LINE_HEIGHT + bodyLines * BODY_LINE_HEIGHT +
             message.attachments.size * ATTACHMENT_LINE_HEIGHT + 18
     }

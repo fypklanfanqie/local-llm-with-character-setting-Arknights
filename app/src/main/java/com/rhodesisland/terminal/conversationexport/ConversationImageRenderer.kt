@@ -10,6 +10,7 @@ import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.RectF
 import android.text.TextPaint
+import com.rhodesisland.terminal.i18n.L10nRuntime
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.max
@@ -129,10 +130,11 @@ object ConversationImageRenderer {
         val title = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = GOLD; textSize = 42f; isFakeBoldText = true }
         val subtitle = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = MUTED; textSize = 24f }
         // 头部整体居中：标题/副标题/页码按各自宽度水平居中，金线横贯居中区。
-        canvas.drawText("罗德岛通讯记录", (EXPORT_IMAGE_WIDTH_PX - title.measureText("罗德岛通讯记录")) / 2f, 62f, title)
+        val headerText = L10nRuntime.t("罗德岛通讯记录")
+        canvas.drawText(headerText, (EXPORT_IMAGE_WIDTH_PX - title.measureText(headerText)) / 2f, 62f, title)
         val subtitleText = "${document.ownerName} · ${document.title}"
         canvas.drawText(subtitleText, (EXPORT_IMAGE_WIDTH_PX - subtitle.measureText(subtitleText)) / 2f, 102f, subtitle)
-        val pageText = "第 $pageNumber / $pageCount 页"
+        val pageText = L10nRuntime.format("第 {0} / {1} 页", pageNumber, pageCount)
         canvas.drawText(pageText, (EXPORT_IMAGE_WIDTH_PX - subtitle.measureText(pageText)) / 2f, 138f, subtitle)
         // 分隔线：从 gutter 到右侧 gutter（本身关于中轴对称），顶部间距保持与标题节奏一致。
         canvas.drawRect(
@@ -193,13 +195,15 @@ object ConversationImageRenderer {
         avatarCache: MutableMap<String, Bitmap?>,
     ): Int {
         val lines = ConversationImageLayout.wrap(
-            message.content.ifBlank { "（无文本内容）" },
+            message.content.ifBlank { L10nRuntime.t("（无文本内容）") },
             EXPORT_BUBBLE_CONTENT_WIDTH,
             BODY_TEXT_SIZE,
         )
         val height = MESSAGE_PADDING * 2 + META_LINE_HEIGHT + lines.size * BODY_LINE_HEIGHT +
             message.attachments.size * ATTACHMENT_LINE_HEIGHT + 18
-        val isUser = message.senderName == "博士" || message.senderName == "用户"
+        // 用户侧判定用模型上的 isUser 字段：senderName 会随界面语言翻译（博士 → Doctor），
+        // 不能拿中文名比较（见 ConversationExportMessage.isUser 注释）。
+        val isUser = message.isUser
         val left = if (isUser) userBubbleLeft else charBubbleLeft
         val right = if (isUser) userBubbleRight else charBubbleRight
 
@@ -312,7 +316,7 @@ object ConversationImageRenderer {
 
     private fun ConversationExportMessage.splitForPage(maxHeight: Int): List<ConversationExportMessage> {
         val maxLines = ((maxHeight - MESSAGE_PADDING * 2 - META_LINE_HEIGHT - 18) / BODY_LINE_HEIGHT).coerceAtLeast(1)
-        val lines = ConversationImageLayout.wrap(content.ifBlank { "（无文本内容）" }, EXPORT_BUBBLE_CONTENT_WIDTH, BODY_TEXT_SIZE)
+        val lines = ConversationImageLayout.wrap(content.ifBlank { L10nRuntime.t("（无文本内容）") }, EXPORT_BUBBLE_CONTENT_WIDTH, BODY_TEXT_SIZE)
         return lines.chunked(maxLines).mapIndexed { index, part ->
             copy(
                 content = part.joinToString("\n"),
