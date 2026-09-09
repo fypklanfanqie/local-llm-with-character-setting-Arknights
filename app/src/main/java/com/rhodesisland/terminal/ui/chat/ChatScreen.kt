@@ -102,7 +102,9 @@ import com.rhodesisland.terminal.data.model.MessageSegment
 import com.rhodesisland.terminal.data.model.SeedanceVideo
 import com.rhodesisland.terminal.data.repository.ChatBackgroundConfig
 import com.rhodesisland.terminal.data.repository.ConversationRepository
+import com.rhodesisland.terminal.i18n.AppLanguage
 import com.rhodesisland.terminal.i18n.L10nRuntime
+import com.rhodesisland.terminal.i18n.LocalAppLanguage
 import com.rhodesisland.terminal.i18n.t
 import com.rhodesisland.terminal.i18n.tf
 import com.rhodesisland.terminal.perfmon.PerformanceGlassOverlay
@@ -1056,7 +1058,9 @@ private fun LangBubble(
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            lang.displayChar,
+            // 语言角标：中文界面用「中/日」单字（紧凑圆形按钮），其他界面用 ISO 码——
+            // 「中」这个 key 已被设置页尺寸档位「中」(Medium) 占用，不能复用，故按界面语言分流。
+            if (LocalAppLanguage.current == AppLanguage.ZH) lang.displayChar else lang.name.uppercase(),
             color = scheme.primary,
             fontSize = 13.sp,
             fontWeight = FontWeight.Bold,

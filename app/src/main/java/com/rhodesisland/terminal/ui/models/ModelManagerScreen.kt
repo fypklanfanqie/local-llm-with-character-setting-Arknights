@@ -152,7 +152,7 @@ private fun ModelCard(
                 }
             }
             if (model.description.isNotBlank()) {
-                Text(model.description, color = scheme.onSurfaceVariant, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
+                Text(t(model.description), color = scheme.onSurfaceVariant, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
             }
             Text(
                 tf("大小: {0} · MNN · v{1}", formatSize(model.size), model.version),

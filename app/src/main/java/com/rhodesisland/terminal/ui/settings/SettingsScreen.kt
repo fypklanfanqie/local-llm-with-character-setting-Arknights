@@ -529,7 +529,7 @@ fun SettingsScreen(
                 )
                 FieldLabel(t("朗读引擎"))
                 SeedanceDropdown(
-                    items = TtsEngine.entries.map { it to it.label },
+                    items = TtsEngine.entries.map { it to t(it.label) },
                     selected = ttsEngineEdit,
                     onSelect = { ttsEngineEdit = it },
                 )
@@ -2816,7 +2816,7 @@ private fun ModelDropdown(
                         Column {
                             Text(model.displayName, color = if (selectedModel == model) scheme.primary else scheme.onSurface, fontSize = 13.sp)
                             if (model.description.isNotBlank()) {
-                                Text(model.description, color = scheme.onSurfaceVariant, fontSize = 10.sp)
+                                Text(t(model.description), color = scheme.onSurfaceVariant, fontSize = 10.sp)
                             }
                         }
                     },
