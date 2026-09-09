@@ -31,6 +31,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.rhodesisland.terminal.data.model.DisplayMessage
 import com.rhodesisland.terminal.data.model.SeedanceVideo
+import com.rhodesisland.terminal.i18n.t
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -163,7 +164,7 @@ fun ChatMessageList(
             ) {
                 Icon(
                     Icons.Filled.KeyboardArrowDown,
-                    contentDescription = "回到底部",
+                    contentDescription = t("回到底部"),
                     tint = Color.White,
                 )
             }

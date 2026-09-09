@@ -101,6 +101,10 @@ import com.rhodesisland.terminal.affinity.OwnedGift
 import com.rhodesisland.terminal.data.model.MessageSegment
 import com.rhodesisland.terminal.data.model.SeedanceVideo
 import com.rhodesisland.terminal.data.repository.ChatBackgroundConfig
+import com.rhodesisland.terminal.data.repository.ConversationRepository
+import com.rhodesisland.terminal.i18n.L10nRuntime
+import com.rhodesisland.terminal.i18n.t
+import com.rhodesisland.terminal.i18n.tf
 import com.rhodesisland.terminal.perfmon.PerformanceGlassOverlay
 import com.rhodesisland.terminal.ui.glass.GlassSegmented
 import com.rhodesisland.terminal.ui.navigation.ClampedImeBottomPadding
@@ -241,11 +245,11 @@ fun ChatScreen(
             when (val result = container.affinityRepository.sendGift(state.characterId, gift.definition.id, conversationId)) {
                 is GiftSendResult.Sent -> {
                     viewModel.sendGiftThanks(result.history)
-                    Toast.makeText(context, "已赠送 ${gift.definition.name}，好感度 +${result.history.affinityGain}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, L10nRuntime.format("已赠送 {0}，好感度 +{1}", gift.definition.name, result.history.affinityGain), Toast.LENGTH_SHORT).show()
                     showGiftSheet = false
                 }
-                GiftSendResult.InventoryEmpty -> Toast.makeText(context, "该礼物库存不足", Toast.LENGTH_SHORT).show()
-                GiftSendResult.GiftMissing -> Toast.makeText(context, "礼物已不存在", Toast.LENGTH_SHORT).show()
+                GiftSendResult.InventoryEmpty -> Toast.makeText(context, L10nRuntime.t("该礼物库存不足"), Toast.LENGTH_SHORT).show()
+                GiftSendResult.GiftMissing -> Toast.makeText(context, L10nRuntime.t("礼物已不存在"), Toast.LENGTH_SHORT).show()
             }
             giftSendBusy = false
         }
@@ -257,8 +261,8 @@ fun ChatScreen(
         exportBusy = true
         exportScope.launch {
             conversationExportWriter.writeText(uri, ConversationTextExporter.render(document))
-                .onSuccess { Toast.makeText(context, "聊天记录已导出", Toast.LENGTH_SHORT).show() }
-                .onFailure { error -> Toast.makeText(context, "导出失败：${error.toUserErrorMessage()}", Toast.LENGTH_SHORT).show() }
+                .onSuccess { Toast.makeText(context, L10nRuntime.t("聊天记录已导出"), Toast.LENGTH_SHORT).show() }
+                .onFailure { error -> Toast.makeText(context, L10nRuntime.format("导出失败：{0}", error.toUserErrorMessage()), Toast.LENGTH_SHORT).show() }
             exportBusy = false
         }
     }
@@ -273,8 +277,8 @@ fun ChatScreen(
             runCatching { ConversationImageRenderer.render(ConversationImageLayout.plan(document, mode), context).single() }
                 .onSuccess { png ->
                     conversationExportWriter.writePng(uri, png)
-                        .onSuccess { Toast.makeText(context, "聊天记录图片已导出", Toast.LENGTH_SHORT).show() }
-                        .onFailure { error -> Toast.makeText(context, "导出失败：${error.toUserErrorMessage()}", Toast.LENGTH_SHORT).show() }
+                        .onSuccess { Toast.makeText(context, L10nRuntime.t("聊天记录图片已导出"), Toast.LENGTH_SHORT).show() }
+                        .onFailure { error -> Toast.makeText(context, L10nRuntime.format("导出失败：{0}", error.toUserErrorMessage()), Toast.LENGTH_SHORT).show() }
                 }
                 .onFailure { error -> Toast.makeText(context, error.toUserErrorMessage(), Toast.LENGTH_SHORT).show() }
             exportBusy = false
@@ -300,8 +304,8 @@ fun ChatScreen(
                     .fold(
                         onSuccess = { pngs ->
                             conversationExportWriter.writePngPages(treeUri, suggestedExportBaseName(document.ownerName, document.title, document.exportedAt), pngs)
-                                .onSuccess { count -> Toast.makeText(context, "已导出 $count 张聊天记录图片", Toast.LENGTH_SHORT).show() }
-                                .onFailure { error -> Toast.makeText(context, "导出失败：${error.toUserErrorMessage()}", Toast.LENGTH_SHORT).show() }
+                                .onSuccess { count -> Toast.makeText(context, L10nRuntime.format("已导出 {0} 张聊天记录图片", count), Toast.LENGTH_SHORT).show() }
+                                .onFailure { error -> Toast.makeText(context, L10nRuntime.format("导出失败：{0}", error.toUserErrorMessage()), Toast.LENGTH_SHORT).show() }
                         },
                         onFailure = { error -> Toast.makeText(context, error.toUserErrorMessage(), Toast.LENGTH_SHORT).show() },
                     )
@@ -374,9 +378,9 @@ fun ChatScreen(
             val (video, _) = pending
             videoScope.launch {
                 exporter.exportToUri(video, uri).onSuccess {
-                    Toast.makeText(context, "视频已保存到所选位置", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, L10nRuntime.t("视频已保存到所选位置"), Toast.LENGTH_SHORT).show()
                 }.onFailure { e ->
-                    Toast.makeText(context, "保存失败：${e.toUserErrorMessage()}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, L10nRuntime.format("保存失败：{0}", e.toUserErrorMessage()), Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -385,7 +389,7 @@ fun ChatScreen(
     val handleVideoPlay: (SeedanceVideo) -> Unit = { video ->
         val path = video.localVideoPath
         if (path.isNullOrBlank()) {
-            Toast.makeText(context, "视频文件尚未就绪", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, L10nRuntime.t("视频文件尚未就绪"), Toast.LENGTH_SHORT).show()
         } else {
             playbackController.toggle(File(path))
         }
@@ -394,7 +398,7 @@ fun ChatScreen(
     val handleVideoFullScreen: (SeedanceVideo) -> Unit = { video ->
         val path = video.localVideoPath
         if (path.isNullOrBlank()) {
-            Toast.makeText(context, "视频文件尚未就绪", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, L10nRuntime.t("视频文件尚未就绪"), Toast.LENGTH_SHORT).show()
         } else {
             playbackController.play(File(path))
             playbackController.setFullScreen(true)
@@ -403,14 +407,14 @@ fun ChatScreen(
     // 保存到本地（卡片「保存到本地」）：Android 10+ 写 MediaStore 相册；7–9 弹 SAF 选择器后流式写入。
     val handleVideoExport: (SeedanceVideo) -> Unit = { video ->
         if (video.localVideoPath.isNullOrBlank()) {
-            Toast.makeText(context, "视频文件尚未就绪", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, L10nRuntime.t("视频文件尚未就绪"), Toast.LENGTH_SHORT).show()
         } else {
             when (exportTargetForSdk(Build.VERSION.SDK_INT)) {
                 VideoExportTarget.MediaStoreMovies -> videoScope.launch {
                     exporter.exportToMediaStore(video).onSuccess {
-                        Toast.makeText(context, "视频已保存到相册 Movies/RhodesIslandTerminal", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, L10nRuntime.t("视频已保存到相册 Movies/RhodesIslandTerminal"), Toast.LENGTH_SHORT).show()
                     }.onFailure { e ->
-                        Toast.makeText(context, "保存失败：${e.toUserErrorMessage()}", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, L10nRuntime.format("保存失败：{0}", e.toUserErrorMessage()), Toast.LENGTH_SHORT).show()
                     }
                 }
                 VideoExportTarget.CreateDocument -> {
@@ -536,7 +540,7 @@ fun ChatScreen(
                 Snackbar(
                     modifier = Modifier.padding(8.dp),
                     action = {
-                        TextButton(onClick = { viewModel.clearError() }) { Text("关闭") }
+                        TextButton(onClick = { viewModel.clearError() }) { Text(t("关闭")) }
                     }
                 ) { Text(error) }
             }
@@ -644,7 +648,7 @@ fun ChatScreen(
                     val document = pendingConversationExport ?: return@ConversationExportImageModeDialog
                     val error = runCatching { ConversationImageLayout.plan(document, ConversationImageMode.LONG_IMAGE) }.exceptionOrNull()
                     if (error != null) {
-                        Toast.makeText(context, "图片生成失败：${error.toUserErrorMessage()}", Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, L10nRuntime.format("图片生成失败：{0}", error.toUserErrorMessage()), Toast.LENGTH_LONG).show()
                         return@ConversationExportImageModeDialog
                     }
                     showExportImageModePicker = false
@@ -745,7 +749,8 @@ private fun WelcomeState(
 ) {
     val scheme = MaterialTheme.colorScheme
     val glass = chatGlass()
-    val suggestions = remember { listOf("和我打个招呼", "今天过得怎么样", "讲个故事给我听") }
+    // 推荐话题：随界面语言显示，点击后即以该文案作为用户消息发送。
+    val suggestions = listOf(t("和我打个招呼"), t("今天过得怎么样"), t("讲个故事给我听"))
     Box(
         modifier = Modifier.fillMaxSize().padding(horizontal = 28.dp),
         contentAlignment = Alignment.Center,
@@ -765,7 +770,7 @@ private fun WelcomeState(
             )
             Spacer(Modifier.height(14.dp))
             Text(
-                name.ifBlank { "未选择角色" },
+                name.ifBlank { t("未选择角色") },
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 color = scheme.onBackground,
@@ -775,7 +780,7 @@ private fun WelcomeState(
             }
             Spacer(Modifier.height(8.dp))
             Text(
-                if (name.isBlank()) "去角色页选择一位，开始对话吧" else "开始和 $name 对话吧",
+                if (name.isBlank()) t("去角色页选择一位，开始对话吧") else tf("开始和 {0} 对话吧", name),
                 color = scheme.onSurfaceVariant,
                 fontSize = 12.5.sp,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -852,7 +857,7 @@ private fun ChatTopBar(
         ) {
             IconBubble(
                 icon = Icons.AutoMirrored.Outlined.ArrowBack,
-                contentDescription = "返回",
+                contentDescription = t("返回"),
                 onClick = onBack,
             )
             Spacer(Modifier.width(2.dp))
@@ -881,7 +886,7 @@ private fun ChatTopBar(
                 Spacer(Modifier.width(10.dp))
                 Column {
                     Text(
-                        name.ifBlank { "未选择角色" },
+                        name.ifBlank { t("未选择角色") },
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = scheme.onSurface,
@@ -889,7 +894,7 @@ private fun ChatTopBar(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        role.ifBlank { "角色" },
+                        role.ifBlank { t("角色") },
                         color = scheme.onSurfaceVariant,
                         fontSize = 11.sp,
                         maxLines = 1,
@@ -906,7 +911,7 @@ private fun ChatTopBar(
             )
             IconBubble(
                 icon = Icons.Filled.KeyboardArrowUp,
-                contentDescription = if (controlsExpanded) "收起操作栏" else "展开操作栏",
+                contentDescription = if (controlsExpanded) t("收起操作栏") else t("展开操作栏"),
                 onClick = onToggleControlsExpanded,
                 modifier = Modifier.graphicsLayer { rotationZ = chevronRotation },
             )
@@ -926,21 +931,23 @@ private fun ChatTopBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
+            val providerOptions = if (specialEventActive) {
+                listOf(ChatProviderType.CLOUD to t("☁ 云端"))
+            } else {
+                ChatProviderType.values().map { type ->
+                    val label = if (type == ChatProviderType.CLOUD) t("云端") else t("本地")
+                    type to "${type.icon} $label"
+                }
+            }
             GlassSegmented(
-                options = if (specialEventActive) {
-                    listOf(ChatProviderType.CLOUD to "☁ 云端")
-                } else {
-                    ChatProviderType.values().map {
-                        it to "${it.icon} ${if (it == ChatProviderType.CLOUD) "云端" else "本地"}"
-                    }
-                },
+                options = providerOptions,
                 selected = activeProvider,
                 onSelect = onSwitchProvider,
             )
 
             IconBubble(
                 icon = Icons.Outlined.Psychology,
-                contentDescription = "深度思考",
+                contentDescription = t("深度思考"),
                 highlighted = deepThinkingEnabled,
                 onClick = onToggleDeepThinking,
             )
@@ -948,15 +955,15 @@ private fun ChatTopBar(
             IconBubble(
                 icon = Icons.Outlined.Videocam,
                 contentDescription = when {
-                    specialEventActive -> "特殊邂逅中不可生成视频"
-                    videoToggleDisabled -> "自动视频：仅云端可用"
-                    else -> "自动视频"
+                    specialEventActive -> t("特殊邂逅中不可生成视频")
+                    videoToggleDisabled -> t("自动视频：仅云端可用")
+                    else -> t("自动视频")
                 },
                 highlighted = videoAutoEnabled && !videoToggleDisabled && !specialEventActive,
                 onClick = {
                     when {
-                        specialEventActive -> Toast.makeText(context, "特殊邂逅中不可生成视频", Toast.LENGTH_SHORT).show()
-                        videoToggleDisabled -> Toast.makeText(context, "自动视频仅云端可用", Toast.LENGTH_SHORT).show()
+                        specialEventActive -> Toast.makeText(context, L10nRuntime.t("特殊邂逅中不可生成视频"), Toast.LENGTH_SHORT).show()
+                        videoToggleDisabled -> Toast.makeText(context, L10nRuntime.t("自动视频仅云端可用"), Toast.LENGTH_SHORT).show()
                         else -> onToggleVideoAuto()
                     }
                 },
@@ -964,17 +971,17 @@ private fun ChatTopBar(
             // 会话记录（与语言切换同排，紧邻）。
             IconBubble(
                 icon = Icons.AutoMirrored.Outlined.Chat,
-                contentDescription = "会话记录",
+                contentDescription = t("会话记录"),
                 badge = conversationCount.takeIf { it > 0 },
                 onClick = onOpenConversations,
             )
             LangBubble(
                 lang = ttsLanguage,
-                contentDescription = "语音语言：${ttsLanguage.label}",
+                contentDescription = tf("语音语言：{0}", t(ttsLanguage.label)),
                 onClick = {
                     val next = if (ttsLanguage == TtsLanguage.ZH) TtsLanguage.JA else TtsLanguage.ZH
                     onToggleLang()
-                    Toast.makeText(context, "语音语言已切换至${next.label}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, L10nRuntime.format("语音语言已切换至{0}", L10nRuntime.t(next.label)), Toast.LENGTH_SHORT).show()
                 },
             )
             }
@@ -1195,8 +1202,8 @@ internal fun MessageBubble(
                         if (!message.isStreaming && message.completionState != MessageCompletionState.COMPLETE) {
                             Text(
                                 text = when (message.completionState) {
-                                    MessageCompletionState.STOPPED_PARTIAL -> "已停止（已保留部分输出）"
-                                    MessageCompletionState.STOPPED_BEFORE_FINAL -> "已停止（尚未生成最终答案）"
+                                    MessageCompletionState.STOPPED_PARTIAL -> t("已停止（已保留部分输出）")
+                                    MessageCompletionState.STOPPED_BEFORE_FINAL -> t("已停止（尚未生成最终答案）")
                                     MessageCompletionState.COMPLETE -> ""
                                 },
                                 color = bubbleContentColor.copy(alpha = 0.6f),
@@ -1228,7 +1235,7 @@ internal fun MessageBubble(
                     ) {
                         ActionChip(
                             icon = Icons.Outlined.ContentCopy,
-                            label = if (copied) "已复制" else "复制",
+                            label = if (copied) t("已复制") else t("复制"),
                             done = copied,
                             onClick = {
                                 val text = messageCopyText(message)
@@ -1241,7 +1248,7 @@ internal fun MessageBubble(
                         if (!isUser && state.ttsEnabled) {
                             ActionChip(
                                 icon = Icons.AutoMirrored.Outlined.VolumeUp,
-                                label = "朗读",
+                                label = t("朗读"),
                                 onClick = onTts,
                             )
                         }
@@ -1249,7 +1256,7 @@ internal fun MessageBubble(
                         if (message.databaseId != null) {
                             ActionChip(
                                 icon = Icons.Outlined.Delete,
-                                label = "删除",
+                                label = t("删除"),
                                 onClick = onDelete,
                             )
                         }
@@ -1260,7 +1267,7 @@ internal fun MessageBubble(
             if (isUser) {
                 Spacer(Modifier.width(8.dp))
                 // 博士头像（设置「我的形象」）；未设置时 ChatAvatar 自动回落 monogram「我」
-                ChatAvatar(imageUrl = userImage, name = "我", size = UserAvatarSize)
+                ChatAvatar(imageUrl = userImage, name = t("我"), size = UserAvatarSize)
             }
         }
     }
@@ -1332,13 +1339,13 @@ private fun CodeBlockView(seg: MessageSegment.Code) {
                     },
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                 ) {
-                    Text(if (copied) "✓ 已复制" else "复制", color = if (copied) SuccessGreen else Color(0xFF9aa5ce), fontSize = 10.sp)
+                    Text(if (copied) t("✓ 已复制") else t("复制"), color = if (copied) SuccessGreen else Color(0xFF9aa5ce), fontSize = 10.sp)
                 }
                 TextButton(
                     onClick = { folded = !folded },
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                 ) {
-                    Text(if (folded) "展开" else "折叠", color = Color(0xFF9aa5ce), fontSize = 10.sp)
+                    Text(if (folded) t("展开") else t("折叠"), color = Color(0xFF9aa5ce), fontSize = 10.sp)
                 }
             }
             if (!folded) {
@@ -1385,7 +1392,7 @@ private fun ScienceBlockView(seg: MessageSegment.Science) {
                     },
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                 ) {
-                    Text(if (copied) "✓ 已复制" else "复制", color = if (copied) SuccessGreen else MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp)
+                    Text(if (copied) t("✓ 已复制") else t("复制"), color = if (copied) SuccessGreen else MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp)
                 }
             }
             seg.lines.forEach { line ->
@@ -1432,7 +1439,7 @@ private fun ThinkBlockView(seg: MessageSegment.Think) {
                 )
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    if (seg.streaming) "思考中…" else "思考过程",
+                    if (seg.streaming) t("思考中…") else t("思考过程"),
                     color = scheme.primary,
                     fontSize = 11.5.sp,
                     fontWeight = FontWeight.Medium,
@@ -1577,7 +1584,7 @@ internal fun ChatInputBar(
                                     onClick = { onRemoveImage(idx) },
                                     modifier = Modifier.align(Alignment.TopEnd).size(20.dp),
                                 ) {
-                                    Icon(Icons.Outlined.Close, contentDescription = "移除", tint = Color.White, modifier = Modifier.size(14.dp))
+                                    Icon(Icons.Outlined.Close, contentDescription = t("移除"), tint = Color.White, modifier = Modifier.size(14.dp))
                                 }
                             }
                         }
@@ -1601,7 +1608,7 @@ internal fun ChatInputBar(
                             modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
                         )
                         IconButton(onClick = { onRemoveFile(idx) }, modifier = Modifier.size(20.dp)) {
-                            Icon(Icons.Outlined.Close, contentDescription = "移除", tint = scheme.error, modifier = Modifier.size(14.dp))
+                            Icon(Icons.Outlined.Close, contentDescription = t("移除"), tint = scheme.error, modifier = Modifier.size(14.dp))
                         }
                     }
                 }
@@ -1629,19 +1636,19 @@ internal fun ChatInputBar(
                 modifier = Modifier.size(40.dp).clickable(onClick = onOpenGifts),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.CardGiftcard, contentDescription = "赠送礼物", tint = scheme.primary, modifier = Modifier.size(20.dp))
+                Icon(Icons.Filled.CardGiftcard, contentDescription = t("赠送礼物"), tint = scheme.primary, modifier = Modifier.size(20.dp))
             }
             Box(
                 modifier = Modifier.size(40.dp).clickable(onClick = onPickImage),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Outlined.Add, contentDescription = "添加图片", tint = scheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                Icon(Icons.Outlined.Add, contentDescription = t("添加图片"), tint = scheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
             }
             Box(
                 modifier = Modifier.size(40.dp).clickable(onClick = onPickFile),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Outlined.AttachFile, contentDescription = "添加文件", tint = scheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                Icon(Icons.Outlined.AttachFile, contentDescription = t("添加文件"), tint = scheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
             }
             BasicTextField(
                 value = text,
@@ -1655,13 +1662,19 @@ internal fun ChatInputBar(
                 cursorBrush = androidx.compose.ui.graphics.SolidColor(scheme.primary),
                 decorationBox = { inner ->
                     if (text.isEmpty()) {
-                        Text("输入消息…", color = scheme.onSurfaceVariant, fontSize = 14.5.sp)
+                        Text(t("输入消息…"), color = scheme.onSurfaceVariant, fontSize = 14.5.sp)
                     }
                     inner()
                 },
             )
             // 发送 / 停止按钮（Task 7）：生成中切换为「停止」，stopRequested 时显示「正在停止」并禁用重复点击。
             // 视觉圆形保持 36dp（与原有发送按钮一致，未改变触摸目标尺寸）。
+            // 无障碍描述在 Composable 内先取文案：semantics {} 不是 Composable 作用域，不能在其中调 t()。
+            val sendButtonDescription = when {
+                stopRequested -> t("正在停止")
+                isStreaming -> t("停止生成")
+                else -> t("发送")
+            }
             Box(
                 modifier = Modifier
                     .size(36.dp)
@@ -1679,11 +1692,7 @@ internal fun ChatInputBar(
                         }
                     )
                     .semantics {
-                        contentDescription = when {
-                            stopRequested -> "正在停止"
-                            isStreaming -> "停止生成"
-                            else -> "发送"
-                        }
+                        contentDescription = sendButtonDescription
                     }
                     .clickable(
                         enabled = !(isStreaming && stopRequested),
@@ -1701,7 +1710,7 @@ internal fun ChatInputBar(
                 } else {
                     Icon(
                         Icons.AutoMirrored.Outlined.Send,
-                        contentDescription = "发送",
+                        contentDescription = t("发送"),
                         tint = scheme.onPrimary,
                         modifier = Modifier.size(17.dp),
                     )
@@ -1725,6 +1734,13 @@ private fun queryDisplayName(context: android.content.Context, uri: android.net.
 /** 时间戳格式化为「MM-dd HH:mm」 */
 private fun formatConversationTime(ts: Long): String =
     java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(ts))
+
+/**
+ * 会话显示标题：系统默认标题「新对话」随界面语言显示；用户自定义标题是数据，保持原样不翻译。
+ */
+@Composable
+internal fun conversationDisplayTitle(title: String): String =
+    if (title.isBlank() || title == ConversationRepository.DEFAULT_TITLE) t("新对话") else title
 
 /**
  * 提取消息可复制纯文本：拼接 Text / Code / Science 段，跳过 Think。
@@ -1793,23 +1809,23 @@ private fun ConversationSheet(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("对话记录", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = scheme.onSurface)
+                Text(t("对话记录"), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = scheme.onSurface)
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     TextButton(onClick = onStartExport, enabled = exportEnabled) {
                         Icon(Icons.Outlined.Description, contentDescription = null, tint = scheme.primary, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text(if (exportEnabled) "导出记录" else "导出中…", color = scheme.primary)
+                        Text(if (exportEnabled) t("导出记录") else t("导出中…"), color = scheme.primary)
                     }
                     TextButton(onClick = onNew, enabled = exportEnabled) {
                         Icon(Icons.Outlined.Add, contentDescription = null, tint = scheme.primary, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("新建对话", color = scheme.primary)
+                        Text(t("新建对话"), color = scheme.primary)
                     }
                 }
             }
             if (conversations.isEmpty()) {
                 Text(
-                    "暂无对话，点右上角「新建对话」开始",
+                    t("暂无对话，点右上角「新建对话」开始"),
                     color = scheme.onSurfaceVariant,
                     fontSize = 13.sp,
                     modifier = Modifier.padding(vertical = 24.dp),
@@ -1840,7 +1856,7 @@ private fun ConversationSheet(
         AlertDialog(
             onDismissRequest = { renaming = null },
             containerColor = scheme.surfaceContainerHigh,
-            title = { Text("重命名对话", color = scheme.onSurface) },
+            title = { Text(t("重命名对话"), color = scheme.onSurface) },
             text = {
                 OutlinedTextField(
                     value = renameText,
@@ -1858,10 +1874,10 @@ private fun ConversationSheet(
                 TextButton(onClick = {
                     onRename(conv.id, renameText)
                     renaming = null
-                }) { Text("确定", color = scheme.primary) }
+                }) { Text(t("确定"), color = scheme.primary) }
             },
             dismissButton = {
-                TextButton(onClick = { renaming = null }) { Text("取消", color = scheme.onSurfaceVariant) }
+                TextButton(onClick = { renaming = null }) { Text(t("取消"), color = scheme.onSurfaceVariant) }
             },
         )
     }
@@ -1870,16 +1886,16 @@ private fun ConversationSheet(
         AlertDialog(
             onDismissRequest = { deleting = null },
             containerColor = scheme.surfaceContainerHigh,
-            title = { Text("删除对话", color = scheme.onSurface) },
-            text = { Text("确定删除「${conv.title.ifBlank { "新对话" }}」？该对话的全部消息将被清除。", color = scheme.onSurfaceVariant) },
+            title = { Text(t("删除对话"), color = scheme.onSurface) },
+            text = { Text(tf("确定删除「{0}」？该对话的全部消息将被清除。", conversationDisplayTitle(conv.title)), color = scheme.onSurfaceVariant) },
             confirmButton = {
                 TextButton(onClick = {
                     onDelete(conv.id)
                     deleting = null
-                }) { Text("删除", color = scheme.error) }
+                }) { Text(t("删除"), color = scheme.error) }
             },
             dismissButton = {
-                TextButton(onClick = { deleting = null }) { Text("取消", color = scheme.onSurfaceVariant) }
+                TextButton(onClick = { deleting = null }) { Text(t("取消"), color = scheme.onSurfaceVariant) }
             },
         )
     }
@@ -1920,7 +1936,7 @@ private fun ConversationItem(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    conversation.title.ifBlank { "新对话" },
+                    conversationDisplayTitle(conversation.title),
                     color = if (isActive) scheme.primary else scheme.onSurface,
                     fontSize = 14.sp,
                     fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
@@ -1935,10 +1951,10 @@ private fun ConversationItem(
                 )
             }
             IconButton(onClick = onRename, modifier = Modifier.size(30.dp)) {
-                Icon(Icons.Outlined.Edit, contentDescription = "重命名", tint = scheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                Icon(Icons.Outlined.Edit, contentDescription = t("重命名"), tint = scheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
             }
             IconButton(onClick = onDelete, modifier = Modifier.size(30.dp)) {
-                Icon(Icons.Outlined.Delete, contentDescription = "删除", tint = scheme.error, modifier = Modifier.size(16.dp))
+                Icon(Icons.Outlined.Delete, contentDescription = t("删除"), tint = scheme.error, modifier = Modifier.size(16.dp))
             }
         }
     }
@@ -1975,7 +1991,7 @@ private fun SeedanceFullScreenPlayer(
                     .padding(8.dp)
                     .size(40.dp),
             ) {
-                Icon(Icons.Outlined.Close, contentDescription = "关闭全屏", tint = Color.White)
+                Icon(Icons.Outlined.Close, contentDescription = t("关闭全屏"), tint = Color.White)
             }
         }
     }

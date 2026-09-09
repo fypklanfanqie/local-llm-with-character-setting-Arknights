@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rhodesisland.terminal.data.model.Conversation
+import com.rhodesisland.terminal.i18n.t
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -38,7 +39,7 @@ fun ConversationExportSelectionDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = scheme.surfaceContainerHigh,
-        title = { Text("选择要导出的对话", color = scheme.onSurface) },
+        title = { Text(t("选择要导出的对话"), color = scheme.onSurface) },
         text = {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 items(conversations, key = { it.id }) { conversation ->
@@ -48,9 +49,9 @@ fun ConversationExportSelectionDialog(
                         modifier = Modifier.fillMaxWidth().clickable { onSelect(conversation.id) },
                     ) {
                         Column(Modifier.padding(12.dp)) {
-                            Text(conversation.title.ifBlank { "新对话" }, color = scheme.onSurface, fontSize = 14.sp)
+                            Text(conversationDisplayTitle(conversation.title), color = scheme.onSurface, fontSize = 14.sp)
                             Text(
-                                exportDialogConversationTime(conversation.updatedAt) + if (conversation.id == activeConversationId) " · 当前对话" else "",
+                                exportDialogConversationTime(conversation.updatedAt) + if (conversation.id == activeConversationId) t(" · 当前对话") else "",
                                 color = scheme.onSurfaceVariant,
                                 fontSize = 11.sp,
                             )
@@ -60,7 +61,7 @@ fun ConversationExportSelectionDialog(
             }
         },
         confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消", color = scheme.onSurfaceVariant) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(t("取消"), color = scheme.onSurfaceVariant) } },
     )
 }
 
@@ -74,15 +75,15 @@ fun ConversationExportFormatDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = scheme.surfaceContainerHigh,
-        title = { Text("选择导出格式", color = scheme.onSurface) },
+        title = { Text(t("选择导出格式"), color = scheme.onSurface) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onText, modifier = Modifier.fillMaxWidth()) { Text("TXT（完整记录）") }
-                OutlinedButton(onClick = onImage, modifier = Modifier.fillMaxWidth()) { Text("图片（PNG）") }
+                Button(onClick = onText, modifier = Modifier.fillMaxWidth()) { Text(t("TXT（完整记录）")) }
+                OutlinedButton(onClick = onImage, modifier = Modifier.fillMaxWidth()) { Text(t("图片（PNG）")) }
             }
         },
         confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消", color = scheme.onSurfaceVariant) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(t("取消"), color = scheme.onSurfaceVariant) } },
     )
 }
 
@@ -96,15 +97,15 @@ fun ConversationExportImageModeDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = scheme.surfaceContainerHigh,
-        title = { Text("选择图片导出方式", color = scheme.onSurface) },
+        title = { Text(t("选择图片导出方式"), color = scheme.onSurface) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onPaged, modifier = Modifier.fillMaxWidth()) { Text("自动分页多张图") }
-                OutlinedButton(onClick = onLong, modifier = Modifier.fillMaxWidth()) { Text("一张超长图") }
-                Text("超长会话建议使用分页模式，避免生成失败。", color = scheme.onSurfaceVariant, fontSize = 11.sp)
+                Button(onClick = onPaged, modifier = Modifier.fillMaxWidth()) { Text(t("自动分页多张图")) }
+                OutlinedButton(onClick = onLong, modifier = Modifier.fillMaxWidth()) { Text(t("一张超长图")) }
+                Text(t("超长会话建议使用分页模式，避免生成失败。"), color = scheme.onSurfaceVariant, fontSize = 11.sp)
             }
         },
         confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消", color = scheme.onSurfaceVariant) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(t("取消"), color = scheme.onSurfaceVariant) } },
     )
 }

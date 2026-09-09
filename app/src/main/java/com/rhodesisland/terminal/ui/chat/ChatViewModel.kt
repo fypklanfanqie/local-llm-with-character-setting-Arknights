@@ -15,6 +15,7 @@ import com.rhodesisland.terminal.data.repository.AutoVideoOutboxDraft
 import com.rhodesisland.terminal.data.repository.ChatCompletionRepository
 import com.rhodesisland.terminal.data.repository.ConversationRepository
 import com.rhodesisland.terminal.conversationexport.ConversationExportDocument
+import com.rhodesisland.terminal.i18n.L10nRuntime
 import com.rhodesisland.terminal.data.model.GiftHistory
 import com.rhodesisland.terminal.provider.local.LocalChatProvider
 import com.rhodesisland.terminal.util.MarkdownParser
@@ -106,7 +107,7 @@ class ChatViewModel(
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {
                 Log.e(TAG, "activeCharacter flow 异常", e)
-                _uiState.update { it.copy(errorMessage = "角色数据加载失败：${e.toUserErrorMessage()}", showWelcome = false) }
+                _uiState.update { it.copy(errorMessage = L10nRuntime.format("角色数据加载失败：{0}", e.toUserErrorMessage()), showWelcome = false) }
             }
         }
         // 监听角色 + 活跃会话映射：确定该角色的活跃会话；无（或已被删除）则自动新建「新对话」。
@@ -129,7 +130,7 @@ class ChatViewModel(
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {
                 Log.e(TAG, "活跃会话 flow 异常", e)
-                _uiState.update { it.copy(errorMessage = "会话数据加载失败：${e.toUserErrorMessage()}", showWelcome = false) }
+                _uiState.update { it.copy(errorMessage = L10nRuntime.format("会话数据加载失败：{0}", e.toUserErrorMessage()), showWelcome = false) }
             }
         }
         // 监听活跃会话 + 聊天记录 + 会话内 Seedance 视频（flatMapLatest 保证会话切换时取消旧订阅，
@@ -155,7 +156,7 @@ class ChatViewModel(
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {
                 Log.e(TAG, "聊天记录 flow 异常", e)
-                _uiState.update { it.copy(errorMessage = "聊天记录加载失败：${e.toUserErrorMessage()}", showWelcome = false) }
+                _uiState.update { it.copy(errorMessage = L10nRuntime.format("聊天记录加载失败：{0}", e.toUserErrorMessage()), showWelcome = false) }
             }
         }
         // 监听当前角色的会话列表（供抽屉展示 + 同步当前会话标题）
@@ -170,7 +171,7 @@ class ChatViewModel(
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {
                 Log.e(TAG, "会话列表 flow 异常", e)
-                _uiState.update { it.copy(errorMessage = "会话列表加载失败：${e.toUserErrorMessage()}") }
+                _uiState.update { it.copy(errorMessage = L10nRuntime.format("会话列表加载失败：{0}", e.toUserErrorMessage())) }
             }
         }
         // 监听活跃会话变化 -> 同步标题/高亮（切换/新建/删除后立即生效）
@@ -191,7 +192,7 @@ class ChatViewModel(
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {
                 Log.e(TAG, "providerType flow 异常", e)
-                _uiState.update { it.copy(errorMessage = "Provider 切换失败：${e.toUserErrorMessage()}") }
+                _uiState.update { it.copy(errorMessage = L10nRuntime.format("Provider 切换失败：{0}", e.toUserErrorMessage())) }
             }
         }
         // 监听 TTS 语言
@@ -373,7 +374,7 @@ class ChatViewModel(
         viewModelScope.launch {
             val deleted = container.conversationRepository.delete(id)
             if (!deleted) {
-                _uiState.update { it.copy(errorMessage = "特殊邂逅的回忆会永久保存，无法删除") }
+                _uiState.update { it.copy(errorMessage = L10nRuntime.t("特殊邂逅的回忆会永久保存，无法删除")) }
                 return@launch
             }
             // 删除的若是当前活跃会话（或其 pending 所属会话），同步清理，防止残留串台。
@@ -433,7 +434,7 @@ class ChatViewModel(
      */
     fun setAutoVideoEnabled(conversationId: Long, enabled: Boolean) {
         if (_uiState.value.activeSpecialEventId != null) {
-            _uiState.update { it.copy(errorMessage = "特殊邂逅中不可生成视频") }
+            _uiState.update { it.copy(errorMessage = L10nRuntime.t("特殊邂逅中不可生成视频")) }
             return
         }
         if (!enabled) {
@@ -444,7 +445,7 @@ class ChatViewModel(
             val seedance = container.settingsRepository.getSeedanceConfigNow()
             if (seedance.apiKey.isBlank()) {
                 _uiState.update {
-                    it.copy(errorMessage = "未配置 Seedance API Key，请先到「设置」中配置后再开启自动视频")
+                    it.copy(errorMessage = L10nRuntime.t("未配置 Seedance API Key，请先到「设置」中配置后再开启自动视频"))
                 }
                 return@launch
             }
@@ -455,7 +456,7 @@ class ChatViewModel(
             else AssetPaths.PICTURES[charId] != null
             if (!hasCharacterImage) {
                 _uiState.update {
-                    it.copy(errorMessage = "该角色未设置立绘图片，请先到角色页配置后再开启自动视频")
+                    it.copy(errorMessage = L10nRuntime.t("该角色未设置立绘图片，请先到角色页配置后再开启自动视频"))
                 }
                 return@launch
             }
@@ -568,7 +569,7 @@ class ChatViewModel(
 
     fun switchProvider(type: ChatProviderType) {
         if (_uiState.value.activeSpecialEventId != null && type != ChatProviderType.CLOUD) {
-            _uiState.update { it.copy(errorMessage = "特殊邂逅中仅支持云端对话") }
+            _uiState.update { it.copy(errorMessage = L10nRuntime.t("特殊邂逅中仅支持云端对话")) }
             return
         }
         viewModelScope.launch {
@@ -634,7 +635,7 @@ class ChatViewModel(
         val convId = _activeConversationId.value
         if (convId == null) {
             // 活跃会话尚未初始化完成（首屏竞态）：给出可见错误，而非让发送按钮静默无反应。
-            _uiState.update { it.copy(errorMessage = "会话尚未就绪，请稍候再试") }
+            _uiState.update { it.copy(errorMessage = L10nRuntime.t("会话尚未就绪，请稍候再试")) }
             return
         }
 
@@ -657,7 +658,7 @@ class ChatViewModel(
         streamingJob = viewModelScope.launch {
             // 性能浮窗日志终态：默认「已停止」（取消路径），成功/出错时覆盖。
             // 须在 try 外声明，catch/finally 才可见（try 块内声明的局部变量不对 catch/finally 可见）。
-            var termReason = "已停止"
+            var termReason = L10nRuntime.t("已停止")
             var userMsgId = 0L   // 已落库用户消息 id；发送失败时 catch 据此回滚删除
             var userDisplayText = ""  // 用户消息展示文本（自动视频 outbox 的用户文本快照；try 外声明供 catch 可见）
             // Task 7：发送起点捕获的自动视频快照与角色来源（try 外声明，catch 的停止路径也可安全传参；
@@ -667,7 +668,7 @@ class ChatViewModel(
             var autoCharacterImageSource: String? = null
             try {
                 val char = container.characterRepository.getNow(charId)
-                    ?: throw Exception("角色不存在")
+                    ?: throw Exception(L10nRuntime.t("角色不存在"))
                 autoCharacter = char
                 // Task 7：发送起点捕获自动视频触发快照（Provider/会话开关/API 配置/Seedance 配置/
                 // 角色图来源）。生成期间切换 Provider、开关或配置均不影响本次判定；
@@ -822,7 +823,7 @@ class ChatViewModel(
                 // 性能浮窗：重置速率与日志。实时 Token 速率由浮窗读 MnnBackend 原子快照（native tps），
                 // 不再按流式 chunk 近似计数（Task 4：批处理后 chunk 数≠token 数）。
                 container.performanceCollector.updateTokenRate(0f)
-                container.performanceCollector.updateLog("生成中…")
+                container.performanceCollector.updateLog(L10nRuntime.t("生成中…"))
                 // 流式 UI 节流：见 STREAM_THROTTLE_MS。onChunk 由 LocalStreamRenderPump 渲染协程
                 // （节流放行）与 finish（同步终帧）串行调用，lastStreamRenderMs 无需同步。
                 var lastStreamRenderMs = 0L
@@ -883,10 +884,10 @@ class ChatViewModel(
                 val stoppedByUser = _uiState.value.stopRequested &&
                     _uiState.value.activeGenerationId == generationId
                 termReason = when {
-                    stoppedByUser -> "已停止（保留部分输出）"
-                    localCompletionReason == com.rhodesisland.terminal.llm.metrics.CompletionReason.TIMEOUT -> "生成超时"
-                    localCompletionReason == com.rhodesisland.terminal.llm.metrics.CompletionReason.MAX_TOKENS -> "达到生成上限"
-                    else -> "完成: $generatedTokens tokens"
+                    stoppedByUser -> L10nRuntime.t("已停止（保留部分输出）")
+                    localCompletionReason == com.rhodesisland.terminal.llm.metrics.CompletionReason.TIMEOUT -> L10nRuntime.t("生成超时")
+                    localCompletionReason == com.rhodesisland.terminal.llm.metrics.CompletionReason.MAX_TOKENS -> L10nRuntime.t("达到生成上限")
+                    else -> L10nRuntime.format("完成: {0} tokens", generatedTokens)
                 }
                 val completionState = if (stoppedByUser) {
                     stoppedCompletionState(displayResponse)
@@ -919,7 +920,7 @@ class ChatViewModel(
                     // 不删除已落库的用户消息，不展示错误横幅。
                     // 用户主动停止仍保留并完成本轮对话，给予该条已落库用户消息的好感。
                     if (userMsgId != 0L) container.affinityRepository.addChatAffinity(charId, userMsgId)
-                    termReason = "已停止（保留部分输出）"
+                    termReason = L10nRuntime.t("已停止（保留部分输出）")
                     val partial = latestAccumulated
                     finalizeAssistant(
                         charId = charId,
@@ -934,7 +935,7 @@ class ChatViewModel(
                         characterImageSource = autoCharacterImageSource,
                     )
                 } else {
-                    termReason = "出错: ${e.toUserErrorMessage()}"
+                    termReason = L10nRuntime.format("出错: {0}", e.toUserErrorMessage())
                     // 回滚：删除已落库的用户消息（无对应回复，避免孤儿），恢复输入框内容，
                     // 让用户可直接重试而无需重输（重发产生新消息，不会重复）。
                     if (userMsgId != 0L) runCatching { container.chatRepository.deleteMessage(convId, userMsgId) }
@@ -1215,7 +1216,7 @@ class ChatViewModel(
         // 图片 -> 多模态直传；非多模态模型上抛清晰提示（替代原 OCR 兜底，直连后无法实现）
         val multimodalImages = if (isMultimodal) base64Images else emptyList()
         if (!isMultimodal && base64Images.isNotEmpty()) {
-            throw Exception("当前模型不支持图片识别，请切换多模态模型（如 GPT-4o / Qwen-VL）")
+            throw Exception(L10nRuntime.t("当前模型不支持图片识别，请切换多模态模型（如 GPT-4o / Qwen-VL）"))
         }
 
         val newContent = if (extra.isEmpty()) msg.content else msg.content + extra.toString()
@@ -1294,7 +1295,7 @@ class ChatViewModel(
                     // Room Flow 会回填该消息。不要再手动 append 同一 databaseId，否则 LazyColumn key 重复并崩溃。
                 }
                 .onFailure { error ->
-                    _uiState.update { it.copy(errorMessage = "礼物已送出，感谢回复生成失败：${error.toUserErrorMessage()}") }
+                    _uiState.update { it.copy(errorMessage = L10nRuntime.format("礼物已送出，感谢回复生成失败：{0}", error.toUserErrorMessage())) }
                 }
         }
     }
@@ -1392,7 +1393,7 @@ class ChatViewModel(
                         ttsPlayingIndex = -1,
                         ttsSubtitleJp = "",
                         ttsSubtitleCn = "",
-                        errorMessage = "TTS 失败：${e.toUserErrorMessage()}",
+                        errorMessage = L10nRuntime.format("TTS 失败：{0}", e.toUserErrorMessage()),
                     )
                 }
             }
@@ -1402,7 +1403,7 @@ class ChatViewModel(
     private suspend fun translateToJapanese(text: String): String {
         val apiConfig = container.settingsRepository.getApiConfigNow()
         if (apiConfig.apiKey.isBlank()) {
-            throw Exception("日语翻译需要配置云端对话 API Key")
+            throw Exception(L10nRuntime.t("日语翻译需要配置云端对话 API Key"))
         }
         // 直连对话商：用翻译 prompt 调一次非流式 chat，不经代理。
         // 明确「博士」= 明日方舟对玩家的称呼，一律译为「ドクター」，避免翻译模型偶尔译成
@@ -1421,7 +1422,7 @@ class ChatViewModel(
             },
         ).trim()
         if (translated.isBlank() || translated == text.trim()) {
-            throw Exception("日语翻译失败，请检查云端对话 API 配置后重试")
+            throw Exception(L10nRuntime.t("日语翻译失败，请检查云端对话 API 配置后重试"))
         }
         return translated
     }
