@@ -8,6 +8,7 @@ import android.util.Log
 import coil.ImageLoader
 import coil.ImageLoaderFactory
 import com.rhodesisland.terminal.data.local.AppDatabase
+import com.rhodesisland.terminal.i18n.L10nRuntime
 import com.rhodesisland.terminal.notification.AppLifecycleObserver
 import com.rhodesisland.terminal.notification.GreetingNotificationManager
 import com.rhodesisland.terminal.notification.GroupChatNotificationManager
@@ -144,6 +145,15 @@ class RhodesApp : Application(), ImageLoaderFactory {
             runCatching { container.affinityRepository.shouldShowDailyCheckinPrompt() }
                 .onSuccess { if (it) DailyCheckinBus.request() }
                 .onFailure { CrashCapture.logEvent(this@RhodesApp, "startup", "daily checkin: ${it.stackTraceToString()}") }
+        }
+        // 界面语言运行期缓存：通知 / 前台服务 / 后台任务（非 Composable、非 suspend）要出文案时
+        // 读 L10nRuntime。这里持续跟随设置变化，无 UI 的进程（仅 Worker 唤醒）也能拿到最新语言。
+        appScope.launch {
+            runCatching {
+                container.settingsRepository.appLanguage.collect {
+                    L10nRuntime.update(it, java.util.Locale.getDefault().language)
+                }
+            }.onFailure { CrashCapture.logEvent(this@RhodesApp, "startup", "language collector: ${it.message}") }
         }
         // Task 6：恢复 Seedance 视频流水线（复位进程中断残留的进行中状态 + 重入队可自动认领任务）。幂等，异步。
         appScope.launch {

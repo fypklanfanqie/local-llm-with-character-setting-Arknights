@@ -113,6 +113,33 @@ object L10n {
 val LocalAppLanguage = staticCompositionLocalOf { AppLanguage.ZH }
 
 /**
+ * 运行期语言缓存：给**非 Composable、也非 suspend** 的场景用（通知构建、前台服务、纯格式化函数）。
+ *
+ * 由 [com.rhodesisland.terminal.RhodesApp] 启动时的 collector 持续写入（设置 + 系统语言解析后的
+ * 生效语言）；collector 未跑起来时默认中文——最坏情况是文案回退中文，不会崩、不会空白。
+ *
+ * 能用 `t()`（Composable）或 `L10n.t(lang, zh)`（有 suspend 上下文）时**优先用它们**，
+ * 这个缓存是最后的便利入口。
+ */
+object L10nRuntime {
+
+    @Volatile
+    var language: AppLanguage = AppLanguage.ZH
+        private set
+
+    /** 由启动期 collector 调用：把「设置 + 系统语言」解析成生效语言缓存下来。 */
+    fun update(setting: AppLanguage, systemLanguageTag: String?) {
+        language = L10n.resolve(setting, systemLanguageTag)
+    }
+
+    /** 查表（读 [language] 缓存）。 */
+    fun t(zh: String): String = L10n.t(language, zh)
+
+    /** 带占位符的查表，见 [L10n.format]。 */
+    fun format(zh: String, vararg args: Any?): String = L10n.format(language, zh, *args)
+}
+
+/**
  * Composable 查表：读 [LocalAppLanguage] 的当前语言。
  *
  * 语言变化时因 [LocalAppLanguage] 是 static local，调用方所在子树整体重组，文案立即更新
