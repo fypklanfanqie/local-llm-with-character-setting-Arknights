@@ -1,5 +1,7 @@
 package com.rhodesisland.terminal.ui.guide
 
+import com.rhodesisland.terminal.i18n.L10nRuntime
+
 /**
  * 使用指南内容层：分级枚举 / 结构化内容块 / 分类与话题数据 / 模糊搜索。
  *
@@ -746,20 +748,33 @@ val GUIDE_RECOMMENDED_QUERIES: List<String> = listOf("TTS", "免费", "本地模
 /**
  * 模糊搜索：query trim+lowercase 后对 标题 > 别名 > 分类名 做 contains 分层打分，
  * 同分按标题稳定排序。话题总量 ~45，内存即时过滤即可，无需 debounce。
+ *
+ * 多语言：数据层是中文原文，这里额外用 [L10nRuntime] 把标题/别名/分类名换成**当前界面语言**
+ * 再匹配一次，因此英文/日文界面下可以直接用译文关键词搜索（例：Getting started / はじめかた）；
+ * `matchedIn` 仍返回中文原文，由渲染处 `t(...)` 显示成对应语言。
  */
 fun searchGuideTopics(query: String): List<GuideSearchHit> {
     val q = query.trim().lowercase()
     if (q.isEmpty()) return emptyList()
     return GUIDE_TOPICS.mapNotNull { topic ->
+        val localizedTitle = L10nRuntime.t(topic.title)
         val hit = when {
-            topic.title.lowercase().contains(q) -> 3 to topic.title
+            topic.title.lowercase().contains(q) || localizedTitle.lowercase().contains(q) -> 3 to topic.title
             else -> {
-                val alias = topic.aliases.firstOrNull { it.lowercase().contains(q) }
+                val alias = topic.aliases.firstOrNull {
+                    it.lowercase().contains(q) || L10nRuntime.t(it).lowercase().contains(q)
+                }
                 if (alias != null) {
                     2 to alias
                 } else {
                     val cat = guideCategoryOf(topic.categoryId)
-                    if (cat != null && cat.title.lowercase().contains(q)) 1 to cat.title else null
+                    if (cat != null &&
+                        (cat.title.lowercase().contains(q) || L10nRuntime.t(cat.title).lowercase().contains(q))
+                    ) {
+                        1 to cat.title
+                    } else {
+                        null
+                    }
                 }
             }
         } ?: return@mapNotNull null
