@@ -469,7 +469,7 @@ fun NovelEditorScreen(
         var editContent by remember(line.id) { mutableStateOf(line.content) }
         AlertDialog(
             onDismissRequest = { editTarget = null },
-            title = { Text("编辑（${line.speakerName}）") },
+            title = { Text(tf("编辑（{0}）", line.speakerName)) },
             text = {
                 BasicTextField(
                     value = editContent,
