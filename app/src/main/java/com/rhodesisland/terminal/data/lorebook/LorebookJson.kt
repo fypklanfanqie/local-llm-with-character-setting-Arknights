@@ -4,6 +4,7 @@ import com.rhodesisland.terminal.data.model.Lorebook
 import com.rhodesisland.terminal.data.model.LorebookEntry
 import com.rhodesisland.terminal.data.model.LorebookInsertPosition
 import com.rhodesisland.terminal.data.model.LorebookSecondaryLogic
+import com.rhodesisland.terminal.i18n.L10nRuntime
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -44,7 +45,7 @@ object LorebookJson {
 
     fun parseSillyTavern(text: String): ParseResult {
         val root = runCatching { json.parseToJsonElement(text).jsonObject }
-            .getOrElse { return ParseResult.Fail("不是有效的 JSON 文件") }
+            .getOrElse { return ParseResult.Fail(L10nRuntime.t("不是有效的 JSON 文件")) }
 
         // 书名：顶层 name 或 V2 character_book.name
         val v2Book = (root["data"] as? JsonObject)?.get("character_book") as? JsonObject
@@ -54,9 +55,11 @@ object LorebookJson {
         val rawEntries: List<JsonElement> = when (val el = root["entries"] ?: v2Book?.get("entries")) {
             is JsonObject -> el.values.toList()
             is JsonArray -> el
-            else -> return ParseResult.Fail("未找到 entries 字段，不是世界书或角色卡 JSON")
+            else -> return ParseResult.Fail(
+                L10nRuntime.t("未找到 entries 字段，不是世界书或角色卡 JSON"),
+            )
         }
-        if (rawEntries.isEmpty()) return ParseResult.Fail("世界书没有任何条目")
+        if (rawEntries.isEmpty()) return ParseResult.Fail(L10nRuntime.t("世界书没有任何条目"))
 
         var truncated = false
         val entries = rawEntries.asSequence()
@@ -65,9 +68,11 @@ object LorebookJson {
             .toList()
             .let { if (it.size > MAX_IMPORT_ENTRIES) { truncated = true; it.take(MAX_IMPORT_ENTRIES) } else it }
 
-        if (entries.isEmpty()) return ParseResult.Fail("没有可识别的条目（content 均为空）")
+        if (entries.isEmpty()) return ParseResult.Fail(L10nRuntime.t("没有可识别的条目（content 均为空）"))
         val warning = when {
-            truncated -> "条目数超过上限 $MAX_IMPORT_ENTRIES，已截断导入前 $MAX_IMPORT_ENTRIES 条"
+            truncated -> L10nRuntime.format(
+                "条目数超过上限 {0}，已截断导入前 {0} 条", MAX_IMPORT_ENTRIES,
+            )
             else -> null
         }
         return ParseResult.Ok(name, entries, warning)

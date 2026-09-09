@@ -5,6 +5,7 @@ import com.rhodesisland.terminal.data.model.SeedanceConfig
 import com.rhodesisland.terminal.data.model.SeedanceModelVariant
 import com.rhodesisland.terminal.data.model.SeedanceRatio
 import com.rhodesisland.terminal.data.model.SeedanceResolution
+import com.rhodesisland.terminal.i18n.L10nRuntime
 import com.rhodesisland.terminal.util.seedanceUserErrorMessage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -309,7 +310,7 @@ class SeedanceClient(
                 Log.w(TAG, "seedance media create network error")
                 throw SeedanceApiException(
                     classification = SeedanceError.AMBIGUOUS_TRANSPORT,
-                    message = "网络错误，无法确认任务状态：${describeNetworkError(e)}",
+                    message = L10nRuntime.format("网络错误，无法确认任务状态：{0}", describeNetworkError(e)),
                     taskId = null,
                     cause = e,
                 )
@@ -351,7 +352,7 @@ class SeedanceClient(
                 Log.w(TAG, "seedance media status network error taskId=$taskId")
                 throw SeedanceApiException(
                     classification = SeedanceError.AMBIGUOUS_TRANSPORT,
-                    message = "网络错误，无法确认任务状态：${describeNetworkError(e)}",
+                    message = L10nRuntime.format("网络错误，无法确认任务状态：{0}", describeNetworkError(e)),
                     taskId = taskId,
                     cause = e,
                 )
@@ -469,34 +470,40 @@ class SeedanceClient(
                 val status = response.code
                 val raw = response.body?.string().orEmpty()
                 when {
-                    status in 200..299 -> SeedanceProbeResult.Ok("接口正常，服务地址可用")
+                    status in 200..299 -> SeedanceProbeResult.Ok(L10nRuntime.t("接口正常，服务地址可用"))
                     status == 401 || status == 403 ->
-                        SeedanceProbeResult.Failed("接口可达，但 API Key 无效或未授权")
+                        SeedanceProbeResult.Failed(L10nRuntime.t("接口可达，但 API Key 无效或未授权"))
                     status == 429 || status >= 500 ->
-                        SeedanceProbeResult.Failed("接口可达，但服务暂时繁忙，请稍后重试")
+                        SeedanceProbeResult.Failed(L10nRuntime.t("接口可达，但服务暂时繁忙，请稍后重试"))
                     status == 404 || status == 405 -> {
                         // 路径正确时，对不存在的探测任务服务端返回 JSON 错误体（如「任务不存在」）；
                         // 路径错误（被网关拦下）则通常是 HTML/空体。
                         val jsonBody = raw.isNotBlank() &&
                             (raw.trimStart().startsWith("{") || raw.trimStart().startsWith("["))
                         if (jsonBody) {
-                            SeedanceProbeResult.Ok("接口可达，路径正确（探测任务返回预期结果）")
+                            SeedanceProbeResult.Ok(L10nRuntime.t("接口可达，路径正确（探测任务返回预期结果）"))
                         } else {
                             val hint = if (media) {
-                                "中转站地址请填写完整「创建任务」接口（如 https://api.lk888.ai/v1/media/generate），或直接填该站点主机"
+                                L10nRuntime.t(
+                                    "中转站地址请填写完整「创建任务」接口（如 https://api.lk888.ai/v1/media/generate），或直接填该站点主机",
+                                )
                             } else {
-                                "官方地址填 base（含 /api/v3）；中转站请粘贴完整的「创建任务」接口地址（如 https://xxx/v1/media/generate），不要只填主机或 /v1"
+                                L10nRuntime.t(
+                                    "官方地址填 base（含 /api/v3）；中转站请粘贴完整的「创建任务」接口地址（如 https://xxx/v1/media/generate），不要只填主机或 /v1",
+                                )
                             }
-                            SeedanceProbeResult.Failed("接口可达，但路径可能不正确：$hint")
+                            SeedanceProbeResult.Failed(
+                                L10nRuntime.format("接口可达，但路径可能不正确：{0}", hint),
+                            )
                         }
                     }
-                    else -> SeedanceProbeResult.Failed("接口可达，但返回异常，请检查服务地址")
+                    else -> SeedanceProbeResult.Failed(L10nRuntime.t("接口可达，但返回异常，请检查服务地址"))
                 }
             }
         } catch (e: IOException) {
             coroutineContext.ensureActive() // 被取消（超时/页面离开）时抛 CancellationException
             Log.w(TAG, "seedance probe network error")
-            SeedanceProbeResult.Failed("无法连接服务，请检查地址与网络")
+            SeedanceProbeResult.Failed(L10nRuntime.t("无法连接服务，请检查地址与网络"))
         } finally {
             handle?.dispose()
             call.cancel()
@@ -523,7 +530,7 @@ class SeedanceClient(
                 Log.w(TAG, "seedance network error taskId=$taskId")
                 throw SeedanceApiException(
                     classification = SeedanceError.AMBIGUOUS_TRANSPORT,
-                    message = "网络错误，无法确认任务状态：${describeNetworkError(e)}",
+                    message = L10nRuntime.format("网络错误，无法确认任务状态：{0}", describeNetworkError(e)),
                     taskId = taskId,
                     cause = e,
                 )
@@ -629,14 +636,14 @@ class SeedanceClient(
         SeedanceResolution.P4K -> "4k"
     }
 
-    /** 把底层 IOException 分类为具体中文原因，便于用户/开发直接定位网络层问题。 */
+    /** 把底层 IOException 分类为具体原因，便于用户/开发直接定位网络层问题。 */
     private fun describeNetworkError(e: IOException): String {
         val type = when (e) {
-            is SocketTimeoutException -> "连接或读取超时"
-            is UnknownHostException -> "无法解析服务器地址（DNS 失败或域名被墙）"
-            is ConnectException -> "无法连接到服务器（连接被拒绝或端口不通）"
-            is SSLException -> "安全连接失败（TLS/证书问题）"
-            else -> "网络异常"
+            is SocketTimeoutException -> L10nRuntime.t("连接或读取超时")
+            is UnknownHostException -> L10nRuntime.t("无法解析服务器地址（DNS 失败或域名被墙）")
+            is ConnectException -> L10nRuntime.t("无法连接到服务器（连接被拒绝或端口不通）")
+            is SSLException -> L10nRuntime.t("安全连接失败（TLS/证书问题）")
+            else -> L10nRuntime.t("网络异常")
         }
         val detail = e.message?.take(120)?.let { "：$it" } ?: ""
         return "$type$detail"

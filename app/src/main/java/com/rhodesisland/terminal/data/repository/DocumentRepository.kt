@@ -10,6 +10,7 @@ import android.util.Base64OutputStream
 import com.rhodesisland.terminal.data.model.ApiConfig
 import com.rhodesisland.terminal.data.remote.ChatMessageDto
 import com.rhodesisland.terminal.data.remote.DirectLlmClient
+import com.rhodesisland.terminal.i18n.L10nRuntime
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.buildJsonArray
@@ -52,7 +53,7 @@ class DocumentRepository(
     /** 读取文件为 base64（流式编码，避免大文件整块读入内存导致 OOM）；超大文件拒绝。 */
     suspend fun readFileAsBase64(path: String): String = withContext(Dispatchers.IO) {
         val f = File(path)
-        if (f.length() > MAX_IMAGE_BYTES) throw IOException("文件过大，无法上传")
+        if (f.length() > MAX_IMAGE_BYTES) throw IOException(L10nRuntime.t("文件过大，无法上传"))
         val output = ByteArrayOutputStream()
         f.inputStream().use { input ->
             Base64OutputStream(output, Base64.NO_WRAP).use { b64Out ->
@@ -121,7 +122,7 @@ class DocumentRepository(
             ext == "pdf" -> extractPdfText(context, uri, cfg)
             isImageExt(ext) -> extractImageText(context, uri, cfg)
             isTextExt(ext) -> readTextFile(context, uri)
-            else -> throw Exception("暂不支持 .$ext 文档直连解析，请转为 PDF 后上传")
+            else -> throw Exception(L10nRuntime.format("暂不支持 .{0} 文档直连解析，请转为 PDF 后上传", ext))
         }
     }
 
@@ -156,20 +157,25 @@ class DocumentRepository(
 
     /** PDF -> PdfRenderer 逐页渲染 -> 多模态模型提取文字。需当前模型支持多模态。 */
     private suspend fun extractPdfText(context: Context, uri: String, cfg: ApiConfig): String {
-        if (cfg.apiKey.isBlank()) throw Exception("请先在设置页配置 API Key")
+        if (cfg.apiKey.isBlank()) throw Exception(L10nRuntime.t("请先在设置页配置 API Key"))
         if (!isMultimodalModel(cfg.model)) {
-            throw Exception("PDF 提取需多模态模型，请在设置切换（如 GPT-4o / Qwen-VL）")
+            throw Exception(L10nRuntime.t("PDF 提取需多模态模型，请在设置切换（如 GPT-4o / Qwen-VL）"))
         }
-        contentLength(context, uri)?.let { if (it > MAX_PDF_BYTES) throw Exception("PDF 文件过大") }
-        val tmp = copyUriToTempFile(context, uri, "doc.pdf") ?: throw Exception("无法读取 PDF 文件")
+        contentLength(context, uri)?.let {
+            if (it > MAX_PDF_BYTES) throw Exception(L10nRuntime.t("PDF 文件过大"))
+        }
+        val tmp = copyUriToTempFile(context, uri, "doc.pdf")
+            ?: throw Exception(L10nRuntime.t("无法读取 PDF 文件"))
         try {
             val (images, truncated) = renderPdfPages(tmp, MAX_PDF_PAGES)
-            if (images.isEmpty()) throw Exception("PDF 无可渲染页面")
+            if (images.isEmpty()) throw Exception(L10nRuntime.t("PDF 无可渲染页面"))
             val text = extractFromImages(
                 cfg, images,
                 "请提取并输出下列文档图片中的全部文字内容，保持原始结构与阅读顺序，仅输出文字。",
             )
-            return if (truncated) "$text\n[仅前 $MAX_PDF_PAGES 页已提取]" else text
+            if (!truncated) return text
+            val notice = L10nRuntime.format("[仅前 {0} 页已提取]", MAX_PDF_PAGES)
+            return "$text\n$notice"
         } finally {
             tmp.delete()
         }
@@ -177,11 +183,11 @@ class DocumentRepository(
 
     /** 图片文件 -> 多模态模型 OCR 提取文字。需当前模型支持多模态。 */
     private suspend fun extractImageText(context: Context, uri: String, cfg: ApiConfig): String {
-        if (cfg.apiKey.isBlank()) throw Exception("请先在设置页配置 API Key")
+        if (cfg.apiKey.isBlank()) throw Exception(L10nRuntime.t("请先在设置页配置 API Key"))
         if (!isMultimodalModel(cfg.model)) {
-            throw Exception("图片识别需多模态模型，请在设置切换（如 GPT-4o / Qwen-VL）")
+            throw Exception(L10nRuntime.t("图片识别需多模态模型，请在设置切换（如 GPT-4o / Qwen-VL）"))
         }
-        val b64 = uriToBase64(context, uri) ?: throw Exception("无法读取图片")
+        val b64 = uriToBase64(context, uri) ?: throw Exception(L10nRuntime.t("无法读取图片"))
         return extractFromImages(cfg, listOf(b64), "请提取并输出图片中的全部文字内容，仅输出文字。")
     }
 

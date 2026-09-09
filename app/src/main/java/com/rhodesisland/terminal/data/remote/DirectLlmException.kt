@@ -1,5 +1,7 @@
 package com.rhodesisland.terminal.data.remote
 
+import com.rhodesisland.terminal.i18n.L10nRuntime
+
 /** 分类后的直连 LLM 失败类型；不携带供应商原始错误文本。 */
 enum class DirectLlmFailure {
     HTTP,
@@ -19,9 +21,9 @@ class DirectLlmException(
     cause: Throwable? = null,
 ) : Exception(
     when (failure) {
-        DirectLlmFailure.HTTP -> "云端请求失败"
-        DirectLlmFailure.NETWORK -> "网络连接失败"
-        DirectLlmFailure.EMPTY_RESPONSE -> "云端返回为空"
+        DirectLlmFailure.HTTP -> L10nRuntime.t("云端请求失败")
+        DirectLlmFailure.NETWORK -> L10nRuntime.t("网络连接失败")
+        DirectLlmFailure.EMPTY_RESPONSE -> L10nRuntime.t("云端返回为空")
     },
     cause,
 )

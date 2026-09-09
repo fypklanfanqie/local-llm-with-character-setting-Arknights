@@ -1,5 +1,6 @@
 package com.rhodesisland.terminal.data.model
 
+import com.rhodesisland.terminal.i18n.L10nRuntime
 import kotlinx.serialization.Serializable
 
 /**
@@ -102,7 +103,11 @@ data class VoiceConfig(
 
     /** resourceId 是旧配置兼容字段，新版声音复刻 2.0 资源由客户端固定。 */
     fun validationError(label: String): String? =
-        if (voiceId.isBlank() && resourceId.isNotBlank()) "$label Resource ID 已保存，但缺少音色 ID" else null
+        if (voiceId.isBlank() && resourceId.isNotBlank()) {
+            L10nRuntime.format("{0} Resource ID 已保存，但缺少音色 ID", label)
+        } else {
+            null
+        }
 }
 
 @Serializable
@@ -115,7 +120,7 @@ fun TtsConfig.authMode(): TtsAuthMode =
     if (apiKey.isNotBlank()) TtsAuthMode.API_KEY else TtsAuthMode.NONE
 
 fun TtsConfig.validationError(): String? =
-    if (apiKey.isBlank()) "请填写火山引擎 API Key" else null
+    if (apiKey.isBlank()) L10nRuntime.t("请填写火山引擎 API Key") else null
 
 fun speakerIdForLanguage(
     characterId: String,

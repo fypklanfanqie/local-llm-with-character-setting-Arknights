@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Base64
 import com.rhodesisland.terminal.config.AppConfig
+import com.rhodesisland.terminal.i18n.L10nRuntime
 import com.rhodesisland.terminal.llm.MomentPromptBuilder
 import com.rhodesisland.terminal.util.MomentImageExtractor
 import kotlinx.coroutines.Dispatchers
@@ -69,7 +70,7 @@ class MomentImageGenClient(
         referenceImagePath: String?,
         count: Int,
     ): List<String> = withContext(Dispatchers.IO) {
-        if (!config.isConfigured) throw MomentImageGenException("生图 API 未配置")
+        if (!config.isConfigured) throw MomentImageGenException(L10nRuntime.t("生图 API 未配置"))
         val target = count.coerceIn(1, AppConfig.Moment.MAX_IMAGES)
         val userText = MomentPromptBuilder.buildImageGenUserMessage(imagePrompt, target)
         val failures = mutableListOf<String>()
@@ -127,7 +128,7 @@ class MomentImageGenClient(
 
         throw MomentImageGenException(
             failures.map { it.trim() }.filter { it.isNotEmpty() }.distinct().joinToString("；")
-                .ifBlank { "生图失败" },
+                .ifBlank { L10nRuntime.t("生图失败") },
         )
     }
 
@@ -162,7 +163,7 @@ class MomentImageGenClient(
                     }
                     SubmitOutcome(taskId = MediaTaskApi.parseSubmitResponse(postJson(submitEndpoint, body.toString(), apiKey)))
                 } catch (e: Exception) {
-                    SubmitOutcome(error = e.message ?: "提交失败")
+                    SubmitOutcome(error = e.message ?: L10nRuntime.t("提交失败"))
                 }
             }
         }.awaitAll()
@@ -186,27 +187,40 @@ class MomentImageGenClient(
                 }
                 when {
                     status == null || !status.isFinal -> Unit
-                    status.error != null -> { errors += "任务 $taskId：${status.error}"; iterator.remove() }
+                    status.error != null -> {
+                        errors += L10nRuntime.format("任务 {0}：{1}", taskId, status.error)
+                        iterator.remove()
+                    }
                     status.resultUrl.isNullOrBlank() ->
-                        { errors += "任务 $taskId：任务完成但未返回结果链接"; iterator.remove() }
+                        { errors += L10nRuntime.format("任务 {0}：任务完成但未返回结果链接", taskId); iterator.remove() }
                     status.resultType != null && status.resultType != "image" ->
-                        { errors += "任务 $taskId：结果类型为 ${status.resultType}，预期 image"; iterator.remove() }
+                        {
+                            errors += L10nRuntime.format(
+                                "任务 {0}：结果类型为 {1}，预期 image", taskId, status.resultType,
+                            )
+                            iterator.remove()
+                        }
                     else -> { urls += status.resultUrl!!; iterator.remove() }
                 }
             }
         }
-        pending.forEach { errors += "任务 $it：轮询超时（${TASK_POLL_BUDGET_MS / 1000}s）仍未完成" }
+        pending.forEach {
+            errors += L10nRuntime.format(
+                "任务 {0}：轮询超时（{1}s）仍未完成", it, TASK_POLL_BUDGET_MS / 1000,
+            )
+        }
 
         if (urls.isEmpty()) {
             throw MomentImageGenException(
-                "生图任务失败：" + errors.distinct().joinToString("；").ifBlank { "无任务成功" },
+                L10nRuntime.t("生图任务失败：") + errors.distinct().joinToString("；")
+                    .ifBlank { L10nRuntime.t("无任务成功") },
             )
         }
 
         val saved = urls.take(target).mapNotNull { url ->
             download(url)?.let { bytes -> saveAsJpeg(bytes) }
         }
-        if (saved.isEmpty()) throw MomentImageGenException("图片下载/解码失败")
+        if (saved.isEmpty()) throw MomentImageGenException(L10nRuntime.t("图片下载/解码失败"))
         saved
     }
 
@@ -223,14 +237,16 @@ class MomentImageGenClient(
             httpClient.newCall(request).execute().use { response ->
                 val text = response.body?.string().orEmpty()
                 if (!response.isSuccessful) {
-                    throw MomentImageGenException("查询失败 HTTP ${response.code}: ${text.take(120)}")
+                    throw MomentImageGenException(
+                        L10nRuntime.format("查询失败 HTTP {0}: {1}", response.code, text.take(120)),
+                    )
                 }
                 text
             }
         } catch (e: MomentImageGenException) {
             throw e
         } catch (e: Exception) {
-            throw MomentImageGenException("查询异常: ${e.message}", e)
+            throw MomentImageGenException(L10nRuntime.format("查询异常: {0}", e.message), e)
         }
     }
 
@@ -263,7 +279,9 @@ class MomentImageGenClient(
     private fun extractAndSave(raw: String, target: Int): List<String> {
         val refs = MomentImageExtractor.extract(raw)
         if (refs.isEmpty()) {
-            throw MomentImageGenException("生图回复中未找到图片（回复开头：${raw.take(120)}）")
+            throw MomentImageGenException(
+                L10nRuntime.format("生图回复中未找到图片（回复开头：{0}）", raw.take(120)),
+            )
         }
         val saved = mutableListOf<String>()
         for (ref in refs) {
@@ -277,7 +295,7 @@ class MomentImageGenClient(
             val path = saveAsJpeg(bytes) ?: continue
             saved += path
         }
-        if (saved.isEmpty()) throw MomentImageGenException("图片下载/解码失败")
+        if (saved.isEmpty()) throw MomentImageGenException(L10nRuntime.t("图片下载/解码失败"))
         return saved
     }
 
@@ -292,14 +310,20 @@ class MomentImageGenClient(
             httpClient.newCall(request).execute().use { response ->
                 val text = response.body?.string().orEmpty()
                 if (!response.isSuccessful) {
-                    throw MomentImageGenException("生图请求失败 HTTP ${response.code}: ${text.take(200)}（$endpoint）")
+                    throw MomentImageGenException(
+                        L10nRuntime.format(
+                            "生图请求失败 HTTP {0}: {1}（{2}）", response.code, text.take(200), endpoint,
+                        ),
+                    )
                 }
                 text
             }
         } catch (e: MomentImageGenException) {
             throw e
         } catch (e: Exception) {
-            throw MomentImageGenException("生图请求异常: ${e.message}（$endpoint）", e)
+            throw MomentImageGenException(
+                L10nRuntime.format("生图请求异常: {0}（{1}）", e.message, endpoint), e,
+            )
         }
     }
 
@@ -420,14 +444,20 @@ internal object MediaTaskApi {
     fun parseSubmitResponse(body: String): String {
         val root = runCatching { json.parseToJsonElement(body) as? JsonObject }
             .getOrNull()
-            ?: throw IllegalArgumentException("提交响应不是 JSON 对象: ${body.take(120)}")
+            ?: throw IllegalArgumentException(
+                L10nRuntime.format("提交响应不是 JSON 对象: {0}", body.take(120)),
+            )
         val code = root.text("code")?.toIntOrNull()
         if (code != 200) {
             val msg = root.text("msg") ?: body.take(120)
-            throw IllegalArgumentException("提交被拒（code=$code）：$msg")
+            throw IllegalArgumentException(L10nRuntime.format("提交被拒（code={0}）：{1}", code, msg))
         }
         val taskId = (root["data"] as? JsonObject)?.text("task_id")
-        if (taskId.isNullOrBlank()) throw IllegalArgumentException("提交成功但未返回 task_id: ${body.take(120)}")
+        if (taskId.isNullOrBlank()) {
+            throw IllegalArgumentException(
+                L10nRuntime.format("提交成功但未返回 task_id: {0}", body.take(120)),
+            )
+        }
         return taskId
     }
 
@@ -435,11 +465,11 @@ internal object MediaTaskApi {
     fun parseTaskStatus(body: String): TaskStatus {
         val root = runCatching { json.parseToJsonElement(body) as? JsonObject }
             .getOrNull()
-            ?: throw IllegalArgumentException("状态响应不是 JSON: ${body.take(120)}")
-        if (root["error"] is JsonObject) throw IllegalArgumentException("网关瞬时故障")
+            ?: throw IllegalArgumentException(L10nRuntime.format("状态响应不是 JSON: {0}", body.take(120)))
+        if (root["error"] is JsonObject) throw IllegalArgumentException(L10nRuntime.t("网关瞬时故障"))
         val state = root.text("state")
         val error = root.text("error")
-            ?: state?.takeIf { it == "failed" }?.let { "任务失败（state=failed，平台已自动退款）" }
+            ?: state?.takeIf { it == "failed" }?.let { L10nRuntime.t("任务失败（state=failed，平台已自动退款）") }
         return TaskStatus(
             isFinal = root.text("is_final")?.toBooleanStrictOrNull() ?: false,
             resultUrl = root.text("result_url"),

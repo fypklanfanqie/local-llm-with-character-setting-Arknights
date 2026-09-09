@@ -5,6 +5,7 @@ import com.rhodesisland.terminal.data.local.NovelChapterEntity
 import com.rhodesisland.terminal.data.local.NovelDao
 import com.rhodesisland.terminal.data.local.NovelLineEntity
 import com.rhodesisland.terminal.data.local.NovelStoryEntity
+import com.rhodesisland.terminal.i18n.L10nRuntime
 import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -36,7 +37,7 @@ class NovelRepository(
         protagonistName: String,
         protagonistPersona: String,
     ): Long {
-        require(title.isNotBlank()) { "故事名不能为空" }
+        require(title.isNotBlank()) { L10nRuntime.t("故事名不能为空") }
         val now = System.currentTimeMillis()
         return dao.insertStory(
             NovelStoryEntity(
@@ -80,7 +81,9 @@ class NovelRepository(
             NovelChapterEntity(
                 storyId = storyId,
                 orderIndex = nextOrder,
-                title = title.ifBlank { "第 ${nextOrder + 1} 话" },
+                // 章节默认标题按当前界面语言落库（与 GroupChatRepository.GROUP_TITLE 同策略）：
+                // 标题显示在章节列表/顶栏，不该在中英日界面下都是中文。
+                title = title.ifBlank { L10nRuntime.format("第 {0} 话", nextOrder + 1) },
                 createdAt = now,
                 updatedAt = now,
             ),
@@ -126,7 +129,9 @@ class NovelRepository(
     suspend fun appendLine(line: NovelLineEntity): Long {
         val count = dao.getLines(line.chapterId).size
         if (count >= AppConfig.Novel.MAX_LINES_PER_CHAPTER) {
-            throw IllegalStateException("本话已达 ${AppConfig.Novel.MAX_LINES_PER_CHAPTER} 行上限")
+            throw IllegalStateException(
+                L10nRuntime.format("本话已达 {0} 行上限", AppConfig.Novel.MAX_LINES_PER_CHAPTER),
+            )
         }
         val nextOrder = (dao.maxLineOrder(line.chapterId) ?: -1) + 1
         return dao.insertLine(

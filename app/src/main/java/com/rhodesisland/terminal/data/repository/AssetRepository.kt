@@ -5,6 +5,7 @@ import android.net.Uri
 import android.webkit.URLUtil
 import com.rhodesisland.terminal.config.AppConfig
 import com.rhodesisland.terminal.config.AssetPaths
+import com.rhodesisland.terminal.i18n.L10nRuntime
 import kotlinx.serialization.Serializable
 import java.io.IOException
 
@@ -146,10 +147,12 @@ data class BgmTrack(
     /**
      * EP 分类（由 key 前缀派生，用于音乐页 EP 筛选）。
      * 与网页版 musicData.js 的 ep 字段对应：系统 / Y-7 … Y-2 / Y-0～Y-1 / Overseas。
+     *
+     * 「系统」「其他」是展示标签（走词典）；Y-* / Overseas 是曲目编码，保持原样不翻译。
      */
     val ep: String
         get() = when {
-            key.startsWith("sys") -> "系统"
+            key.startsWith("sys") -> L10nRuntime.t("系统")
             key.startsWith("y7") -> "Y-7"
             key.startsWith("y6") -> "Y-6"
             key.startsWith("y5") -> "Y-5"
@@ -158,6 +161,6 @@ data class BgmTrack(
             key.startsWith("y2") -> "Y-2"
             key.startsWith("y01") -> "Y-0～Y-1"
             key.startsWith("os") -> "Overseas"
-            else -> "其他"
+            else -> L10nRuntime.t("其他")
         }
 }
