@@ -20,7 +20,7 @@
 | 9A | `util/*` + `notification/*` + `work/*` + `provider/*` + `tts/*` + `service/*` + `perfmon/*` | 93 | `09System` | ✅ 已完成（91 处 + 92 词条） |
 | 9B | `data/remote` + `data/model` + `data/repository` + `data/lorebook` | 117 | `09SystemB` | ✅ 已完成（65 处 + 75 词条） |
 | 10 | `conversationexport/*` + `manager/*` | 37 | `10Export` | ✅ 已完成（37 处 + 30 词条） |
-| 11 | `llm/` 诊断层文案（提示词除外） | ~150 | `11Diagnostics` | ⏳ |
+| 11 | `llm/` 诊断层文案（提示词除外） | 83 | `11Diagnostics` | ✅ 已完成（100% 覆盖；81 条 l10n:ignore） |
 | — | 跨批次补漏（朗读引擎下拉 / 模型说明 / 语音语言角标） | 3 | — | ✅ 已完成 |
 
 ## 约定
