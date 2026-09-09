@@ -99,16 +99,33 @@ class L10nTest {
         assertEquals(AppLanguage.SYSTEM, AppLanguage.fromKey("klingon"))
     }
 
+    // ===== 运行期缓存（通知/后台任务用） =====
+
+    @Test
+    fun `runtime cache resolves setting against system locale`() {
+        L10nRuntime.update(AppLanguage.EN, "zh-Hans-CN")
+        assertEquals(AppLanguage.EN, L10nRuntime.language)
+        assertEquals("Language", L10nRuntime.t("语言"))
+        assertEquals("Current: 2", L10nRuntime.format("当前：{0}", 2))
+
+        L10nRuntime.update(AppLanguage.SYSTEM, "ja")
+        assertEquals("言語", L10nRuntime.t("语言"))
+
+        L10nRuntime.update(AppLanguage.SYSTEM, "zh")
+        assertEquals("语言", L10nRuntime.t("语言"))
+
+        // 未收录词条回退中文，不崩
+        assertEquals("不存在的词条", L10nRuntime.t("不存在的词条"))
+
+        L10nRuntime.update(AppLanguage.ZH, null)
+    }
+
     // ===== 词典完整性 =====
 
     @Test
-    fun `english dictionary has no duplicate keys and no blank values`() {
-        assertDictionaryHealthy("en", EnEntries, EnStrings)
-    }
-
-    @Test
-    fun `japanese dictionary has no duplicate keys and no blank values`() {
-        assertDictionaryHealthy("ja", JaEntries, JaStrings)
+    fun `every batch dictionary has no duplicate keys and no blank values`() {
+        EnDictionaries.forEach { (name, entries) -> assertDictionaryHealthy("en/$name", entries) }
+        JaDictionaries.forEach { (name, entries) -> assertDictionaryHealthy("ja/$name", entries) }
     }
 
     @Test
@@ -121,6 +138,12 @@ class L10nTest {
     }
 
     @Test
+    fun `same source text translates consistently across batches`() {
+        assertEquals("英文跨批次译文冲突", emptyList<String>(), dictionaryConflicts(EnDictionaries))
+        assertEquals("日文跨批次译文冲突", emptyList<String>(), dictionaryConflicts(JaDictionaries))
+    }
+
+    @Test
     fun `has and size agree with the dictionary`() {
         assertEquals(EnStrings.size, L10n.size(AppLanguage.EN))
         assertEquals(JaStrings.size, L10n.size(AppLanguage.JA))
@@ -130,14 +153,9 @@ class L10nTest {
         assertTrue(L10n.has(AppLanguage.ZH, "这条词条一定不存在于词典里"))
     }
 
-    private fun assertDictionaryHealthy(
-        name: String,
-        entries: List<Pair<String, String>>,
-        map: Map<String, String>,
-    ) {
+    private fun assertDictionaryHealthy(name: String, entries: List<Pair<String, String>>) {
         val duplicates = entries.groupingBy { it.first }.eachCount().filterValues { it > 1 }.keys
         assertEquals("$name 词典存在重复 key（后者会静默覆盖前者）: $duplicates", emptySet<String>(), duplicates)
-        assertEquals("$name 词典有重复 key", entries.size, map.size)
         entries.forEach { (key, value) ->
             assertTrue("$name 词典出现空 key", key.isNotBlank())
             assertTrue("$name 词典空译文: $key", value.isNotBlank())
