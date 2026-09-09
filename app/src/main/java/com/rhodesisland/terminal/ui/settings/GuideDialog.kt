@@ -51,6 +51,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.rhodesisland.terminal.AppContainer
+import com.rhodesisland.terminal.i18n.t
+import com.rhodesisland.terminal.i18n.tf
 import com.rhodesisland.terminal.ui.glass.GlassChip
 import com.rhodesisland.terminal.ui.glass.GlassListRow
 import com.rhodesisland.terminal.ui.glass.GlassTextField
@@ -162,19 +164,19 @@ fun GuideDialog(
                                 },
                                 modifier = Modifier.size(32.dp),
                             ) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", tint = scheme.onSurfaceVariant)
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = t("返回"), tint = scheme.onSurfaceVariant)
                             }
                             Spacer(Modifier.width(8.dp))
                         }
                         Text(
-                            "使用指南",
+                            t("使用指南"),
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             color = scheme.onSurface,
                             modifier = Modifier.weight(1f),
                         )
                         IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Filled.Close, contentDescription = "关闭", tint = scheme.onSurfaceVariant)
+                            Icon(Icons.Filled.Close, contentDescription = t("关闭"), tint = scheme.onSurfaceVariant)
                         }
                     }
                     HorizontalDivider(color = scheme.outline.copy(alpha = 0.5f))
@@ -226,7 +228,7 @@ fun GuideDialog(
                             onClick = onDismiss,
                             colors = ButtonDefaults.buttonColors(containerColor = scheme.primary),
                         ) {
-                            Text("关闭指南", color = scheme.onPrimary)
+                            Text(t("关闭指南"), color = scheme.onPrimary)
                         }
                     }
                 }
@@ -293,12 +295,12 @@ private fun GuideHomePage(
             GlassTextField(
                 value = query,
                 onValueChange = onQueryChange,
-                placeholder = "搜索功能（如：朗读 / 世界书 / 免费）",
+                placeholder = t("搜索功能（如：朗读 / 世界书 / 免费）"),
                 modifier = Modifier.weight(1f),
                 trailing = {
                     if (query.isNotEmpty()) {
                         IconButton(onClick = { onQueryChange("") }, modifier = Modifier.size(24.dp)) {
-                            Icon(Icons.Filled.Close, contentDescription = "清除搜索", tint = scheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Filled.Close, contentDescription = t("清除搜索"), tint = scheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
                         }
                     }
                 },
@@ -310,15 +312,19 @@ private fun GuideHomePage(
             val catOf = remember { GUIDE_CATEGORIES.associateBy { it.id } }
             if (hits.isEmpty()) {
                 Text(
-                    "没有匹配的功能，换个关键词试试（如「语音」「群聊」「模型」）",
+                    t("没有匹配的功能，换个关键词试试（如「语音」「群聊」「模型」）"),
                     color = scheme.onSurfaceVariant, fontSize = 12.sp,
                     modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
                 )
             } else {
                 hits.forEach { hit ->
+                    // 数据层保存中文原文：标题 / 分类名 / 命中字段都在渲染处查表。
+                    val topicTitle = t(hit.topic.title)
+                    val categoryTitle = t(catOf[hit.topic.categoryId]?.title.orEmpty())
+                    val matchedIn = t(hit.matchedIn)
                     GlassListRow(
-                        title = "${hit.topic.emoji} ${hit.topic.title}",
-                        subtitle = "${catOf[hit.topic.categoryId]?.title.orEmpty()} · 命中：${hit.matchedIn}",
+                        title = "${hit.topic.emoji} $topicTitle",
+                        subtitle = tf("{0} · 命中：{1}", categoryTitle, matchedIn),
                         onClick = {
                             onQueryChange("")
                             onOpenTopic(hit.topic.id)
@@ -329,18 +335,19 @@ private fun GuideHomePage(
             }
         } else {
             // ---- 推荐联想词 ----
-            Text("热门搜索", color = scheme.onSurfaceVariant, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            Text(t("热门搜索"), color = scheme.onSurfaceVariant, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
             Row(
                 modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 GUIDE_RECOMMENDED_QUERIES.forEach { keyword ->
-                    GlassChip(label = keyword, selected = false, onClick = { onQueryChange(keyword) })
+                    // 词条按界面语言显示，但点击仍填入中文原文（搜索匹配的是数据层中文）。
+                    GlassChip(label = t(keyword), selected = false, onClick = { onQueryChange(keyword) })
                 }
             }
 
             Spacer(Modifier.height(2.dp))
-            Text("功能分类", color = scheme.onSurfaceVariant, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            Text(t("功能分类"), color = scheme.onSurfaceVariant, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
 
             // ---- 分类按钮网格（每行 2 个；勿用 LazyVerticalGrid 嵌 verticalScroll）----
             GUIDE_CATEGORIES.chunked(2).forEach { rowCategories ->
@@ -359,7 +366,7 @@ private fun GuideHomePage(
             // ---- 嘉豪入口（低调一行，无任何解释）----
             Spacer(Modifier.height(4.dp))
             GlassListRow(
-                title = "我是嘉豪",
+                title = t("我是嘉豪"),
                 onClick = onOpenQuiz,
                 showDivider = false,
             )
@@ -379,9 +386,9 @@ private fun GuideCategoryCard(category: GuideCategory, onClick: () -> Unit, modi
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Text(category.emoji, fontSize = 22.sp)
-        Text(category.title, color = scheme.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        Text(t(category.title), color = scheme.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Bold)
         Text(
-            category.subtitle,
+            t(category.subtitle),
             color = scheme.onSurfaceVariant, fontSize = 10.sp, lineHeight = 14.sp,
             maxLines = 2,
             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
@@ -406,22 +413,22 @@ private fun GuideLevelSelectPage(
             .padding(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("开始之前", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = scheme.onSurface)
-        Text("你平时用 AI 聊天应用吗？选择最符合你的说明方式，之后随时可以更改。", color = scheme.onSurfaceVariant, fontSize = 13.sp, lineHeight = 19.sp)
+        Text(t("开始之前"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = scheme.onSurface)
+        Text(t("你平时用 AI 聊天应用吗？选择最符合你的说明方式，之后随时可以更改。"), color = scheme.onSurfaceVariant, fontSize = 13.sp, lineHeight = 19.sp)
 
         Spacer(Modifier.height(4.dp))
 
         GuideLevelCard(
             emoji = "🧭",
-            title = "我是小白",
-            desc = "用大白话讲解每一步，几乎不出现专业词。",
+            title = t("我是小白"),
+            desc = t("用大白话讲解每一步，几乎不出现专业词。"),
             highlight = true,
             onClick = { onSelect(GuideLevel.BEGINNER) },
         )
         GuideLevelCard(
             emoji = "🚀",
-            title = "我有 AI 聊天经验，很熟",
-            desc = "直接上术语与参数，讲清实现与配置细节。",
+            title = t("我有 AI 聊天经验，很熟"),
+            desc = t("直接上术语与参数，讲清实现与配置细节。"),
             highlight = false,
             onClick = { onSelect(GuideLevel.EXPERIENCED) },
         )
@@ -435,7 +442,7 @@ private fun GuideLevelSelectPage(
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text(
-                "我是嘉豪",
+                t("我是嘉豪"),
                 color = scheme.onSurfaceVariant,
                 fontSize = 13.sp,
                 modifier = Modifier
@@ -484,7 +491,7 @@ private fun GuideLevelCard(
 private fun GuideCategoryPage(category: GuideCategory?, onOpenTopic: (String) -> Unit) {
     val scheme = MaterialTheme.colorScheme
     if (category == null) {
-        Text("分类不存在", color = scheme.onSurfaceVariant, modifier = Modifier.padding(24.dp))
+        Text(t("分类不存在"), color = scheme.onSurfaceVariant, modifier = Modifier.padding(24.dp))
         return
     }
     val topics = remember(category.id) { topicsOfCategory(category.id) }
@@ -495,13 +502,14 @@ private fun GuideCategoryPage(category: GuideCategory?, onOpenTopic: (String) ->
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text("${category.emoji} ${category.title}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = scheme.onSurface)
-        Text(category.subtitle, color = scheme.onSurfaceVariant, fontSize = 11.sp)
+        val categoryTitle = t(category.title)
+        Text("${category.emoji} $categoryTitle", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = scheme.onSurface)
+        Text(t(category.subtitle), color = scheme.onSurfaceVariant, fontSize = 11.sp)
 
         topics.forEach { topic ->
             GuideListCard(
                 emoji = topic.emoji,
-                title = topic.title,
+                title = t(topic.title),
                 subtitle = firstLineOf(topic),
                 onClick = { onOpenTopic(topic.id) },
             )
@@ -509,10 +517,12 @@ private fun GuideCategoryPage(category: GuideCategory?, onOpenTopic: (String) ->
     }
 }
 
-/** 话题摘要：列表预览统一用小白版首段（短且友好）。 */
+/** 话题摘要：列表预览统一用小白版首段（短且友好）。先按中文原文查表，再截断（截断串查不到词典）。 */
+@Composable
 private fun firstLineOf(topic: GuideTopic): String {
     val block = topic.beginner.firstOrNull() ?: return ""
-    return block.text.take(40) + if (block.text.length > 40) "…" else ""
+    val text = t(block.text)
+    return text.take(40) + if (text.length > 40) "…" else ""
 }
 
 @Composable
@@ -549,7 +559,7 @@ private fun GuideTopicPage(
 ) {
     val scheme = MaterialTheme.colorScheme
     if (topic == null) {
-        Text("话题不存在", color = scheme.onSurfaceVariant, modifier = Modifier.padding(24.dp))
+        Text(t("话题不存在"), color = scheme.onSurfaceVariant, modifier = Modifier.padding(24.dp))
         return
     }
     val blocks = remember(topic.id, currentLevel) {
@@ -562,12 +572,13 @@ private fun GuideTopicPage(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text("${topic.emoji} ${topic.title}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = scheme.onSurface)
+        val topicTitle = t(topic.title)
+        Text("${topic.emoji} $topicTitle", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = scheme.onSurface)
 
         // 等级切换 chips：点击立即持久化（满足"随时重新选择水平"）。
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             GuideLevel.values().forEach { lv ->
-                GlassChip(label = lv.chipLabel, selected = lv == currentLevel, onClick = { onSelectLevel(lv) })
+                GlassChip(label = t(lv.chipLabel), selected = lv == currentLevel, onClick = { onSelectLevel(lv) })
             }
         }
 
@@ -578,7 +589,7 @@ private fun GuideTopicPage(
         if (currentLevel == GuideLevel.BEGINNER) {
             Spacer(Modifier.height(4.dp))
             Text(
-                "💡 觉得太啰嗦？点上方「🚀 熟练版」切换为专业讲解。",
+                t("💡 觉得太啰嗦？点上方「🚀 熟练版」切换为专业讲解。"),
                 color = scheme.onSurfaceVariant, fontSize = 11.sp,
             )
         }
@@ -592,30 +603,36 @@ private fun GuideTopicPage(
 @Composable
 private fun GuideBlockView(block: GuideBlock) {
     val scheme = MaterialTheme.colorScheme
+    // 内容层是纯数据（顶层 val，非 Composable，拿不到语言）：文案一律在渲染处查表。
+    val text = t(block.text)
     when (block.type) {
         GuideBlockType.PARAGRAPH -> Text(
-            block.text, color = scheme.onSurfaceVariant, fontSize = 12.sp, lineHeight = 17.sp,
+            text, color = scheme.onSurfaceVariant, fontSize = 12.sp, lineHeight = 17.sp,
         )
         GuideBlockType.STEP_TITLE -> Text(
-            block.text, color = scheme.primary, fontSize = 12.sp, fontWeight = FontWeight.Medium,
+            text, color = scheme.primary, fontSize = 12.sp, fontWeight = FontWeight.Medium,
             modifier = Modifier.padding(top = 4.dp),
         )
         GuideBlockType.STEP_TEXT -> Text(
-            block.text, color = scheme.onSurfaceVariant, fontSize = 11.sp, lineHeight = 16.sp,
+            text, color = scheme.onSurfaceVariant, fontSize = 11.sp, lineHeight = 16.sp,
             modifier = Modifier.padding(start = 8.dp),
         )
-        GuideBlockType.TIP -> Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
-            verticalAlignment = Alignment.Top,
-        ) {
-            Text("•", color = scheme.primary, fontSize = 12.sp, modifier = Modifier.padding(end = 6.dp))
-            Text(
-                buildAnnotatedString {
-                    withStyle(SpanStyle(color = scheme.primary, fontWeight = FontWeight.Bold)) { append("${block.title}：") }
-                    withStyle(SpanStyle(color = scheme.onSurfaceVariant)) { append(block.text) }
-                },
-                fontSize = 11.sp, lineHeight = 16.sp,
-            )
+        GuideBlockType.TIP -> {
+            // 标题 + 分隔符整体走词典：中文「标题：」、英文「Title: 」由 {0} 模板决定。
+            val tipTitle = tf("{0}：", t(block.title.orEmpty()))
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Text("•", color = scheme.primary, fontSize = 12.sp, modifier = Modifier.padding(end = 6.dp))
+                Text(
+                    buildAnnotatedString {
+                        withStyle(SpanStyle(color = scheme.primary, fontWeight = FontWeight.Bold)) { append(tipTitle) }
+                        withStyle(SpanStyle(color = scheme.onSurfaceVariant)) { append(text) }
+                    },
+                    fontSize = 11.sp, lineHeight = 16.sp,
+                )
+            }
         }
         GuideBlockType.WARN -> Row(
             modifier = Modifier
@@ -626,7 +643,7 @@ private fun GuideBlockView(block: GuideBlock) {
             verticalAlignment = Alignment.Top,
         ) {
             Text("⚠️", fontSize = 11.sp, modifier = Modifier.padding(end = 6.dp))
-            Text(block.text, color = scheme.onSurfaceVariant, fontSize = 11.sp, lineHeight = 16.sp)
+            Text(text, color = scheme.onSurfaceVariant, fontSize = 11.sp, lineHeight = 16.sp)
         }
     }
 }
