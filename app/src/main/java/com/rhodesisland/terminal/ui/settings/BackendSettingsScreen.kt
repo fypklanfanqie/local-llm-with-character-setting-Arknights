@@ -268,8 +268,8 @@ fun BackendSettingsScreen(
                 GlassListRow(
                     title = "NPU (Hexagon)",
                     subtitle = if (cap.npuInfo.supported)
-                        tf("支持 · {0} ({1})", cap.npuInfo.chipLevel.displayName, cap.npuInfo.socModel)
-                    else tf("不支持 ({0})", cap.npuInfo.reason),
+                        tf("支持 · {0} ({1})", t(cap.npuInfo.chipLevel.displayName), cap.npuInfo.socModel)
+                    else tf("不支持 ({0})", t(cap.npuInfo.reason)),
                     showDivider = false,
                 )
             }
@@ -336,7 +336,7 @@ fun BackendSettingsScreen(
                     BackendPreference.MNN_NPU -> com.rhodesisland.terminal.llm.backend.MnnSupportDetector.QNN_STANDARD_BUILD_UNAVAILABLE
                 }
                 BackendOptionRow(
-                    title = entry.displayName,
+                    title = t(entry.displayName),
                     desc = desc,
                     selected = selected,
                     enabled = enabled,
@@ -477,7 +477,7 @@ fun BackendSettingsScreen(
                     is LookaheadCertificationDecision.Certified ->
                         t("已认证：lookahead 启用（本机已有基准证据）")
                     is LookaheadCertificationDecision.NotCertified ->
-                        tf("未认证：{0}", outcome.reasons.joinToString("；"))
+                        tf("未认证：{0}", outcome.reasons.joinToString("；") { L10nRuntime.t(it) })
                 }
                 GlassListRow(
                     title = t("最近一次认证判定"),
@@ -559,7 +559,7 @@ fun BackendSettingsScreen(
                             is LookaheadCertificationDecision.NotCertified ->
                                 Toast.makeText(
                                     context,
-                                    L10nRuntime.format("未认证：{0}", result.reasons.firstOrNull() ?: L10nRuntime.t("未知原因")),
+                                    L10nRuntime.format("未认证：{0}", L10nRuntime.t(result.reasons.firstOrNull() ?: "未知原因")),
                                     Toast.LENGTH_LONG,
                                 ).show()
                         }
@@ -599,7 +599,7 @@ fun BackendSettingsScreen(
                             is DecodeOptionCertificationOutcome.NotCertified ->
                                 Toast.makeText(
                                     context,
-                                    L10nRuntime.format("未认证：{0}", result.reasons.firstOrNull() ?: L10nRuntime.t("未知原因")),
+                                    L10nRuntime.format("未认证：{0}", L10nRuntime.t(result.reasons.firstOrNull() ?: "未知原因")),
                                     Toast.LENGTH_LONG,
                                 ).show()
                         }
@@ -620,7 +620,7 @@ fun BackendSettingsScreen(
                     subtitle = when (outcome) {
                         is DecodeOptionCertificationOutcome.Certified -> outcome.text
                         is DecodeOptionCertificationOutcome.NotCertified ->
-                            outcome.reasons.joinToString("；").take(160)
+                            outcome.reasons.joinToString("；") { L10nRuntime.t(it) }.take(160)
                     },
                     showDivider = true,
                 )
@@ -646,7 +646,7 @@ fun BackendSettingsScreen(
                     title = t("最近一次 CPU/GPU prefill 对比"),
                     subtitle = when (outcome) {
                         is PrefillBenchmarkOutcome.Done -> outcome.text
-                        is PrefillBenchmarkOutcome.Skipped -> outcome.reason
+                        is PrefillBenchmarkOutcome.Skipped -> t(outcome.reason)
                     },
                     showDivider = true,
                 )
@@ -677,9 +677,9 @@ fun BackendSettingsScreen(
                         preheatRunning = false
                         when (outcome) {
                             is GpuPreheatCoordinator.PreheatResult.Done ->
-                                Toast.makeText(context, L10nRuntime.format("GPU 预热完成（{0}）", outcome.backend.displayName), Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, L10nRuntime.format("GPU 预热完成（{0}）", L10nRuntime.t(outcome.backend.displayName)), Toast.LENGTH_SHORT).show()
                             is GpuPreheatCoordinator.PreheatResult.Skipped ->
-                                Toast.makeText(context, outcome.reason, Toast.LENGTH_LONG).show()
+                                Toast.makeText(context, L10nRuntime.t(outcome.reason), Toast.LENGTH_LONG).show()
                         }
                     }
                 },
@@ -699,11 +699,11 @@ fun BackendSettingsScreen(
                     title = t("最近一次 GPU 预热"),
                     subtitle = when (outcome) {
                         is GpuPreheatCoordinator.PreheatResult.Done ->
-                            tf("完成：实际后端 {0}", outcome.backend.displayName) +
+                            tf("完成：实际后端 {0}", t(outcome.backend.displayName)) +
                                 (outcome.ttftMs?.let { "，TTFT ${it}ms" } ?: "") +
                                 (outcome.prefillMs?.let { "，prefill ${it}ms" } ?: "") +
                                 (outcome.loadMs?.let { tf("，加载 {0}ms", it) } ?: "")
-                        is GpuPreheatCoordinator.PreheatResult.Skipped -> outcome.reason
+                        is GpuPreheatCoordinator.PreheatResult.Skipped -> t(outcome.reason)
                     },
                     showDivider = true,
                 )
@@ -808,7 +808,7 @@ fun BackendSettingsScreen(
                                 is PrefillBenchmarkOutcome.Done ->
                                     Toast.makeText(context, L10nRuntime.t("CPU/GPU prefill 基准完成"), Toast.LENGTH_SHORT).show()
                                 is PrefillBenchmarkOutcome.Skipped ->
-                                    Toast.makeText(context, outcome.reason, Toast.LENGTH_LONG).show()
+                                    Toast.makeText(context, L10nRuntime.t(outcome.reason), Toast.LENGTH_LONG).show()
                             }
                         }
                     }) { Text(t("运行")) }
@@ -823,10 +823,10 @@ fun BackendSettingsScreen(
         GlassListSection(title = t("自动回退顺序")) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    fallbackChain.joinToString("  ›  ") { it.displayName },
+                    fallbackChain.joinToString("  ›  ") { L10nRuntime.t(it.displayName) },
                     color = scheme.onSurface, fontSize = 13.sp,
                 )
-                Text(tf("当前激活后端：{0}", activeBackend.displayName), color = scheme.primary, fontSize = 12.sp)
+                Text(tf("当前激活后端：{0}", t(activeBackend.displayName)), color = scheme.primary, fontSize = 12.sp)
             }
         }
 
@@ -1123,7 +1123,7 @@ fun diagnosticRows(
     )
     // Task 5：本地思考档位策略行（仅本地开启深度思考且有计划时存在）。
     rows += thinkingPolicyRows(record.thinkingPolicy)
-    val backend = record.backend?.displayName ?: L10nRuntime.t("未知")
+    val backend = L10nRuntime.t(record.backend?.displayName ?: "未知")
     val trace = if (record.attemptTrace.isEmpty()) "" else L10nRuntime.format(" · 尝试: {0}", record.attemptTrace.joinToString(" → "))
     rows += TurnDiagnosticRow(label = L10nRuntime.t("实际后端"), value = "$backend$trace")
     if (record.downgradeReasons.isNotEmpty()) {

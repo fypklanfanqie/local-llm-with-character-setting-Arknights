@@ -272,7 +272,7 @@ private fun BackendSelectorCard(container: AppContainer) {
             Spacer(Modifier.height(6.dp))
             BackendStatusRow("MNN CPU", if (mnnCpuReady) t("运行时就绪") else t("未就绪"), mnnCpuReady)
             BackendStatusRow("MNN OpenCL GPU", if (mnnGpuReady) t("运行时就绪") else t("运行时未就绪"), mnnGpuReady)
-            val npuStatus = if (!npuInfo.supported) t("不支持") else tf("支持 · {0}", npuInfo.chipLevel.displayName)
+            val npuStatus = if (!npuInfo.supported) t("不支持") else tf("支持 · {0}", t(npuInfo.chipLevel.displayName))
             BackendStatusRow("MNN QNN NPU", npuStatus + if (mnnNpuReady) t("（运行时就绪）") else "", mnnNpuReady)
 
             Spacer(Modifier.height(8.dp))
@@ -305,7 +305,7 @@ private fun BackendSelectorCard(container: AppContainer) {
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
                         Text(
-                            entry.displayName,
+                            t(entry.displayName),
                             color = if (selected) scheme.onSurface else if (enabled) scheme.onSurface else scheme.onSurfaceVariant,
                             fontSize = 13.sp,
                             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
