@@ -17,7 +17,7 @@
 | 6 | `ui/lorebook/*` + `ui/glass/*` | 99 | `06Lorebook` | ✅ 已完成（99 处 + 75 词条） |
 | 7 | `ui/moment/*` + `ui/feed/*` + `ui/navigation/*` + `ui/characters/*` | 100 | `07Moment` | ✅ 已完成（100 处 + 58 词条；Tab 通讯=Comms/トーク） |
 | 8 | `ui/novel/*` + `ui/affinity/*` + `ui/music/*` + `ui/theme/*` | 162 | `08Novel` | ✅ 已完成（161 处 + 126 词条） |
-| 9A | `util/*` + `notification/*` + `work/*` + `provider/*` + `tts/*` + `service/*` + `perfmon/*` | ~100 | `09System` | 🔄 进行中 |
+| 9A | `util/*` + `notification/*` + `work/*` + `provider/*` + `tts/*` + `service/*` + `perfmon/*` | 93 | `09System` | ✅ 已完成（91 处 + 92 词条） |
 | 9B | `data/remote` + `data/model` + `data/repository` + `data/lorebook` | 117 | `09SystemB` | ✅ 已完成（65 处 + 75 词条） |
 | 10 | `conversationexport/*` + `manager/*` | 37 | `10Export` | ✅ 已完成（37 处 + 30 词条） |
 | 11 | `llm/` 诊断层文案（提示词除外） | ~150 | `11Diagnostics` | ⏳ |
