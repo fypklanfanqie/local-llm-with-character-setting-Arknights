@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.rhodesisland.terminal.i18n.tf
 import com.rhodesisland.terminal.ui.theme.GlassShapes
 
 /**
@@ -114,7 +115,7 @@ fun CollapsibleSection(
                 }
                 Icon(
                     Icons.Filled.KeyboardArrowDown,
-                    contentDescription = if (expanded) "收起$title" else "展开$title",
+                    contentDescription = if (expanded) tf("收起{0}", title) else tf("展开{0}", title),
                     tint = scheme.primary,
                     modifier = Modifier
                         .size(24.dp)

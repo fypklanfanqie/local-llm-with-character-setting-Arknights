@@ -54,6 +54,9 @@ import com.rhodesisland.terminal.data.model.Lorebook
 import com.rhodesisland.terminal.data.model.LorebookEntry
 import com.rhodesisland.terminal.data.model.LorebookInsertPosition
 import com.rhodesisland.terminal.data.model.LorebookScopeType
+import com.rhodesisland.terminal.i18n.L10nRuntime
+import com.rhodesisland.terminal.i18n.t
+import com.rhodesisland.terminal.i18n.tf
 import com.rhodesisland.terminal.ui.settings.filterCharacters
 import com.rhodesisland.terminal.ui.settings.filterGroups
 import com.rhodesisland.terminal.ui.glass.GlassButton
@@ -102,7 +105,7 @@ fun LorebookDetailScreen(
                     } != null
                 }.getOrDefault(false)
             }
-            if (!ok) exportError = "导出失败，请重试"
+            if (!ok) exportError = L10nRuntime.t("导出失败，请重试")
         }
     }
 
@@ -118,21 +121,21 @@ fun LorebookDetailScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", tint = MaterialTheme.colorScheme.onSurface)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = t("返回"), tint = MaterialTheme.colorScheme.onSurface)
                 }
                 Text(
-                    book.name.ifBlank { "未命名世界书" },
+                    book.name.ifBlank { t("未命名世界书") },
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 IconButton(onClick = { showRename = true }) {
-                    Icon(Icons.Filled.Edit, contentDescription = "重命名", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Icon(Icons.Filled.Edit, contentDescription = t("重命名"), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             Text(
-                text = "${book.entries.size} 个条目 · 点击条目编辑详情",
+                text = tf("{0} 个条目 · 点击条目编辑详情", book.entries.size),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp),
@@ -143,13 +146,13 @@ fun LorebookDetailScreen(
             val groups by container.groupChatRepository.observeGroups().collectAsState(initial = emptyList())
             var showScopePicker by remember { mutableStateOf(false) }
             GlassListRow(
-                title = "生效范围",
+                title = t("生效范围"),
                 subtitle = scopeDescription(book, characters, groups),
                 onClick = { showScopePicker = true },
                 showDivider = false,
                 trailing = {
                     Icon(
-                        Icons.Filled.Edit, contentDescription = "修改生效范围",
+                        Icons.Filled.Edit, contentDescription = t("修改生效范围"),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp),
                     )
                 },
@@ -184,9 +187,9 @@ fun LorebookDetailScreen(
                         title = entry.displayTitle(),
                         subtitle = buildString {
                             append(positionLabel(entry))
-                            append(" · 顺序 ${entry.order}")
-                            if (entry.constant) append(" · 常驻")
-                            if (!entry.enabled) append(" · 已停用")
+                            append(tf(" · 顺序 {0}", entry.order))
+                            if (entry.constant) append(t(" · 常驻"))
+                            if (!entry.enabled) append(t(" · 已停用"))
                             append("\n")
                             append(entry.content.lineSequence().firstOrNull().orEmpty().take(30))
                             if (entry.content.length > 30) append("…")
@@ -226,17 +229,19 @@ fun LorebookDetailScreen(
                         onClick = { onOpenEntry("new") },
                         modifier = Modifier.fillMaxWidth(),
                         style = GlassButtonStyle.Tinted,
-                    ) { Text("添加条目", fontSize = 14.sp, fontWeight = FontWeight.Medium) }
+                    ) { Text(t("添加条目"), fontSize = 14.sp, fontWeight = FontWeight.Medium) }
                 }
                 Box(modifier = Modifier.weight(1f)) {
                     GlassButton(
                         onClick = {
                             pendingExportJson = LorebookJson.toSillyTavernJson(book)
-                            exportLauncher.launch("${book.name.ifBlank { "世界书" }}.json")
+                            // onClick 不是 Composable 上下文：用运行期缓存取回退书名，只做拼接
+                            val bookName = book.name.ifBlank { L10nRuntime.t("世界书") }
+                            exportLauncher.launch("$bookName.json")
                         },
                         modifier = Modifier.fillMaxWidth(),
                         style = GlassButtonStyle.Tinted,
-                    ) { Text("导出本书", fontSize = 14.sp, fontWeight = FontWeight.Medium) }
+                    ) { Text(t("导出本书"), fontSize = 14.sp, fontWeight = FontWeight.Medium) }
                 }
             }
         }
@@ -250,10 +255,10 @@ fun LorebookDetailScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", tint = MaterialTheme.colorScheme.onSurface)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = t("返回"), tint = MaterialTheme.colorScheme.onSurface)
                 }
                 Text(
-                    "世界书",
+                    t("世界书"),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -261,7 +266,7 @@ fun LorebookDetailScreen(
             }
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
-                    if (books == null) "加载中…" else "世界书不存在或已被删除",
+                    if (books == null) t("加载中…") else t("世界书不存在或已被删除"),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 13.sp,
                 )
@@ -289,10 +294,10 @@ fun LorebookDetailScreen(
             onDismissRequest = { exportError = null },
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             titleContentColor = MaterialTheme.colorScheme.onSurface,
-            title = { Text("导出", color = MaterialTheme.colorScheme.onSurface) },
+            title = { Text(t("导出"), color = MaterialTheme.colorScheme.onSurface) },
             text = { Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant) },
             confirmButton = {
-                TextButton(onClick = { exportError = null }) { Text("知道了") }
+                TextButton(onClick = { exportError = null }) { Text(t("知道了")) }
             },
         )
     }
@@ -302,14 +307,14 @@ fun LorebookDetailScreen(
 internal fun LorebookEntry.displayTitle(): String = when {
     title.isNotBlank() -> title.trim()
     keys.isNotEmpty() -> keys.first().trim()
-    else -> "未命名条目"
+    else -> L10nRuntime.t("未命名条目")
 }
 
 /** 位置标签：设定前 / 设定后 / @深度N。 */
 internal fun positionLabel(entry: LorebookEntry): String = when (entry.position) {
-    LorebookInsertPosition.BEFORE_CHAR -> "角色设定前"
-    LorebookInsertPosition.AFTER_CHAR -> "角色设定后"
-    LorebookInsertPosition.AT_DEPTH -> "@深度${entry.depth}"
+    LorebookInsertPosition.BEFORE_CHAR -> L10nRuntime.t("角色设定前")
+    LorebookInsertPosition.AFTER_CHAR -> L10nRuntime.t("角色设定后")
+    LorebookInsertPosition.AT_DEPTH -> L10nRuntime.format("@深度{0}", entry.depth)
 }
 
 /** 生效范围描述：全局 / 角色名列表 / 群名列表（悬空 id 显式提示）。 */
@@ -318,17 +323,20 @@ internal fun scopeDescription(
     characters: List<com.rhodesisland.terminal.data.model.Character>,
     groups: List<Conversation>,
 ): String = when (book.scopeType) {
-    LorebookScopeType.ALL -> "全局：所有角色聊天与群聊都生效"
+    LorebookScopeType.ALL -> L10nRuntime.t("全局：所有角色聊天与群聊都生效")
     LorebookScopeType.CHARACTER -> {
-        if (book.scopeIds.isEmpty()) "未绑定角色（点此选择）"
-        else book.scopeIds.map { id -> characters.firstOrNull { it.id == id }?.name ?: "已删除角色" }
-            .joinToString("、").let { "仅角色：$it" }
+        if (book.scopeIds.isEmpty()) L10nRuntime.t("未绑定角色（点此选择）")
+        else book.scopeIds.map { id ->
+            characters.firstOrNull { it.id == id }?.name ?: L10nRuntime.t("已删除角色")
+        }
+            .joinToString("、").let { L10nRuntime.format("仅角色：{0}", it) }
     }
     LorebookScopeType.GROUP -> {
-        if (book.scopeIds.isEmpty()) "未绑定群聊（点此选择）"
+        if (book.scopeIds.isEmpty()) L10nRuntime.t("未绑定群聊（点此选择）")
         else book.scopeIds.map { id ->
-            groups.firstOrNull { it.id.toString() == id }?.title?.ifBlank { "群聊" } ?: "已删除群聊"
-        }.joinToString("、").let { "仅群聊：$it" }
+            groups.firstOrNull { it.id.toString() == id }?.title?.ifBlank { L10nRuntime.t("群聊") }
+                ?: L10nRuntime.t("已删除群聊")
+        }.joinToString("、").let { L10nRuntime.format("仅群聊：{0}", it) }
     }
 }
 
@@ -373,14 +381,14 @@ private fun ScopePickerDialog(
         onDismissRequest = onDismiss,
         containerColor = scheme.surfaceContainerHigh,
         titleContentColor = scheme.onSurface,
-        title = { Text("生效范围", color = scheme.onSurface) },
+        title = { Text(t("生效范围"), color = scheme.onSurface) },
         text = {
             Column {
                 GlassSegmented(
                     options = listOf(
-                        LorebookScopeType.ALL to "全局",
-                        LorebookScopeType.CHARACTER to "指定角色",
-                        LorebookScopeType.GROUP to "指定群聊",
+                        LorebookScopeType.ALL to t("全局"),
+                        LorebookScopeType.CHARACTER to t("指定角色"),
+                        LorebookScopeType.GROUP to t("指定群聊"),
                     ),
                     selected = scopeType,
                     onSelect = {
@@ -398,7 +406,7 @@ private fun ScopePickerDialog(
                             .padding(horizontal = 10.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(Icons.Filled.Search, contentDescription = "搜索", tint = scheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Filled.Search, contentDescription = t("搜索"), tint = scheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
                         androidx.compose.foundation.text.BasicTextField(
                             value = searchQuery,
@@ -409,7 +417,7 @@ private fun ScopePickerDialog(
                             decorationBox = { inner ->
                                 if (searchQuery.isEmpty()) {
                                     Text(
-                                        if (scopeType == LorebookScopeType.CHARACTER) "搜索角色名、代号或 ID" else "搜索群聊名称或 ID",
+                                        if (scopeType == LorebookScopeType.CHARACTER) t("搜索角色名、代号或 ID") else t("搜索群聊名称或 ID"),
                                         color = scheme.onSurfaceVariant,
                                         fontSize = 12.sp,
                                     )
@@ -421,16 +429,16 @@ private fun ScopePickerDialog(
                 }
                 when (scopeType) {
                     LorebookScopeType.ALL -> Text(
-                        "所有角色聊天与群聊都会应用本书。",
+                        t("所有角色聊天与群聊都会应用本书。"),
                         color = scheme.onSurfaceVariant,
                         fontSize = 12.sp,
                         modifier = Modifier.padding(top = 12.dp),
                     )
                     LorebookScopeType.CHARACTER -> {
-                        val rows = missingCharacters.map { it to "已删除角色（ID: $it）" } +
+                        val rows = missingCharacters.map { it to tf("已删除角色（ID: {0}）", it) } +
                             filteredCharacters.map { it.id to it.name }
                         if (rows.isEmpty()) {
-                            Text("没有找到匹配的角色", color = scheme.onSurfaceVariant, fontSize = 12.sp, modifier = Modifier.padding(top = 12.dp))
+                            Text(t("没有找到匹配的角色"), color = scheme.onSurfaceVariant, fontSize = 12.sp, modifier = Modifier.padding(top = 12.dp))
                         } else {
                             LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp).padding(top = 8.dp)) {
                                 items(rows, key = { it.first }) { (id, label) ->
@@ -440,10 +448,10 @@ private fun ScopePickerDialog(
                         }
                     }
                     LorebookScopeType.GROUP -> {
-                        val rows = missingGroups.map { it to "已删除群聊（ID: $it）" } +
-                            filteredGroups.map { it.id.toString() to (it.title.ifBlank { "群聊" }) }
+                        val rows = missingGroups.map { it to tf("已删除群聊（ID: {0}）", it) } +
+                            filteredGroups.map { it.id.toString() to (it.title.ifBlank { t("群聊") }) }
                         if (rows.isEmpty()) {
-                            Text("没有找到匹配的群聊", color = scheme.onSurfaceVariant, fontSize = 12.sp, modifier = Modifier.padding(top = 12.dp))
+                            Text(t("没有找到匹配的群聊"), color = scheme.onSurfaceVariant, fontSize = 12.sp, modifier = Modifier.padding(top = 12.dp))
                         } else {
                             LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp).padding(top = 8.dp)) {
                                 items(rows, key = { it.first }) { (id, label) ->
@@ -463,10 +471,10 @@ private fun ScopePickerDialog(
                     LorebookScopeType.GROUP -> groupSelectedIds.toList()
                 }
                 onConfirm(scopeType, ids)
-            }) { Text("保存", color = scheme.primary) }
+            }) { Text(t("保存"), color = scheme.primary) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消", color = scheme.onSurfaceVariant) }
+            TextButton(onClick = onDismiss) { Text(t("取消"), color = scheme.onSurfaceVariant) }
         },
     )
 }
@@ -505,13 +513,13 @@ private fun RenameDialog(
         onDismissRequest = onDismiss,
         containerColor = scheme.surfaceContainerHigh,
         titleContentColor = scheme.onSurface,
-        title = { Text("重命名世界书", color = scheme.onSurface) },
+        title = { Text(t("重命名世界书"), color = scheme.onSurface) },
         text = {
             GlassTextField(
                 value = name,
                 onValueChange = { name = it },
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = "世界书名称",
+                placeholder = t("世界书名称"),
                 singleLine = true,
             )
         },
@@ -519,10 +527,10 @@ private fun RenameDialog(
             TextButton(
                 enabled = name.isNotBlank(),
                 onClick = { onConfirm(name.trim()) },
-            ) { Text("保存", color = if (name.isNotBlank()) scheme.primary else scheme.onSurfaceVariant) }
+            ) { Text(t("保存"), color = if (name.isNotBlank()) scheme.primary else scheme.onSurfaceVariant) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消", color = scheme.onSurfaceVariant) }
+            TextButton(onClick = onDismiss) { Text(t("取消"), color = scheme.onSurfaceVariant) }
         },
     )
 }

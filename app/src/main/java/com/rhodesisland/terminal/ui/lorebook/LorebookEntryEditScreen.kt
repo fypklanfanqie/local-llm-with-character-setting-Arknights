@@ -47,6 +47,9 @@ import com.rhodesisland.terminal.data.model.Lorebook
 import com.rhodesisland.terminal.data.model.LorebookEntry
 import com.rhodesisland.terminal.data.model.LorebookInsertPosition
 import com.rhodesisland.terminal.data.model.LorebookSecondaryLogic
+import com.rhodesisland.terminal.i18n.L10nRuntime
+import com.rhodesisland.terminal.i18n.t
+import com.rhodesisland.terminal.i18n.tf
 import com.rhodesisland.terminal.ui.glass.CollapsibleSection
 import com.rhodesisland.terminal.ui.glass.GlassButton
 import com.rhodesisland.terminal.ui.glass.GlassButtonStyle
@@ -90,10 +93,10 @@ fun LorebookEntryEditScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", tint = scheme.onSurface)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = t("返回"), tint = scheme.onSurface)
             }
             Text(
-                if (isNew) "添加条目" else "编辑条目",
+                if (isNew) t("添加条目") else t("编辑条目"),
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
@@ -103,8 +106,8 @@ fun LorebookEntryEditScreen(
 
         when {
             // DataStore 首次发射前：加载态（不进表单，防草稿误播种）
-            books == null -> CenterHint("加载中…")
-            book == null || (!isNew && editing == null) -> CenterHint("世界书或条目不存在，可能已被删除")
+            books == null -> CenterHint(t("加载中…"))
+            book == null || (!isNew && editing == null) -> CenterHint(t("世界书或条目不存在，可能已被删除"))
             else -> EntryFormBody(
                 container = container,
                 bookId = bookId,
@@ -213,10 +216,10 @@ private fun EntryFormBody(
         ) {
             if (!isNew) {
                 IconButton(onClick = { showDeleteConfirm = true }) {
-                    Icon(Icons.Filled.Delete, contentDescription = "删除", tint = scheme.error)
+                    Icon(Icons.Filled.Delete, contentDescription = t("删除"), tint = scheme.error)
                 }
                 Text(
-                    "删除此条目",
+                    t("删除此条目"),
                     color = scheme.error,
                     fontSize = 12.sp,
                     modifier = Modifier.weight(1f),
@@ -226,23 +229,23 @@ private fun EntryFormBody(
             }
         }
 
-        FormLabel("备注名")
+        FormLabel(t("备注名"))
         GlassTextField(
             value = title,
             onValueChange = { title = it },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            placeholder = "如：青云宗（留空时用首个关键词当标题）",
+            placeholder = t("如：青云宗（留空时用首个关键词当标题）"),
         )
 
-        FormLabel("主关键词（顿号/逗号分隔，命中任一即触发）")
+        FormLabel(t("主关键词（顿号/逗号分隔，命中任一即触发）"))
         GlassTextField(
             value = keysText,
             onValueChange = { keysText = it },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            placeholder = "如：青云宗、玄真子、大师姐",
+            placeholder = t("如：青云宗、玄真子、大师姐"),
         )
 
-        FormLabel("条目内容")
+        FormLabel(t("条目内容"))
         BasicTextField(
             value = content,
             onValueChange = { if (it.length <= 8000) content = it },
@@ -259,7 +262,7 @@ private fun EntryFormBody(
                 Box {
                     if (content.isEmpty()) {
                         Text(
-                            "命中后注入给 AI 的背景设定正文…",
+                            t("命中后注入给 AI 的背景设定正文…"),
                             color = scheme.onSurfaceVariant,
                             fontSize = 13.sp,
                         )
@@ -269,21 +272,21 @@ private fun EntryFormBody(
             },
         )
 
-        FormLabel("次级关键词（可选，配合逻辑做二次筛选）")
+        FormLabel(t("次级关键词（可选，配合逻辑做二次筛选）"))
         GlassTextField(
             value = secondaryText,
             onValueChange = { secondaryText = it },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            placeholder = "留空则不做次级判定",
+            placeholder = t("留空则不做次级判定"),
         )
         if (secondaryKeys.isNotEmpty()) {
-            FormLabel("次级逻辑")
+            FormLabel(t("次级逻辑"))
             GlassSegmented(
                 options = listOf(
-                    LorebookSecondaryLogic.AND_ANY to "任一在",
-                    LorebookSecondaryLogic.AND_ALL to "全在",
-                    LorebookSecondaryLogic.NOT_ALL to "非全在",
-                    LorebookSecondaryLogic.NOT_ANY to "全不在",
+                    LorebookSecondaryLogic.AND_ANY to t("任一在"),
+                    LorebookSecondaryLogic.AND_ALL to t("全在"),
+                    LorebookSecondaryLogic.NOT_ALL to t("非全在"),
+                    LorebookSecondaryLogic.NOT_ANY to t("全不在"),
                 ),
                 selected = logic,
                 onSelect = { logic = it },
@@ -291,27 +294,27 @@ private fun EntryFormBody(
             )
         }
 
-        FormLabel("插入位置")
+        FormLabel(t("插入位置"))
         GlassSegmented(
             options = listOf(
-                LorebookInsertPosition.BEFORE_CHAR to "设定前",
-                LorebookInsertPosition.AFTER_CHAR to "设定后",
-                LorebookInsertPosition.AT_DEPTH to "@深度",
+                LorebookInsertPosition.BEFORE_CHAR to t("设定前"),
+                LorebookInsertPosition.AFTER_CHAR to t("设定后"),
+                LorebookInsertPosition.AT_DEPTH to t("@深度"),
             ),
             selected = position,
             onSelect = { position = it },
             modifier = Modifier.padding(horizontal = 16.dp),
         )
         if (position == LorebookInsertPosition.AT_DEPTH) {
-            NumberFieldRow(label = "插入深度（插到倒数第几条消息上方）", value = depthText) { depthText = it }
+            NumberFieldRow(label = t("插入深度（插到倒数第几条消息上方）"), value = depthText) { depthText = it }
         }
 
-        NumberFieldRow(label = "插入顺序（越大越靠下、影响越强）", value = orderText) { orderText = it }
-        NumberFieldRow(label = "触发概率 %（100 = 必触发）", value = probabilityText) { probabilityText = it }
+        NumberFieldRow(label = t("插入顺序（越大越靠下、影响越强）"), value = orderText) { orderText = it }
+        NumberFieldRow(label = t("触发概率 %（100 = 必触发）"), value = probabilityText) { probabilityText = it }
 
         GlassListRow(
-            title = "常驻条目（蓝灯）",
-            subtitle = "无需关键词，每次对话都注入",
+            title = t("常驻条目（蓝灯）"),
+            subtitle = t("无需关键词，每次对话都注入"),
             trailing = {
                 Switch(checked = constant, onCheckedChange = { constant = it })
             },
@@ -320,7 +323,7 @@ private fun EntryFormBody(
         )
         if (!constant && keys.isEmpty()) {
             Text(
-                text = "非常驻条目至少需要一个主关键词",
+                text = t("非常驻条目至少需要一个主关键词"),
                 color = scheme.tertiary,
                 fontSize = 11.sp,
                 modifier = Modifier.padding(horizontal = 20.dp),
@@ -328,33 +331,33 @@ private fun EntryFormBody(
         }
 
         // 高级选项折叠区
-        CollapsibleSection(title = "高级", key = "lorebook_entry_advanced", initiallyExpanded = false) {
+        CollapsibleSection(title = t("高级"), key = "lorebook_entry_advanced", initiallyExpanded = false) {
             GlassListRow(
-                title = "区分大小写",
-                subtitle = "主要针对英文关键词",
+                title = t("区分大小写"),
+                subtitle = t("主要针对英文关键词"),
                 trailing = { Switch(checked = caseSensitive, onCheckedChange = { caseSensitive = it }) },
                 showDivider = false,
             )
             GlassListRow(
-                title = "匹配整个单词",
-                subtitle = "英文全词匹配；中文关键词自动按子串处理",
+                title = t("匹配整个单词"),
+                subtitle = t("英文全词匹配；中文关键词自动按子串处理"),
                 trailing = { Switch(checked = wholeWords, onCheckedChange = { wholeWords = it }) },
                 showDivider = false,
             )
             GlassListRow(
-                title = "防止递归",
-                subtitle = "本条内容不再触发其他条目",
+                title = t("防止递归"),
+                subtitle = t("本条内容不再触发其他条目"),
                 trailing = { Switch(checked = preventRecursion, onCheckedChange = { preventRecursion = it }) },
                 showDivider = false,
             )
             GlassListRow(
-                title = "排除递归",
-                subtitle = "本条只能由对话文本直接触发，不被其他条目连锁激活",
+                title = t("排除递归"),
+                subtitle = t("本条只能由对话文本直接触发，不被其他条目连锁激活"),
                 trailing = { Switch(checked = excludeRecursion, onCheckedChange = { excludeRecursion = it }) },
                 showDivider = false,
             )
             NumberFieldRow(
-                label = "扫描深度覆盖（留空 = 用全局设置）",
+                label = t("扫描深度覆盖（留空 = 用全局设置）"),
                 value = scanDepthOverrideText,
                 allowEmpty = true,
             ) { scanDepthOverrideText = it }
@@ -367,7 +370,7 @@ private fun EntryFormBody(
                 style = GlassButtonStyle.Tinted,
                 enabled = canSave,
             ) {
-                Text(if (isNew) "创建条目" else "保存", fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                Text(if (isNew) t("创建条目") else t("保存"), fontSize = 15.sp, fontWeight = FontWeight.Medium)
             }
         }
     }
@@ -377,20 +380,20 @@ private fun EntryFormBody(
             onDismissRequest = { showDeleteConfirm = false },
             containerColor = scheme.surfaceContainerHigh,
             titleContentColor = scheme.onSurface,
-            title = { Text("删除条目", color = scheme.onSurface) },
+            title = { Text(t("删除条目"), color = scheme.onSurface) },
             text = {
                 Text(
-                    "确定删除「${displayTitleCompat(title, keys)}」？该操作不可恢复。",
+                    tf("确定删除「{0}」？该操作不可恢复。", displayTitleCompat(title, keys)),
                     color = scheme.onSurfaceVariant,
                 )
             },
             confirmButton = {
                 TextButton(onClick = { showDeleteConfirm = false; deleteEntry() }) {
-                    Text("删除", color = scheme.error)
+                    Text(t("删除"), color = scheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false }) { Text("取消", color = scheme.onSurfaceVariant) }
+                TextButton(onClick = { showDeleteConfirm = false }) { Text(t("取消"), color = scheme.onSurfaceVariant) }
             },
         )
     }
@@ -407,7 +410,7 @@ private fun displayTitleCompat(title: String, keys: List<String>): String =
     when {
         title.trim().isNotBlank() -> title.trim()
         keys.isNotEmpty() -> keys.first()
-        else -> "未命名条目"
+        else -> L10nRuntime.t("未命名条目")
     }
 
 @Composable
