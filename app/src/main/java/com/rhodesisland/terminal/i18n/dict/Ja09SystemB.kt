@@ -10,7 +10,6 @@ internal val Ja09SystemBEntries: List<Pair<String, String>> = listOf(
     // ===== 朋友圈生图（MomentImageGenClient / MediaTaskApi）=====
     "生图 API 未配置" to "画像生成 API が未設定です",
     "生图失败" to "画像生成に失敗しました",
-    "提交失败" to "送信に失敗しました",
     "任务 {0}：{1}" to "タスク {0}：{1}",
     "任务 {0}：任务完成但未返回结果链接" to "タスク {0}：タスクは完了しましたが結果リンクが返されませんでした",
     "任务 {0}：结果类型为 {1}，预期 image" to "タスク {0}：結果タイプは {1}、想定は image です",
@@ -69,7 +68,6 @@ internal val Ja09SystemBEntries: List<Pair<String, String>> = listOf(
     "{0} Resource ID 已保存，但缺少音色 ID" to "{0} Resource ID は保存されていますが、音色 ID がありません",
     "请填写火山引擎 API Key" to "Volcano Engine の API キーを入力してください",
     "云端 AI" to "クラウド AI",
-    "本地 AI" to "ローカル AI",
 
     // ===== 本地模型说明（LocalModel.kt，数据层原文，渲染处包 t()）=====
     "MNN 优化版，专为移动端或嵌入式设备设计，体积小、效率高。" to
@@ -99,7 +97,6 @@ internal val Ja09SystemBEntries: List<Pair<String, String>> = listOf(
     // ===== 小说仓库（NovelRepository）=====
     "故事名不能为空" to "ストーリー名は必須です",
     // 与批次 08Novel 同译文（该 key 已在 Ja08Novel.kt 收录，重复即一致）
-    "第 {0} 话" to "第 {0} 話",
     "本话已达 {0} 行上限" to "本話は {0} 行の上限に達しました",
 
     // ===== BGM 分类（AssetRepository.BgmTrack.ep）=====

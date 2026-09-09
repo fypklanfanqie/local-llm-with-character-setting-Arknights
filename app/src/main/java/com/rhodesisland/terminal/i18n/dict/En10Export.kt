@@ -20,7 +20,6 @@ internal val En10ExportEntries: List<Pair<String, String>> = listOf(
     "（无文本内容）" to "(No text content)",
     "博士" to "Doctor",
     "助手" to "Assistant",
-    "群聊" to "Group chat",
     "群聊成员" to "Group member",
     "用户" to "User",
     "图片附件（{0} 张）" to "{0} image attachment(s)",

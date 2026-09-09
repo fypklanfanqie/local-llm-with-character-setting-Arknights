@@ -51,10 +51,7 @@ internal val En08NovelEntries: List<Pair<String, String>> = listOf(
 
     // ===== 好感度档案 =====
     "礼" to "G",
-    "关系档案" to "Relationship profile",
     "关系记录" to "Relationship log",
-    "礼物墙" to "Gift wall",
-    "特殊邂逅" to "Special encounter",
     "尚无收礼记录" to "No gifts received yet",
     "已收 {0} 件礼物 · 查看完整记录" to "{0} gifts received · View full log",
     "{0} 个新事件等待回忆" to "{0} new events to recall",

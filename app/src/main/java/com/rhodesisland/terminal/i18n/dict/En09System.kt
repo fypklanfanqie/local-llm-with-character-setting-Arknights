@@ -41,7 +41,6 @@ internal val En09SystemEntries: List<Pair<String, String>> = listOf(
     "视频生成失败，请稍后重试" to "Video generation failed; please try again later",
 
     // ===== 通知（notification）=====
-    "角色问候" to "Character greetings",
     "角色主动发来的消息提醒" to "Notifications for messages a character sends proactively",
     "问候生成" to "Greeting generation",
     "生成角色主动消息时的保活通知" to "Keep-alive notification while generating a proactive character message",
@@ -76,10 +75,8 @@ internal val En09SystemEntries: List<Pair<String, String>> = listOf(
     "图片与临时缓存" to "Images and temp cache",
     "Coil 图片缓存、网络缓存等临时文件，可随时清除" to
         "Temporary files such as Coil image and network caches; safe to clear anytime",
-    "Seedance 对话视频" to "Seedance chat videos",
     "已生成并下载到本地的视频文件与任务快照" to
         "Generated videos downloaded to this device plus task snapshots",
-    "聊天背景" to "Chat background",
     "从相册导入的聊天背景图片" to "Chat background images imported from your gallery",
     "自定义角色立绘" to "Custom character illustrations",
     "自定义角色从相册导入的立绘图片" to
@@ -118,7 +115,6 @@ internal val En09SystemEntries: List<Pair<String, String>> = listOf(
         "The phone's system speech does not support Japanese; switch to Chinese or use the cloud engine in Settings",
 
     // ===== 后台任务 / 本地 Provider =====
-    "角色不存在" to "Character not found",
     "生成的朋友圈文案为空" to "The generated Moments caption is empty",
     "(本地模型未生成回复)" to "(The local model produced no reply)",
 

@@ -9,8 +9,6 @@ package com.rhodesisland.terminal.i18n
 internal val En05GroupChatEntries: List<Pair<String, String>> = listOf(
 
     // ===== 群聊列表 / 顶栏 =====
-    "新建" to "New",
-    "{0} 个群聊" to "{0} group chats",
     "还没有群聊\n点右上角「新建」创建一个吧" to "No group chats yet.\nTap \"New\" in the top right to create one.",
     "暂无消息" to "No messages yet",
     "群信息" to "Group info",

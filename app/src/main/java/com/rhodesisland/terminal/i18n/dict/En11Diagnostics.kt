@@ -16,7 +16,6 @@ internal val En11DiagnosticsEntries: List<Pair<String, String>> = listOf(
     "MNN · CPU 推理，兼容性最好" to "MNN · CPU inference, best compatibility",
     "MNN · OpenCL GPU 加速" to "MNN · OpenCL GPU acceleration",
     "MNN · 高通 Hexagon NPU" to "MNN · Qualcomm Hexagon NPU",
-    "自动（推荐）" to "Auto (recommended)",
     "强制 MNN CPU" to "Force MNN CPU",
     "强制 MNN GPU" to "Force MNN GPU",
     "强制 MNN NPU" to "Force MNN NPU",
@@ -30,7 +29,6 @@ internal val En11DiagnosticsEntries: List<Pair<String, String>> = listOf(
     "芯片等级不足以支持 NPU 推理" to "This chip tier is not powerful enough for NPU inference",
 
     // ===== 推理性能模式（InferencePerformanceMode）=====
-    "平衡" to "Balanced",
     "极速" to "Maximum speed",
 
     // ===== 温度状态（ThermalMonitor）=====
@@ -78,8 +76,6 @@ internal val En11DiagnosticsEntries: List<Pair<String, String>> = listOf(
     "GPU 思考开" to "GPU, thinking on",
 
     // ===== 思考档位（LocalThinkingLevel；「中」与设置页尺寸档位冲突，故不收录）=====
-    "自动" to "Auto",
-    "短" to "Short",
     // ===== 含数值的否决原因（数据层已改成 {0} 模板 + L10nRuntime.format）=====
     "样本数不足（需 ≥{0}，候选={1}，基线={2}）" to
         "Not enough samples (need ≥{0}; candidate={1}, baseline={2})",

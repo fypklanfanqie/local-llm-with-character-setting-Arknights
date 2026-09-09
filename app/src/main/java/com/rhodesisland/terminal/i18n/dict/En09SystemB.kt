@@ -10,7 +10,6 @@ internal val En09SystemBEntries: List<Pair<String, String>> = listOf(
     // ===== 朋友圈生图（MomentImageGenClient / MediaTaskApi）=====
     "生图 API 未配置" to "Image generation API is not configured",
     "生图失败" to "Image generation failed",
-    "提交失败" to "Submission failed",
     "任务 {0}：{1}" to "Task {0}: {1}",
     "任务 {0}：任务完成但未返回结果链接" to "Task {0}: task finished but returned no result URL",
     "任务 {0}：结果类型为 {1}，预期 image" to "Task {0}: result type is {1}, expected image",
@@ -65,7 +64,6 @@ internal val En09SystemBEntries: List<Pair<String, String>> = listOf(
     "{0} Resource ID 已保存，但缺少音色 ID" to "{0} Resource ID is saved, but the voice ID is missing",
     "请填写火山引擎 API Key" to "Please enter the Volcano Engine API key",
     "云端 AI" to "Cloud AI",
-    "本地 AI" to "Local AI",
 
     // ===== 本地模型说明（LocalModel.kt，数据层原文，渲染处包 t()）=====
     "MNN 优化版，专为移动端或嵌入式设备设计，体积小、效率高。" to
@@ -95,7 +93,6 @@ internal val En09SystemBEntries: List<Pair<String, String>> = listOf(
     // ===== 小说仓库（NovelRepository）=====
     "故事名不能为空" to "Story name cannot be empty",
     // 与批次 08Novel 同译文（该 key 已在 En08Novel.kt 收录，重复即一致）
-    "第 {0} 话" to "Episode {0}",
     "本话已达 {0} 行上限" to "This chapter has reached the {0}-line limit",
 
     // ===== BGM 分类（AssetRepository.BgmTrack.ep）=====

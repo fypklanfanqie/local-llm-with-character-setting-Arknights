@@ -20,7 +20,6 @@ internal val Ja10ExportEntries: List<Pair<String, String>> = listOf(
     "（无文本内容）" to "（テキストなし）",
     "博士" to "ドクター",
     "助手" to "アシスタント",
-    "群聊" to "グループチャット",
     "群聊成员" to "グループメンバー",
     "用户" to "ユーザー",
     "图片附件（{0} 张）" to "画像添付（{0} 枚）",

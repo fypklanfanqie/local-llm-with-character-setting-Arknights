@@ -9,8 +9,6 @@ package com.rhodesisland.terminal.i18n
 internal val Ja05GroupChatEntries: List<Pair<String, String>> = listOf(
 
     // ===== グループチャット一覧 / トップバー =====
-    "新建" to "新規",
-    "{0} 个群聊" to "{0} 件のグループチャット",
     "还没有群聊\n点右上角「新建」创建一个吧" to "グループチャットはまだありません。\n右上の「新規」から作成できます。",
     "暂无消息" to "メッセージはまだありません",
     "群信息" to "グループ情報",

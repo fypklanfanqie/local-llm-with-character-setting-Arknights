@@ -75,7 +75,6 @@ internal val Ja06LorebookEntries: List<Pair<String, String>> = listOf(
     "全在" to "すべて存在",
     "非全在" to "すべては存在しない",
     "全不在" to "いずれも存在しない",
-    "插入位置" to "挿入位置",
     "设定前" to "設定の前",
     "设定后" to "設定の後",
     "@深度" to "@深度",

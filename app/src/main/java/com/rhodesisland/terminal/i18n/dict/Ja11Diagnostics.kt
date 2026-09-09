@@ -12,7 +12,6 @@ internal val Ja11DiagnosticsEntries: List<Pair<String, String>> = listOf(
     "MNN · CPU 推理，兼容性最好" to "MNN · CPU 推論、互換性が最も高い",
     "MNN · OpenCL GPU 加速" to "MNN · OpenCL GPU アクセラレーション",
     "MNN · 高通 Hexagon NPU" to "MNN · Qualcomm Hexagon NPU",
-    "自动（推荐）" to "自動（推奨）",
     "强制 MNN CPU" to "MNN CPU を強制",
     "强制 MNN GPU" to "MNN GPU を強制",
     "强制 MNN NPU" to "MNN NPU を強制",
@@ -26,7 +25,6 @@ internal val Ja11DiagnosticsEntries: List<Pair<String, String>> = listOf(
     "芯片等级不足以支持 NPU 推理" to "チップの階級が NPU 推論に足りません",
 
     // ===== 推論パフォーマンスモード（InferencePerformanceMode）=====
-    "平衡" to "バランス",
     "极速" to "最高速度",
 
     // ===== 温度状態（ThermalMonitor）=====
@@ -74,9 +72,6 @@ internal val Ja11DiagnosticsEntries: List<Pair<String, String>> = listOf(
     "GPU 思考开" to "GPU・思考オン",
 
     // ===== 思考レベル（LocalThinkingLevel。「中」は設定画面のサイズ項目と衝突するため未収録）=====
-    "自动" to "自動",
-    "短" to "短",
-    "长" to "長",
 
     // ===== 数値を含む否決理由（データ層は {0} テンプレート + L10nRuntime.format）=====
     "样本数不足（需 ≥{0}，候选={1}，基线={2}）" to

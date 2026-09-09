@@ -75,7 +75,6 @@ internal val En06LorebookEntries: List<Pair<String, String>> = listOf(
     "全在" to "All present",
     "非全在" to "Not all present",
     "全不在" to "None present",
-    "插入位置" to "Insertion position",
     "设定前" to "Before persona",
     "设定后" to "After persona",
     "@深度" to "@Depth",
