@@ -1,5 +1,7 @@
 package com.rhodesisland.terminal.llm.benchmark
 
+import com.rhodesisland.terminal.i18n.L10nRuntime
+
 import com.rhodesisland.terminal.llm.backend.BackendType
 
 /**
@@ -78,20 +80,20 @@ object ExperimentalPromotionPolicy {
         if (!candidate.correctnessOk) reasons += "候选正确性校验未通过（UTF-8/EOS/复读/KV 失配）"
         if (candidate.hotStart || baseline.hotStart) reasons += "热启动样本无效，需冷启重测"
         if (candidate.sampleCount < MIN_SAMPLES || baseline.sampleCount < MIN_SAMPLES) {
-            reasons += "样本数不足（需 ≥$MIN_SAMPLES，候选=${candidate.sampleCount}，基线=${baseline.sampleCount}）"
+            reasons += L10nRuntime.format("样本数不足（需 ≥{0}，候选={1}，基线={2}）", MIN_SAMPLES, candidate.sampleCount, baseline.sampleCount)
         }
         if (candidate.decodeTpsMedian < baseline.decodeTpsMedian * MIN_DECODE_IMPROVEMENT) {
-            reasons += "decode 提升不足 10%（候选=${candidate.decodeTpsMedian} vs 基线=${baseline.decodeTpsMedian}）"
+            reasons += L10nRuntime.format("decode 提升不足 10%（候选={0} vs 基线={1}）", candidate.decodeTpsMedian, baseline.decodeTpsMedian)
         }
         if (candidate.ttftMsMedian != null && baseline.ttftMsMedian != null &&
             candidate.ttftMsMedian > baseline.ttftMsMedian * MAX_TTFT_REGRESSION
         ) {
-            reasons += "TTFT 劣化超 30%（候选=${candidate.ttftMsMedian} vs 基线=${baseline.ttftMsMedian}）"
+            reasons += L10nRuntime.format("TTFT 劣化超 30%（候选={0} vs 基线={1}）", candidate.ttftMsMedian, baseline.ttftMsMedian)
         }
         if (candidate.peakPssMb != null && baseline.peakPssMb != null &&
             candidate.peakPssMb > baseline.peakPssMb * MAX_PSS_REGRESSION
         ) {
-            reasons += "峰值 PSS 劣化超 30%（候选=${candidate.peakPssMb} vs 基线=${baseline.peakPssMb}）"
+            reasons += L10nRuntime.format("峰值 PSS 劣化超 30%（候选={0} vs 基线={1}）", candidate.peakPssMb, baseline.peakPssMb)
         }
 
         return if (reasons.isEmpty()) PromotionDecision.Promote else PromotionDecision.Reject(reasons)
@@ -132,17 +134,17 @@ object ExperimentalPromotionPolicy {
         if (baselineKvReuseRate != null && candidate.kvReuseRate != null &&
             candidate.kvReuseRate < baselineKvReuseRate
         ) {
-            reasons += "KV 复用率回归（候选=${candidate.kvReuseRate} vs 基线=${baselineKvReuseRate}）"
+            reasons += L10nRuntime.format("KV 复用率回归（候选={0} vs 基线={1}）", candidate.kvReuseRate, baselineKvReuseRate)
         }
         if (candidate.emptyResponseRate > MAX_EMPTY_RESPONSE_RATE) {
-            reasons += "候选空响应率过高（${candidate.emptyResponseRate} > $MAX_EMPTY_RESPONSE_RATE）"
+            reasons += L10nRuntime.format("候选空响应率过高（{0} > {1}）", candidate.emptyResponseRate, MAX_EMPTY_RESPONSE_RATE)
         }
 
         // 3. GPU 证据：声称走 GPU 的候选，全部样本必须实际跑在 MNN_GPU；任一 CPU fallback
         //    样本不得计入「GPU 更快」的证据。
         val gpuSamples = candidate.actualBackendCounts[BackendType.MNN_GPU.name] ?: 0
         if (gpuSamples > 0 && gpuSamples != candidate.sample.sampleCount) {
-            reasons += "GPU 候选混入非 GPU 样本（MNN_GPU=$gpuSamples / 总样本=${candidate.sample.sampleCount}，实际后端=${candidate.actualBackendCounts}）"
+            reasons += L10nRuntime.format("GPU 候选混入非 GPU 样本（MNN_GPU={0} / 总样本={1}，实际后端={2}）", gpuSamples, candidate.sample.sampleCount, candidate.actualBackendCounts)
         }
         // 全回退洞：GPU 意图候选若 0 个 GPU 样本（全 CPU fallback），上面「>0」条件不拦，会用 CPU decode
         // 数据通过 ≥1.10× 门禁被当作 GPU 收益晋级。isGpuCandidate=true 时要求 MNN_GPU 计数 == 总样本数，
@@ -154,22 +156,22 @@ object ExperimentalPromotionPolicy {
         // 4. 性能门禁（与 evaluate 同阈值）。
         if (candidate.sample.hotStart || baseline.hotStart) reasons += "热启动样本无效，需冷启重测"
         if (candidate.sample.sampleCount < MIN_SAMPLES || baseline.sampleCount < MIN_SAMPLES) {
-            reasons += "样本数不足（需 ≥$MIN_SAMPLES，候选=${candidate.sample.sampleCount}，基线=${baseline.sampleCount}）"
+            reasons += L10nRuntime.format("样本数不足（需 ≥{0}，候选={1}，基线={2}）", MIN_SAMPLES, candidate.sample.sampleCount, baseline.sampleCount)
         }
         if (candidate.sample.decodeTpsMedian < baseline.decodeTpsMedian * MIN_DECODE_IMPROVEMENT) {
-            reasons += "decode 提升不足 10%（候选=${candidate.sample.decodeTpsMedian} vs 基线=${baseline.decodeTpsMedian}）"
+            reasons += L10nRuntime.format("decode 提升不足 10%（候选={0} vs 基线={1}）", candidate.sample.decodeTpsMedian, baseline.decodeTpsMedian)
         }
         candidate.sample.ttftMsMedian?.let { ct ->
             baseline.ttftMsMedian?.let { bt ->
                 if (ct > bt * MAX_TTFT_REGRESSION) {
-                    reasons += "TTFT 劣化超 30%（候选=$ct vs 基线=$bt）"
+                    reasons += L10nRuntime.format("TTFT 劣化超 30%（候选={0} vs 基线={1}）", ct, bt)
                 }
             }
         }
         candidate.sample.peakPssMb?.let { cp ->
             baseline.peakPssMb?.let { bp ->
                 if (cp > bp * MAX_PSS_REGRESSION) {
-                    reasons += "峰值 PSS 劣化超 30%（候选=$cp vs 基线=$bp）"
+                    reasons += L10nRuntime.format("峰值 PSS 劣化超 30%（候选={0} vs 基线={1}）", cp, bp)
                 }
             }
         }
@@ -199,7 +201,7 @@ object ExperimentalPromotionPolicy {
         if (!candidate.correctnessOk || !baseline.correctnessOk) reasons += "正确性校验未通过（UTF-8/EOS/复读/KV 失配）"
         if (candidate.hotStart || baseline.hotStart) reasons += "热启动样本无效，需冷启重测"
         if (candidate.sampleCount < MIN_SAMPLES || baseline.sampleCount < MIN_SAMPLES) {
-            reasons += "样本数不足（需 ≥$MIN_SAMPLES，候选=${candidate.sampleCount}，基线=${baseline.sampleCount}）"
+            reasons += L10nRuntime.format("样本数不足（需 ≥{0}，候选={1}，基线={2}）", MIN_SAMPLES, candidate.sampleCount, baseline.sampleCount)
         }
         val bp = baseline.prefillTpsMedian
         val cp = candidate.prefillTpsMedian
@@ -211,20 +213,20 @@ object ExperimentalPromotionPolicy {
             val prefillGain = cp / bp
             val ttftGain = bt / ct  // TTFT 变小 = 收益
             if (prefillGain < MIN_PREFILL_IMPROVEMENT && ttftGain < MIN_PREFILL_IMPROVEMENT) {
-                reasons += "prefill 提升不足（prefill ${cp} vs ${bp} tps；TTFT ${ct} vs ${bt} ms）"
+                reasons += L10nRuntime.format("prefill 提升不足（prefill {0} vs {1} tps；TTFT {2} vs {3} ms）", cp, bp, ct, bt)
             }
             if (ct > bt * MAX_TTFT_REGRESSION) {
-                reasons += "TTFT 劣化超 30%（候选=$ct vs 基线=$bt）"
+                reasons += L10nRuntime.format("TTFT 劣化超 30%（候选={0} vs 基线={1}）", ct, bt)
             }
         }
         // 不牺牲解码换首字：decode 可略降，但不超过 30% 容差。
         if (candidate.decodeTpsMedian < baseline.decodeTpsMedian / MAX_TTFT_REGRESSION) {
-            reasons += "decode 劣化超 30%（候选=${candidate.decodeTpsMedian} vs 基线=${baseline.decodeTpsMedian}）"
+            reasons += L10nRuntime.format("decode 劣化超 30%（候选={0} vs 基线={1}）", candidate.decodeTpsMedian, baseline.decodeTpsMedian)
         }
         candidate.peakPssMb?.let { cpss ->
             baseline.peakPssMb?.let { bpss ->
                 if (cpss > bpss * MAX_PSS_REGRESSION) {
-                    reasons += "峰值 PSS 劣化超 30%（候选=$cpss vs 基线=$bpss）"
+                    reasons += L10nRuntime.format("峰值 PSS 劣化超 30%（候选={0} vs 基线={1}）", cpss, bpss)
                 }
             }
         }

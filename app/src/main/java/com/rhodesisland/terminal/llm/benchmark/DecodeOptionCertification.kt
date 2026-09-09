@@ -1,5 +1,7 @@
 package com.rhodesisland.terminal.llm.benchmark
 
+import com.rhodesisland.terminal.i18n.L10nRuntime
+
 import com.rhodesisland.terminal.llm.profile.InferenceProfileResolver
 
 /**
@@ -93,9 +95,9 @@ object DecodeOptionCertification {
         val reasons = mutableListOf<String>()
         if (result.totalRounds <= 0) reasons += "可靠性未执行（totalRounds=0）"
         if (result.nonEmptySuccessRate < 1f) {
-            reasons += "可靠性未满分（${result.nonEmptySuccessRate} < 1.0，含空响应/乱码/复读轮）"
+            reasons += L10nRuntime.format("可靠性未满分（{0} < 1.0，含空响应/乱码/复读轮）", result.nonEmptySuccessRate)
         }
-        if (result.fallbackCount > 0) reasons += "出现后端回退（${result.fallbackCount} 轮）"
+        if (result.fallbackCount > 0) reasons += L10nRuntime.format("出现后端回退（{0} 轮）", result.fallbackCount)
         return reasons
     }
 

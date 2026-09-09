@@ -80,6 +80,26 @@ internal val En11DiagnosticsEntries: List<Pair<String, String>> = listOf(
     // ===== 思考档位（LocalThinkingLevel；「中」与设置页尺寸档位冲突，故不收录）=====
     "自动" to "Auto",
     "短" to "Short",
-    "长" to "Long",
+    // ===== 含数值的否决原因（数据层已改成 {0} 模板 + L10nRuntime.format）=====
+    "样本数不足（需 ≥{0}，候选={1}，基线={2}）" to
+        "Not enough samples (need ≥{0}; candidate={1}, baseline={2})",
+    "decode 提升不足 10%（候选={0} vs 基线={1}）" to
+        "decode gain below 10% (candidate={0} vs baseline={1})",
+    "decode 劣化超 30%（候选={0} vs 基线={1}）" to
+        "decode regression over 30% (candidate={0} vs baseline={1})",
+    "TTFT 劣化超 30%（候选={0} vs 基线={1}）" to
+        "TTFT regression over 30% (candidate={0} vs baseline={1})",
+    "峰值 PSS 劣化超 30%（候选={0} vs 基线={1}）" to
+        "Peak PSS regression over 30% (candidate={0} vs baseline={1})",
+    "KV 复用率回归（候选={0} vs 基线={1}）" to
+        "KV reuse rate regression (candidate={0} vs baseline={1})",
+    "候选空响应率过高（{0} > {1}）" to "Candidate empty-response rate too high ({0} > {1})",
+    "GPU 候选混入非 GPU 样本（MNN_GPU={0} / 总样本={1}，实际后端={2}）" to
+        "GPU candidate includes non-GPU samples (MNN_GPU={0} / total={1}, actual backends={2})",
+    "prefill 提升不足（prefill {0} vs {1} tps；TTFT {2} vs {3} ms）" to
+        "Prefill gain too small (prefill {0} vs {1} tps; TTFT {2} vs {3} ms)",
+    "可靠性未满分（{0} < 1.0，含空响应/乱码/复读轮）" to
+        "Reliability not perfect ({0} < 1.0; includes empty/garbled/repetition rounds)",
+    "出现后端回退（{0} 轮）" to "Backend fallback occurred ({0} rounds)",
 
 )
