@@ -64,6 +64,8 @@ import coil.compose.AsyncImage
 import com.rhodesisland.terminal.AppContainer
 import com.rhodesisland.terminal.config.AppConfig
 import com.rhodesisland.terminal.data.repository.MomentRepository
+import com.rhodesisland.terminal.i18n.t
+import com.rhodesisland.terminal.i18n.tf
 import com.rhodesisland.terminal.ui.moment.MomentsViewModel.PostUi
 import com.rhodesisland.terminal.util.RelativeTime
 
@@ -109,7 +111,7 @@ fun MomentsScreen(
             if (state.posts.isEmpty()) {
                 item {
                     Text(
-                        "还没有动态\n点右上角相机让角色发一条，或自己发一条",
+                        t("还没有动态\n点右上角相机让角色发一条，或自己发一条"),
                         color = Color(0xFF8A93A0),
                         fontSize = 13.sp,
                         lineHeight = 20.sp,
@@ -142,14 +144,14 @@ fun MomentsScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.Filled.Close, contentDescription = "返回", tint = Color.White)
+                Icon(Icons.Filled.Close, contentDescription = t("返回"), tint = Color.White)
             }
             Spacer(Modifier.weight(1f))
             IconButton(onClick = { showAiPostDialog = true }) {
-                Icon(Icons.Filled.PhotoCamera, contentDescription = "让角色发朋友圈", tint = Color.White)
+                Icon(Icons.Filled.PhotoCamera, contentDescription = t("让角色发朋友圈"), tint = Color.White)
             }
             IconButton(onClick = { showComposeDialog = true }) {
-                Icon(Icons.Filled.Add, contentDescription = "自己发朋友圈", tint = Color.White)
+                Icon(Icons.Filled.Add, contentDescription = t("自己发朋友圈"), tint = Color.White)
             }
         }
 
@@ -213,7 +215,7 @@ private fun MomentsHeader(
         } else {
             AsyncImage(
                 model = coverPath,
-                contentDescription = "朋友圈封面",
+                contentDescription = t("朋友圈封面"),
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
             )
@@ -248,7 +250,7 @@ private fun MomentsHeader(
                 modifier = Modifier.size(13.dp),
             )
             Spacer(Modifier.width(4.dp))
-            Text("更换封面", color = Color.White.copy(alpha = 0.92f), fontSize = 11.sp)
+            Text(t("更换封面"), color = Color.White.copy(alpha = 0.92f), fontSize = 11.sp)
         }
         // 右下角：昵称 + 头像（微信位置）
         Row(
@@ -266,7 +268,7 @@ private fun MomentsHeader(
                 } else {
                     AsyncImage(
                         model = userAvatar,
-                        contentDescription = "我的头像",
+                        contentDescription = t("我的头像"),
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop,
                     )
@@ -366,7 +368,7 @@ private fun MomentPostCard(
                     )
                     Spacer(Modifier.weight(1f))
                     Text(
-                        "删除",
+                        t("删除"),
                         color = Color(0xFF7FA8D9),
                         fontSize = 12.sp,
                         modifier = Modifier
@@ -381,7 +383,7 @@ private fun MomentPostCard(
                     ) {
                         Icon(
                             Icons.Filled.MoreHoriz,
-                            contentDescription = "赞/评论",
+                            contentDescription = t("赞/评论"),
                             tint = Color(0xFF7FA8D9),
                             modifier = Modifier.size(18.dp),
                         )
@@ -412,7 +414,7 @@ private fun MomentPostCard(
                                 modifier = Modifier.size(16.dp),
                             )
                             Spacer(Modifier.width(4.dp))
-                            Text(if (post.likedByUser) "取消" else "赞", color = Color(0xFFDDE2E9), fontSize = 13.sp)
+                            Text(if (post.likedByUser) t("取消") else t("赞"), color = Color(0xFFDDE2E9), fontSize = 13.sp)
                         }
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -421,7 +423,7 @@ private fun MomentPostCard(
                                 showActionSheet = false
                             },
                         ) {
-                            Text("评论", color = Color(0xFFDDE2E9), fontSize = 13.sp)
+                            Text(t("评论"), color = Color(0xFFDDE2E9), fontSize = 13.sp)
                         }
                     }
                 }
@@ -439,8 +441,8 @@ private fun MomentPostCard(
                         if (post.likeCharacterIds.isNotEmpty()) {
                             val likerNames = post.likeCharacterIds.mapNotNull { characterNameById[it] }
                             Text(
-                                if (likerNames.isEmpty()) "❤ ${post.likeCharacterIds.size} 人觉得很赞"
-                                else "❤ ${likerNames.joinToString("、")} 觉得很赞",
+                                if (likerNames.isEmpty()) tf("❤ {0} 人觉得很赞", post.likeCharacterIds.size)
+                                else tf("❤ {0} 觉得很赞", likerNames.joinToString("、")),
                                 color = Color(0xFF7FA8D9),
                                 fontSize = 13.sp,
                                 lineHeight = 18.sp,
@@ -450,12 +452,12 @@ private fun MomentPostCard(
                             val commenterName = when {
                                 comment.authorType == MomentRepository.AUTHOR_USER -> userDisplayName
                                 comment.characterId == null -> ""
-                                else -> characterNameById[comment.characterId] ?: "已注销角色"
+                                else -> characterNameById[comment.characterId] ?: t("已注销角色")
                             }
+                            val commentPrefix = tf("{0}：", commenterName)
                             Text(
                                 buildString {
-                                    append(commenterName)
-                                    append("：")
+                                    append(commentPrefix)
                                     append(comment.content)
                                 },
                                 color = Color(0xFFC9CFD8),
@@ -464,7 +466,7 @@ private fun MomentPostCard(
                             )
                         }
                         if (isReplying) {
-                            Text("对方正在输入…", color = Color(0xFF7A8290), fontSize = 12.sp)
+                            Text(t("对方正在输入…"), color = Color(0xFF7A8290), fontSize = 12.sp)
                         }
                     }
                 }
@@ -485,7 +487,7 @@ private fun MomentPostCard(
                                 .padding(horizontal = 10.dp, vertical = 8.dp),
                             decorationBox = { inner ->
                                 if (commentText.isEmpty()) {
-                                    Text("评论", color = Color(0xFF6B7280), fontSize = 14.sp)
+                                    Text(t("评论"), color = Color(0xFF6B7280), fontSize = 14.sp)
                                 }
                                 inner()
                             },
@@ -499,7 +501,7 @@ private fun MomentPostCard(
                                     showCommentInput = false
                                 }
                             },
-                        ) { Text("发送", color = Color(0xFF7FA8D9), fontSize = 13.sp) }
+                        ) { Text(t("发送"), color = Color(0xFF7FA8D9), fontSize = 13.sp) }
                     }
                 }
             }
@@ -521,10 +523,10 @@ private fun AiPostDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("让角色发朋友圈") },
+        title = { Text(t("让角色发朋友圈")) },
         text = {
             Column {
-                Text("选择角色（云端 AI 生成文案与配图）", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(t("选择角色（云端 AI 生成文案与配图）"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(8.dp))
                 LazyColumn(modifier = Modifier.height(220.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     items(characters) { char ->
@@ -555,12 +557,12 @@ private fun AiPostDialog(
                     }
                 }
                 Spacer(Modifier.height(8.dp))
-                Text("配图数量", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(t("配图数量"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(0, 1, 2, 3).forEach { count ->
                         TextButton(onClick = { imageCount = count }) {
                             Text(
-                                if (count == 0) "无图" else "${count}张",
+                                if (count == 0) t("无图") else tf("{0}张", count),
                                 color = if (imageCount == count) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontWeight = if (imageCount == count) FontWeight.Bold else FontWeight.Normal,
                             )
@@ -573,9 +575,9 @@ private fun AiPostDialog(
             TextButton(
                 enabled = selectedId != null && !generating,
                 onClick = { selectedId?.let { onPost(it, imageCount) } },
-            ) { Text(if (generating) "生成中…" else "生成发布") }
+            ) { Text(if (generating) t("生成中…") else t("生成发布")) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(t("取消")) } },
     )
 }
 
@@ -593,7 +595,7 @@ private fun UserComposeDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("发朋友圈") },
+        title = { Text(t("发朋友圈")) },
         text = {
             Column {
                 BasicTextField(
@@ -607,13 +609,13 @@ private fun UserComposeDialog(
                         .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
                         .padding(10.dp),
                     decorationBox = { inner ->
-                        if (text.isEmpty()) Text("这一刻的想法…", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 15.sp)
+                        if (text.isEmpty()) Text(t("这一刻的想法…"), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 15.sp)
                         inner()
                     },
                 )
                 Spacer(Modifier.height(10.dp))
                 TextButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) {
-                    Text(if (uris.value.isEmpty()) "添加图片（最多 3 张）" else "已选 ${uris.value.size} 张 · 点击更换")
+                    Text(if (uris.value.isEmpty()) t("添加图片（最多 3 张）") else tf("已选 {0} 张 · 点击更换", uris.value.size))
                 }
             }
         },
@@ -621,8 +623,8 @@ private fun UserComposeDialog(
             TextButton(
                 enabled = text.isNotBlank() || uris.value.isNotEmpty(),
                 onClick = { onSend(text, uris.value) },
-            ) { Text("发表") }
+            ) { Text(t("发表")) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(t("取消")) } },
     )
 }

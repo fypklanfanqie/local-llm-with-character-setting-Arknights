@@ -11,6 +11,7 @@ import com.rhodesisland.terminal.data.local.MomentPostEntity
 import com.rhodesisland.terminal.data.model.ChatProviderType
 import com.rhodesisland.terminal.data.model.UserProfileConfig
 import com.rhodesisland.terminal.data.repository.MomentRepository
+import com.rhodesisland.terminal.i18n.L10nRuntime
 import com.rhodesisland.terminal.util.CharacterImageStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -55,7 +56,7 @@ class MomentsViewModel(
         val posts: List<PostUi> = emptyList(),
         val userAvatar: String = "",
         /** 朋友圈显示名（设置「我的形象」自定义昵称；空=「我」）。 */
-        val userDisplayName: String = "我",
+        val userDisplayName: String = L10nRuntime.t("我"),
         val isCloud: Boolean = true,
         val generating: Generating = Generating(),
         val errorMessage: String? = null,
@@ -96,7 +97,7 @@ class MomentsViewModel(
                     authorName = when {
                         !isCharacter -> profile.displayOrMe
                         char != null -> char.name
-                        else -> "已注销角色"
+                        else -> L10nRuntime.t("已注销角色")
                     },
                     authorImage = when {
                         !isCharacter -> profile.avatarPath
@@ -154,14 +155,14 @@ class MomentsViewModel(
         viewModelScope.launch {
             try {
                 if (!container.settingsRepository.isCloudApiReady()) {
-                    errorMessage.value = "请先在设置中配置云端 AI API"
+                    errorMessage.value = L10nRuntime.t("请先在设置中配置云端 AI API")
                     return@launch
                 }
                 container.momentGenerationCoordinator.generateAndPost(characterId, imageCount)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                errorMessage.value = e.message ?: "生成失败，请稍后再试"
+                errorMessage.value = e.message ?: L10nRuntime.t("生成失败，请稍后再试")
             } finally {
                 generating.value = Generating()
             }
@@ -243,7 +244,8 @@ class MomentsViewModel(
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                errorMessage.value = "回复生成失败：${e.message ?: "请稍后再试"}"
+                val reason = e.message ?: L10nRuntime.t("请稍后再试")
+                errorMessage.value = L10nRuntime.format("回复生成失败：{0}", reason)
             } finally {
                 generating.value = Generating()
             }
@@ -265,7 +267,7 @@ class MomentsViewModel(
             if (saved != null) {
                 container.settingsRepository.setMomentCoverPath(saved)
             } else {
-                errorMessage.value = "封面图片保存失败"
+                errorMessage.value = L10nRuntime.t("封面图片保存失败")
             }
         }
     }

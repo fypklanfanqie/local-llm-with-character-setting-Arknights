@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.rhodesisland.terminal.data.model.Character
+import com.rhodesisland.terminal.i18n.t
 import com.rhodesisland.terminal.ui.characters.CharacterPortrait
 import com.rhodesisland.terminal.ui.glass.GlassButton
 import com.rhodesisland.terminal.ui.glass.GlassButtonStyle
@@ -236,7 +237,7 @@ internal fun CharacterFeedPage(
                     ) {
                         Icon(Icons.AutoMirrored.Outlined.Chat, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("开始对话", fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1)
+                        Text(t("开始对话"), fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1)
                     }
                     GlassButton(
                         onClick = onAffinity,
@@ -247,7 +248,7 @@ internal fun CharacterFeedPage(
                     ) {
                         Icon(Icons.Filled.Favorite, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("好感", fontWeight = FontWeight.SemiBold, maxLines = 1)
+                        Text(t("好感"), fontWeight = FontWeight.SemiBold, maxLines = 1)
                     }
                     GlassButton(
                         onClick = onNovel,
@@ -258,7 +259,7 @@ internal fun CharacterFeedPage(
                     ) {
                         Icon(Icons.AutoMirrored.Outlined.MenuBook, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("小说", fontWeight = FontWeight.SemiBold, maxLines = 1)
+                        Text(t("小说"), fontWeight = FontWeight.SemiBold, maxLines = 1)
                     }
                 }
             }
@@ -279,7 +280,7 @@ internal fun CharacterFeedPage(
                     RailItem(
                         index = 0,
                         icon = Icons.AutoMirrored.Outlined.VolumeUp,
-                        label = "语音",
+                        label = t("语音"),
                         visible = settled,
                         onClick = voice,
                     )
@@ -288,7 +289,7 @@ internal fun CharacterFeedPage(
                     RailItem(
                         index = 1,
                         icon = Icons.Outlined.Delete,
-                        label = "删除",
+                        label = t("删除"),
                         danger = true,
                         visible = settled,
                         onClick = delete,

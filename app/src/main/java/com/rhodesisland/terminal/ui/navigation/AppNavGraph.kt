@@ -49,6 +49,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.rhodesisland.terminal.AppContainer
+import com.rhodesisland.terminal.i18n.t
 import com.rhodesisland.terminal.ui.characters.CharactersScreen
 import com.rhodesisland.terminal.ui.chat.ChatScreen
 import com.rhodesisland.terminal.ui.feed.CharacterFeedScreen
@@ -182,7 +183,7 @@ fun AppNavGraph(container: AppContainer, initialChatOpen: Boolean = false) {
             }?.route
             GlassNavBar(
                 items = tabs.map {
-                    GlassNavItem(route = it.route, label = it.label, icon = it.icon, selectedIcon = it.selectedIcon)
+                    GlassNavItem(route = it.route, label = t(it.label), icon = it.icon, selectedIcon = it.selectedIcon)
                 },
                 currentRoute = currentTabRoute ?: "",
                 onSelect = { route ->

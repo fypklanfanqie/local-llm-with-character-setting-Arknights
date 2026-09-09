@@ -49,6 +49,8 @@ import com.rhodesisland.terminal.config.Characters
 import com.rhodesisland.terminal.data.model.Character
 import com.rhodesisland.terminal.data.model.LorebookScopeType
 import com.rhodesisland.terminal.data.model.WorldviewTargetType
+import com.rhodesisland.terminal.i18n.t
+import com.rhodesisland.terminal.i18n.tf
 import com.rhodesisland.terminal.ui.characters.CustomCharacterDialog
 import com.rhodesisland.terminal.ui.characters.PersonaSheet
 import com.rhodesisland.terminal.ui.applySystemBarIcons
@@ -220,7 +222,7 @@ fun CharacterFeedScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "通讯",
+                text = t("通讯"),
                 color = Color.White,
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
@@ -241,7 +243,7 @@ fun CharacterFeedScreen(
                     verticalPadding = 8.dp,
                 ) {
                     Text(
-                        "朋友圈",
+                        t("朋友圈"),
                         color = Color.White.copy(alpha = 0.92f),
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
@@ -254,7 +256,7 @@ fun CharacterFeedScreen(
                     verticalPadding = 8.dp,
                 ) {
                     Text(
-                        "邂逅",
+                        t("邂逅"),
                         color = Color.White.copy(alpha = 0.92f),
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
@@ -267,7 +269,7 @@ fun CharacterFeedScreen(
                     verticalPadding = 8.dp,
                 ) {
                     Text(
-                        "群聊",
+                        t("群聊"),
                         color = Color.White.copy(alpha = 0.92f),
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
@@ -287,7 +289,7 @@ fun CharacterFeedScreen(
                     )
                     Spacer(Modifier.width(4.dp))
                     Text(
-                        "新建",
+                        t("新建"),
                         color = Color.White,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
@@ -324,8 +326,8 @@ fun CharacterFeedScreen(
             onDismissRequest = { deleteTarget = null },
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             titleContentColor = MaterialTheme.colorScheme.onSurface,
-            title = { Text("删除角色") },
-            text = { Text("确定删除「${char.name}」？") },
+            title = { Text(t("删除角色")) },
+            text = { Text(tf("确定删除「{0}」？", char.name)) },
             confirmButton = {
                 TextButton(onClick = {
                     scope.launch {
@@ -343,10 +345,10 @@ fun CharacterFeedScreen(
                         }
                     }
                     deleteTarget = null
-                }) { Text("删除", color = MaterialTheme.colorScheme.error) }
+                }) { Text(t("删除"), color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
-                TextButton(onClick = { deleteTarget = null }) { Text("取消") }
+                TextButton(onClick = { deleteTarget = null }) { Text(t("取消")) }
             },
         )
     }

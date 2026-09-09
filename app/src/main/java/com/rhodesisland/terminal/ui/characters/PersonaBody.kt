@@ -5,7 +5,7 @@ package com.rhodesisland.terminal.ui.characters
  * 找不到则返回全文（自定义角色自由文本场景）。
  */
 internal fun extractPersonaBody(systemPrompt: String): String {
-    val marker = "回答要求："
+    val marker = "回答要求：" // l10n:ignore 人设正文解析标记（非界面文案，随 systemPrompt 内容固定）
     val idx = systemPrompt.indexOf(marker)
     return if (idx >= 0) systemPrompt.substring(0, idx).trim() else systemPrompt.trim()
 }

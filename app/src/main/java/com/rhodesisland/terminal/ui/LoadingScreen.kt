@@ -32,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rhodesisland.terminal.R
+import com.rhodesisland.terminal.i18n.t
 import com.rhodesisland.terminal.ui.glass.MeshBackground
 import com.rhodesisland.terminal.ui.glass.frostedGlass
 import kotlinx.coroutines.delay
@@ -93,7 +94,7 @@ fun LoadingScreen(onFinished: () -> Unit) {
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                "AI 角色扮演聊天",
+                t("AI 角色扮演聊天"),
                 color = scheme.onSurfaceVariant,
                 fontSize = 12.sp,
             )

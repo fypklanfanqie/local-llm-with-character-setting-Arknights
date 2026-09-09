@@ -46,6 +46,9 @@ import com.rhodesisland.terminal.config.Characters
 import com.rhodesisland.terminal.data.model.Character
 import com.rhodesisland.terminal.data.model.LorebookScopeType
 import com.rhodesisland.terminal.data.model.WorldviewTargetType
+import com.rhodesisland.terminal.i18n.L10nRuntime
+import com.rhodesisland.terminal.i18n.t
+import com.rhodesisland.terminal.i18n.tf
 import com.rhodesisland.terminal.ui.glass.GlassLargeTitle
 import com.rhodesisland.terminal.ui.glass.GlassSheet
 import com.rhodesisland.terminal.ui.glass.frostedGlass
@@ -109,29 +112,29 @@ fun CharactersScreen(
             .windowInsetsPadding(WindowInsets.statusBars),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            GlassLargeTitle(title = "角色") {
+            GlassLargeTitle(title = t("角色")) {
                 TextButton(onClick = onOpenCheckinShop) {
                     Icon(Icons.Filled.Redeem, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("每日签到", color = MaterialTheme.colorScheme.primary)
+                    Text(t("每日签到"), color = MaterialTheme.colorScheme.primary)
                 }
                 TextButton(onClick = { showCreate = true }) {
                     Icon(Icons.Filled.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("新建", color = MaterialTheme.colorScheme.primary)
+                    Text(t("新建"), color = MaterialTheme.colorScheme.primary)
                 }
-                TextButton(onClick = { showImport = true }) { Text("导入", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                TextButton(onClick = { showImport = true }) { Text(t("导入"), color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 TextButton(onClick = {
                     scope.launch {
                         val list = container.characterRepository.exportCustom()
                         if (list.isEmpty()) {
-                            toast = "没有自定义角色可导出"
+                            toast = L10nRuntime.t("没有自定义角色可导出")
                         } else {
                             clipboard.setText(AnnotatedString(Json.encodeToString(list)))
-                            toast = "已复制 ${list.size} 个自定义角色 JSON"
+                            toast = L10nRuntime.format("已复制 {0} 个自定义角色 JSON", list.size)
                         }
                     }
-                }) { Text("导出", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                }) { Text(t("导出"), color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
 
             // 干员搜索框
@@ -146,7 +149,7 @@ fun CharactersScreen(
             ) {
                 Icon(
                     Icons.Filled.Search,
-                    contentDescription = "搜索",
+                    contentDescription = t("搜索"),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(16.dp),
                 )
@@ -161,7 +164,7 @@ fun CharactersScreen(
                     decorationBox = { inner ->
                         if (searchQuery.isEmpty()) {
                             Text(
-                                "搜索干员名称 / 代号…",
+                                t("搜索干员名称 / 代号…"),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontSize = 14.sp,
                             )
@@ -173,7 +176,7 @@ fun CharactersScreen(
                     IconButton(onClick = { searchQuery = "" }, modifier = Modifier.size(24.dp)) {
                         Icon(
                             Icons.Filled.Close,
-                            contentDescription = "清空",
+                            contentDescription = t("清空"),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(14.dp),
                         )
@@ -194,7 +197,7 @@ fun CharactersScreen(
                             modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Text("未找到「${searchQuery.trim()}」相关的干员", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+                            Text(tf("未找到「{0}」相关的干员", searchQuery.trim()), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
                         }
                     }
                 }
@@ -235,7 +238,7 @@ fun CharactersScreen(
         toast?.let { msg ->
             Snackbar(
                 modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
-                action = { TextButton(onClick = { toast = null }) { Text("知道了") } },
+                action = { TextButton(onClick = { toast = null }) { Text(t("知道了")) } },
             ) { Text(msg) }
         }
     }
@@ -266,10 +269,10 @@ fun CharactersScreen(
             onDismissRequest = { deleteTarget = null },
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             titleContentColor = MaterialTheme.colorScheme.onSurface,
-            title = { Text("删除角色", color = deleteScheme.onSurface) },
+            title = { Text(t("删除角色"), color = deleteScheme.onSurface) },
             text = {
                 Text(
-                    "确定删除自定义角色「${char.name}」？将同时删除其立绘，不可恢复。",
+                    tf("确定删除自定义角色「{0}」？将同时删除其立绘，不可恢复。", char.name),
                     color = deleteScheme.onSurface,
                     fontSize = 14.sp,
                 )
@@ -288,10 +291,10 @@ fun CharactersScreen(
                             LorebookScopeType.CHARACTER, char.id,
                         )
                     }
-                }) { Text("删除", color = deleteScheme.error, fontWeight = FontWeight.Bold) }
+                }) { Text(t("删除"), color = deleteScheme.error, fontWeight = FontWeight.Bold) }
             },
             dismissButton = {
-                TextButton(onClick = { deleteTarget = null }) { Text("取消", color = deleteScheme.onSurfaceVariant) }
+                TextButton(onClick = { deleteTarget = null }) { Text(t("取消"), color = deleteScheme.onSurfaceVariant) }
             },
         )
     }
@@ -303,9 +306,9 @@ fun CharactersScreen(
                     try {
                         val list = Json.decodeFromString<List<Character>>(text)
                         container.characterRepository.importCustom(list)
-                        toast = "已导入 ${list.size} 个自定义角色"
+                        toast = L10nRuntime.format("已导入 {0} 个自定义角色", list.size)
                     } catch (e: Exception) {
-                        toast = "导入失败：JSON 格式错误"
+                        toast = L10nRuntime.t("导入失败：JSON 格式错误")
                     }
                     showImport = false
                 }
@@ -410,7 +413,7 @@ private fun CharacterCard(
                         modifier = Modifier.size(12.dp),
                     )
                     Spacer(Modifier.width(4.dp))
-                    Text("查看人设", color = scheme.onSurfaceVariant, fontSize = 11.5.sp)
+                    Text(t("查看人设"), color = scheme.onSurfaceVariant, fontSize = 11.5.sp)
                 }
                 Box {
                     Row(
@@ -420,9 +423,10 @@ private fun CharacterCard(
                             .padding(horizontal = 8.dp, vertical = 5.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        val affinityText = affinityValue?.let { if (it % 1f == 0f) it.toInt() else it } ?: 0
                         Icon(Icons.Filled.Favorite, contentDescription = null, tint = scheme.primary, modifier = Modifier.size(12.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("好感 ${affinityValue?.let { if (it % 1f == 0f) it.toInt() else it } ?: 0} / 200", color = scheme.primary, fontSize = 10.sp)
+                        Text(tf("好感 {0} / 200", affinityText), color = scheme.primary, fontSize = 10.sp)
                     }
                     if (hasUnreadAffinityEvent) {
                         Box(
@@ -444,7 +448,7 @@ private fun CharacterCard(
                     .background(scheme.primary)
                     .padding(horizontal = 8.dp, vertical = 3.dp),
             ) {
-                Text("使用中", color = scheme.onPrimary, fontSize = 9.5.sp, fontWeight = FontWeight.SemiBold)
+                Text(t("使用中"), color = scheme.onPrimary, fontSize = 9.5.sp, fontWeight = FontWeight.SemiBold)
             }
         }
         if (onEdit != null || onDelete != null) {
@@ -462,7 +466,7 @@ private fun CharacterCard(
                             .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f)),
                     ) {
                         IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Filled.Edit, contentDescription = "编辑", tint = scheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Filled.Edit, contentDescription = t("编辑"), tint = scheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
                         }
                     }
                 }
@@ -476,7 +480,7 @@ private fun CharacterCard(
                             .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f)),
                     ) {
                         IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Filled.Delete, contentDescription = "删除", tint = scheme.error, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Filled.Delete, contentDescription = t("删除"), tint = scheme.error, modifier = Modifier.size(18.dp))
                         }
                     }
                 }
@@ -519,13 +523,13 @@ fun PersonaSheet(
                 ) {
                     if (character.skills.isNotEmpty()) {
                         Text(
-                            "技能：${character.skills.joinToString(" · ")}",
+                            tf("技能：{0}", character.skills.joinToString(" · ")),
                             fontSize = 12.sp, color = scheme.primary,
                         )
                     }
                     if (character.talents.isNotEmpty()) {
                         Text(
-                            "天赋：${character.talents.joinToString(" · ")}",
+                            tf("天赋：{0}", character.talents.joinToString(" · ")),
                             fontSize = 12.sp, color = scheme.onSurfaceVariant,
                         )
                     }
@@ -658,17 +662,17 @@ fun CustomCharacterDialog(
         onDismissRequest = ::discardPendingImages,
         containerColor = scheme.surfaceContainerHigh,
         titleContentColor = scheme.onSurface,
-        title = { Text(if (existing == null) "新建自定义角色" else "编辑角色", color = scheme.onSurface) },
+        title = { Text(if (existing == null) t("新建自定义角色") else t("编辑角色"), color = scheme.onSurface) },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Field("名称 *", name) { name = it }
-                Field("代号 / 编号", code) { code = it }
-                Field("职位 / 定位", role) { role = it }
-                Field("种族", race) { race = it }
-                Text("立绘（可选）", color = scheme.onSurfaceVariant, fontSize = 11.sp)
+                Field(t("名称 *"), name) { name = it }
+                Field(t("代号 / 编号"), code) { code = it }
+                Field(t("职位 / 定位"), role) { role = it }
+                Field(t("种族"), race) { race = it }
+                Text(t("立绘（可选）"), color = scheme.onSurfaceVariant, fontSize = 11.sp)
                 PortraitPicker(
                     imageUri = image,
                     saving = savingImage,
@@ -687,16 +691,16 @@ fun CustomCharacterDialog(
                     },
                 )
                 if (saveError) {
-                    Text("立绘保存失败，请重试", color = scheme.error, fontSize = 11.sp)
+                    Text(t("立绘保存失败，请重试"), color = scheme.error, fontSize = 11.sp)
                 }
-                Text("人格设定（System Prompt）*", color = scheme.onSurfaceVariant, fontSize = 11.sp)
+                Text(t("人格设定（System Prompt）*"), color = scheme.onSurfaceVariant, fontSize = 11.sp)
                 GlassField(
                     value = systemPrompt,
                     onValueChange = { systemPrompt = it },
                     modifier = Modifier.fillMaxWidth().height(120.dp),
                 )
                 if (name.isBlank() || systemPrompt.isBlank()) {
-                    Text("名称与人格设定为必填项", color = MaterialTheme.colorScheme.tertiary, fontSize = 11.sp)
+                    Text(t("名称与人格设定为必填项"), color = MaterialTheme.colorScheme.tertiary, fontSize = 11.sp)
                 }
             }
         },
@@ -737,13 +741,13 @@ fun CustomCharacterDialog(
                 },
             ) {
                 Text(
-                    if (existing == null) "创建" else "保存",
+                    if (existing == null) t("创建") else t("保存"),
                     color = if (savingImage) scheme.onSurfaceVariant else scheme.primary,
                 )
             }
         },
         dismissButton = {
-            TextButton(onClick = ::discardPendingImages) { Text("取消", color = scheme.onSurfaceVariant) }
+            TextButton(onClick = ::discardPendingImages) { Text(t("取消"), color = scheme.onSurfaceVariant) }
         },
     )
 }
@@ -774,7 +778,7 @@ private fun PortraitPicker(
             imageUri.isNotBlank() -> Box(modifier = Modifier.fillMaxSize()) {
                 coil.compose.AsyncImage(
                     model = imageUri,
-                    contentDescription = "立绘预览",
+                    contentDescription = t("立绘预览"),
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop,
                 )
@@ -782,13 +786,13 @@ private fun PortraitPicker(
                     onClick = onClear,
                     modifier = Modifier.align(Alignment.TopEnd).size(28.dp),
                 ) {
-                    Icon(Icons.Filled.Close, contentDescription = "移除立绘", tint = scheme.error, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Filled.Close, contentDescription = t("移除立绘"), tint = scheme.error, modifier = Modifier.size(16.dp))
                 }
             }
             else -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Icon(Icons.Filled.AddPhotoAlternate, contentDescription = null, tint = scheme.primary.copy(alpha = 0.7f), modifier = Modifier.size(32.dp))
                 Spacer(Modifier.height(6.dp))
-                Text("点击上传手机本地照片", color = scheme.onSurfaceVariant, fontSize = 11.sp)
+                Text(t("点击上传手机本地照片"), color = scheme.onSurfaceVariant, fontSize = 11.sp)
             }
         }
     }
@@ -808,10 +812,10 @@ private fun ImportCharacterDialog(
         onDismissRequest = onDismiss,
         containerColor = scheme.surfaceContainerHigh,
         titleContentColor = scheme.onSurface,
-        title = { Text("导入自定义角色", color = scheme.onSurface) },
+        title = { Text(t("导入自定义角色"), color = scheme.onSurface) },
         text = {
             Column {
-                Text("粘贴导出的角色 JSON：", color = scheme.onSurfaceVariant, fontSize = 11.sp)
+                Text(t("粘贴导出的角色 JSON："), color = scheme.onSurfaceVariant, fontSize = 11.sp)
                 Spacer(Modifier.height(6.dp))
                 GlassField(
                     value = text,
@@ -822,11 +826,11 @@ private fun ImportCharacterDialog(
         },
         confirmButton = {
             TextButton(onClick = { onImport(text) }, enabled = text.isNotBlank()) {
-                Text("导入", color = scheme.primary)
+                Text(t("导入"), color = scheme.primary)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消", color = scheme.onSurfaceVariant) }
+            TextButton(onClick = onDismiss) { Text(t("取消"), color = scheme.onSurfaceVariant) }
         },
     )
 }

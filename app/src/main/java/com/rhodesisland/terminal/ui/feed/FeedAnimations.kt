@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rhodesisland.terminal.config.Characters
 import com.rhodesisland.terminal.data.model.Character
+import com.rhodesisland.terminal.i18n.t
 import com.rhodesisland.terminal.ui.glass.frostedGlass
 import kotlinx.coroutines.delay
 
@@ -214,7 +215,7 @@ internal fun ActiveBadgePill() {
             .padding(horizontal = 8.dp, vertical = 4.dp),
     ) {
         Text(
-            text = "使用中",
+            text = t("使用中"),
             color = scheme.onPrimary,
             fontSize = 9.sp,
             fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
