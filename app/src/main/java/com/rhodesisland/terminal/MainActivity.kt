@@ -15,6 +15,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -22,8 +23,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
+import com.rhodesisland.terminal.i18n.AppLanguage
+import com.rhodesisland.terminal.i18n.L10n
+import com.rhodesisland.terminal.i18n.LocalAppLanguage
 import com.rhodesisland.terminal.notification.GreetingNotificationManager
 import com.rhodesisland.terminal.notification.GroupChatNotificationManager
 import com.rhodesisland.terminal.ui.LoadingScreen
@@ -135,36 +140,50 @@ class MainActivity : ComponentActivity() {
         app.container.cpuBoostController.sustainedModeSetter = setter
 
         setContent {
+            // 界面语言：设置项 collectAsState → 语言一变，LocalAppLanguage 变化使整棵 UI 子树重组，
+            // 文案立即切换（不重建 Activity、不丢页面状态）。
+            // SYSTEM 在此解析成具体语言后再注入，下游 t()/L10n.t 收到的永远是已解析语言。
+            val appLanguageSetting by app.container.settingsRepository.appLanguage
+                .collectAsState(initial = AppLanguage.SYSTEM)
+            val systemLanguageTag = LocalConfiguration.current.locales.let { locales ->
+                if (locales.size() > 0) locales[0].language else null
+            }
+            val resolvedLanguage = L10n.resolve(appLanguageSetting, systemLanguageTag)
+
             // PRTS 深色主题：固定深色（themeMode 设置保留但不再生效）。
             val darkTheme = true
             // GlassBackdrop 提供真实背景模糊背板，供所有玻璃面板采样。
             ChatTheme(darkTheme = darkTheme) {
-                GlassBackdrop(Modifier.fillMaxSize()) {
-                Box(Modifier.fillMaxSize()) {
-                    MeshBackground(Modifier.fillMaxSize())
-                    Surface(
-                        modifier = Modifier.fillMaxSize(),
-                        color = Color.Transparent,
-                    ) {
-                        var showLoading by remember { mutableStateOf(true) }
-
+                // 语言切换即时生效：static CompositionLocal 变化 → 整棵子树重组，无需重建 Activity。
+                CompositionLocalProvider(LocalAppLanguage provides resolvedLanguage) {
+                    GlassBackdrop(Modifier.fillMaxSize()) {
                         Box(Modifier.fillMaxSize()) {
-                            // 启动 Loading 画面，结束后淡出
-                            AnimatedVisibility(
-                                visible = showLoading,
-                                enter = fadeIn(),
-                                exit = fadeOut(animationSpec = tween(500)),
+                            MeshBackground(Modifier.fillMaxSize())
+                            Surface(
+                                modifier = Modifier.fillMaxSize(),
+                                color = Color.Transparent,
                             ) {
-                                LoadingScreen(onFinished = { showLoading = false })
-                            }
+                                var showLoading by remember { mutableStateOf(true) }
 
-                            // 主应用，Loading 结束后淡入
-                            AnimatedVisibility(
-                                visible = !showLoading,
-                                enter = fadeIn(animationSpec = tween(600)),
-                                exit = fadeOut(),
-                            ) {
-                                AppNavGraph(container = app.container, initialChatOpen = initialChatOpen)
+                                Box(Modifier.fillMaxSize()) {
+                                    // 启动 Loading 画面，结束后淡出
+                                    AnimatedVisibility(
+                                        visible = showLoading,
+                                        enter = fadeIn(),
+                                        exit = fadeOut(animationSpec = tween(500)),
+                                    ) {
+                                        LoadingScreen(onFinished = { showLoading = false })
+                                    }
+
+                                    // 主应用，Loading 结束后淡入
+                                    AnimatedVisibility(
+                                        visible = !showLoading,
+                                        enter = fadeIn(animationSpec = tween(600)),
+                                        exit = fadeOut(),
+                                    ) {
+                                        AppNavGraph(container = app.container, initialChatOpen = initialChatOpen)
+                                    }
+                                }
                             }
                         }
                     }
@@ -172,7 +191,6 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-}
 
     override fun onResume() {
         super.onResume()

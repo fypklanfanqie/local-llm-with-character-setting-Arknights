@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.BatteryAlert
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Window
 import androidx.compose.material.icons.filled.Alarm
@@ -48,6 +49,9 @@ import coil.compose.AsyncImage
 import com.rhodesisland.terminal.AppContainer
 import com.rhodesisland.terminal.data.remote.ChatMessageDto
 import com.rhodesisland.terminal.data.model.TokenUsageSnapshot
+import com.rhodesisland.terminal.i18n.AppLanguage
+import com.rhodesisland.terminal.i18n.t
+import com.rhodesisland.terminal.i18n.tf
 import kotlinx.serialization.json.JsonPrimitive
 import com.rhodesisland.terminal.util.BackgroundSurvivalHelper
 import com.rhodesisland.terminal.util.RomDetector
@@ -242,6 +246,9 @@ fun SettingsScreen(
                 showDivider = false,
             )
         }
+
+        // ===== 语言 =====
+        LanguageSection(container = container, scope = scope)
 
         // ===== 本地 AI 引擎 =====
         CollapsibleSection(
@@ -725,6 +732,56 @@ fun SettingsScreen(
 
     if (showCrashLogs) {
         CrashLogDialog(onDismiss = { showCrashLogs = false })
+    }
+}
+
+/**
+ * 语言区：跟随系统 / 简体中文 / English / 日本語。
+ *
+ * 选中即写 DataStore → 根 Composable 的 LocalAppLanguage 更新 → 界面文案立即切换（不重启应用）。
+ * **界面语言与 AI 输出语言互相独立**：LLM 提示词与角色人设始终中文，改这里不会让 AI 换语言。
+ */
+@Composable
+private fun LanguageSection(container: AppContainer, scope: CoroutineScope) {
+    val scheme = MaterialTheme.colorScheme
+    val current by container.settingsRepository.appLanguage.collectAsState(initial = AppLanguage.SYSTEM)
+    // 语言名用各自母语写法（English / 日本語 / 简体中文 不翻译）；「跟随系统」跟随当前界面语言。
+    val options = listOf(
+        AppLanguage.SYSTEM to t("跟随系统"),
+        AppLanguage.ZH to "简体中文",
+        AppLanguage.EN to "English",
+        AppLanguage.JA to "日本語",
+    )
+    val currentLabel = options.firstOrNull { it.first == current }?.second ?: t("跟随系统")
+
+    CollapsibleSection(
+        title = t("语言"),
+        key = "language",
+        summary = tf("当前：{0}", currentLabel),
+    ) {
+        Text(
+            t("界面语言（AI 回复语言不受影响）"),
+            color = scheme.onSurfaceVariant,
+            fontSize = 11.sp,
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
+        )
+        options.forEachIndexed { index, (language, label) ->
+            GlassListRow(
+                title = label,
+                trailing = {
+                    if (current == language) {
+                        Icon(
+                            Icons.Filled.Check,
+                            contentDescription = null,
+                            tint = scheme.primary,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                },
+                onClick = { scope.launch { container.settingsRepository.setAppLanguage(language) } },
+                showDivider = index != options.lastIndex,
+            )
+        }
     }
 }
 

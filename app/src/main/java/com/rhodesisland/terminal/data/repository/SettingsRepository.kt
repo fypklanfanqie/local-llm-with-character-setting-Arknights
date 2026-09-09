@@ -25,6 +25,8 @@ import com.rhodesisland.terminal.data.model.VoicePair
 import com.rhodesisland.terminal.data.model.Worldview
 import com.rhodesisland.terminal.config.AppConfig
 import com.rhodesisland.terminal.config.Characters
+import com.rhodesisland.terminal.i18n.AppLanguage
+import com.rhodesisland.terminal.i18n.L10n
 import com.rhodesisland.terminal.llm.backend.BackendPreference
 import com.rhodesisland.terminal.llm.profile.InferencePerformanceMode
 import com.rhodesisland.terminal.llm.thinking.LocalThinkingLevel
@@ -32,6 +34,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withTimeoutOrNull
+import java.util.Locale
 
 /**
  * 设置仓库
@@ -41,6 +44,9 @@ class SettingsRepository(private val store: SettingsStore) {
 
     /** 主题模式（默认跟随系统）。 */
     val themeMode: Flow<ThemeMode> = store.themeMode
+
+    /** 界面语言设置（默认跟随系统；SYSTEM 需经 [getResolvedAppLanguageNow] 解析成具体语言）。 */
+    val appLanguage: Flow<AppLanguage> = store.appLanguage
 
     val apiConfig: Flow<ApiConfig> = store.apiConfig
     /** Seedance 视频生成配置（聚合快照）。 */
@@ -229,6 +235,18 @@ class SettingsRepository(private val store: SettingsStore) {
     val userProfile: Flow<UserProfileConfig> = store.userProfile
 
     suspend fun setThemeMode(mode: ThemeMode) = store.setThemeMode(mode)
+
+    suspend fun setAppLanguage(language: AppLanguage) = store.setAppLanguage(language)
+
+    /** 同步读取语言设置（超时/异常回退 SYSTEM，不崩）。 */
+    suspend fun getAppLanguageNow(): AppLanguage = dataStoreFirst(appLanguage, AppLanguage.SYSTEM)
+
+    /**
+     * Worker / ViewModel 便捷入口：读语言设置并解析系统语言，返回**实际生效**语言
+     * （非 SYSTEM）。通知、后台任务要按用户当前语言出文案时用它 + `L10n.t(lang, zh)`。
+     */
+    suspend fun getResolvedAppLanguageNow(): AppLanguage =
+        L10n.resolve(getAppLanguageNow(), Locale.getDefault().language)
 
     suspend fun setApiConfig(config: ApiConfig) = store.setApiConfig(config)
     /** 每服务商独立配置表（key = 预设 id 或 "custom"）。 */

@@ -29,6 +29,7 @@ import com.rhodesisland.terminal.data.model.TtsLanguage
 import com.rhodesisland.terminal.data.model.VoiceConfig
 import com.rhodesisland.terminal.data.model.VoicePair
 import com.rhodesisland.terminal.data.repository.BgmTrack
+import com.rhodesisland.terminal.i18n.AppLanguage
 import com.rhodesisland.terminal.llm.backend.BackendPreference
 import com.rhodesisland.terminal.llm.profile.InferencePerformanceMode
 import com.rhodesisland.terminal.llm.thinking.LocalThinkingLevel
@@ -61,6 +62,9 @@ class SettingsStore(
     private object Keys {
         // 主题模式
         val THEME_MODE = stringPreferencesKey("theme_mode")
+
+        // 界面语言：system（默认，跟随系统）/ zh / en / ja；只影响界面文案，不影响 AI 输出语言
+        val APP_LANGUAGE = stringPreferencesKey("app_language")
 
         // API
         val API_BASE = stringPreferencesKey("api_base")
@@ -234,6 +238,15 @@ class SettingsStore(
 
     suspend fun setThemeMode(mode: ThemeMode) {
         dataStore.edit { it[Keys.THEME_MODE] = mode.name }
+    }
+
+    // ===== 界面语言（默认跟随系统）=====
+    val appLanguage: Flow<AppLanguage> = dataStore.data.map { p ->
+        AppLanguage.fromKey(p[Keys.APP_LANGUAGE])
+    }
+
+    suspend fun setAppLanguage(language: AppLanguage) {
+        dataStore.edit { it[Keys.APP_LANGUAGE] = language.key }
     }
 
     // ===== API Config =====
