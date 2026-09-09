@@ -570,8 +570,13 @@ fun SettingsScreen(
                     PasswordField(t("火山引擎 API Key"), ttsApiKey, showTtsKey, { ttsApiKey = it }, { showTtsKey = !showTtsKey })
                 }
                 val ttsNoVoiceMessage = t("请先配置至少一个角色音色")
-                val ttsSystemPreviewText = t("你好，这是朗读语音的试听效果。")
-                val ttsClonedPreviewText = t("你好，这是声音复刻朗读的试听效果。")
+                // 试听样本跟**朗读语言**（ttsLanguage）走，不跟界面语言走：样本是拿来听音色的，
+                // 界面切英文却用中文音色读英文句子只会听不出音色好坏。
+                // 故这两条保持中文原文（l10n:ignore），日语分支在下方按 ttsLanguage 换成日文样本。
+                val ttsSystemPreviewText = "你好，这是朗读语音的试听效果。" // l10n:ignore 语音试听样本（随 ttsLanguage）
+                val ttsClonedPreviewText = "你好，这是声音复刻朗读的试听效果。" // l10n:ignore 语音试听样本（随 ttsLanguage）
+                // 日语样本：两条试听路径共用，避免「TTS 语言=日语却用中文样本」的错配
+                val ttsJapaneseSample = "こんにちは、これは日本語の音声テストです。" // l10n:ignore 语音试听样本（随 ttsLanguage）
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     TextButton(
                         onClick = {
@@ -580,13 +585,16 @@ fun SettingsScreen(
                                 ttsPreviewError = null
                                 val result = runCatching {
                                     if (ttsEngineEdit == TtsEngine.SYSTEM) {
-                                        container.ttsManager.previewSystem(ttsSystemPreviewText, ttsTemplateEdit)
+                                        container.ttsManager.previewSystem(
+                                            if (container.settingsRepository.getTtsLanguageNow() == TtsLanguage.JA) ttsJapaneseSample else ttsSystemPreviewText,
+                                            ttsTemplateEdit,
+                                        )
                                     } else {
                         val characterId = ttsPreviewCharacterId
                             ?: voiceCharacters.firstOrNull()?.id
                             ?: throw IllegalStateException(ttsNoVoiceMessage)
                         container.ttsManager.speak(
-                            if (container.settingsRepository.getTtsLanguageNow() == TtsLanguage.JA) "こんにちは、これは日本語の音声テストです。" else ttsClonedPreviewText,
+                            if (container.settingsRepository.getTtsLanguageNow() == TtsLanguage.JA) ttsJapaneseSample else ttsClonedPreviewText,
                             characterId,
                         )
                                     }
