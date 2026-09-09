@@ -16,9 +16,19 @@
 | 待处理（全部为**刻意不翻译**项） | 39 |
 | 调试日志（不翻译） | 41 |
 | `l10n:ignore` 显式豁免（不翻译） | 57 |
-| 词典词条 | **En 1738 / Ja 1738**（key 集合完全一致） |
-| 单元测试 | **872 个，0 失败**（含 16 个词典完整性/一致性测试） |
+| 词典词条 | **En 1783 / Ja 1783**（key 集合完全一致，跨文件无重复） |
+| 单元测试 | **877 个，0 失败**（含词典完整性/一致性、覆盖度门禁、指南搜索多语言回归） |
 | `llm/` 诊断层（额外批次 11） | 164 条中 **83 条已覆盖（100%，其余 81 条豁免 / 35 条日志）** |
+
+### 复现命令
+
+```powershell
+cd "D:\ai\cc Programm\聊天终端安卓本地"
+.\gradlew.bat :app:testDebugUnitTest --console=plain          # 877 tests / 0 failures
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\l10n-coverage.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -Command "& '.\tools\l10n-coverage.ps1' -Dir 'llm' -SkipPathRegex '([\\/]config[\\/]|[\\/]i18n[\\/]|Prompt)'"
+.\gradlew.bat :app:assembleDebug                              # 真 APK（97.6 MB）
+```
 
 ## 2. 架构
 
