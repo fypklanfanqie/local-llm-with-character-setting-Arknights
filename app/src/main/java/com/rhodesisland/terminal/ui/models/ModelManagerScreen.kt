@@ -25,6 +25,8 @@ import androidx.compose.ui.unit.sp
 import com.rhodesisland.terminal.AppContainer
 import com.rhodesisland.terminal.data.model.DownloadState
 import com.rhodesisland.terminal.data.model.ModelInfo
+import com.rhodesisland.terminal.i18n.t
+import com.rhodesisland.terminal.i18n.tf
 import com.rhodesisland.terminal.llm.backend.BackendPreference
 import com.rhodesisland.terminal.llm.backend.NpuSupportDetector
 import com.rhodesisland.terminal.ui.glass.GlassLargeTitle
@@ -55,7 +57,7 @@ fun ModelManagerScreen(container: AppContainer) {
             .background(androidx.compose.ui.graphics.Color.Transparent)
             .windowInsetsPadding(WindowInsets.statusBars)
     ) {
-        GlassLargeTitle("模型管理") {
+        GlassLargeTitle(t("模型管理")) {
             TextButton(onClick = {
                 scope.launch {
                     loading = true
@@ -63,9 +65,9 @@ fun ModelManagerScreen(container: AppContainer) {
                     loading = false
                 }
             }) {
-                Icon(Icons.Filled.Refresh, contentDescription = "刷新", tint = scheme.primary, modifier = Modifier.size(16.dp))
+                Icon(Icons.Filled.Refresh, contentDescription = t("刷新"), tint = scheme.primary, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
-                Text("刷新", color = scheme.primary)
+                Text(t("刷新"), color = scheme.primary)
             }
         }
 
@@ -81,8 +83,8 @@ fun ModelManagerScreen(container: AppContainer) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Filled.CloudOff, contentDescription = null, tint = scheme.onSurfaceVariant, modifier = Modifier.size(48.dp))
                     Spacer(Modifier.height(16.dp))
-                    Text("无法获取模型列表", color = scheme.onSurface, fontSize = 14.sp)
-                    Text("请稍后重试或检查网络连接", color = scheme.onSurfaceVariant, fontSize = 11.sp)
+                    Text(t("无法获取模型列表"), color = scheme.onSurface, fontSize = 14.sp)
+                    Text(t("请稍后重试或检查网络连接"), color = scheme.onSurfaceVariant, fontSize = 11.sp)
                 }
             }
             return
@@ -145,7 +147,7 @@ private fun ModelCard(
                     ) {
                         Icon(Icons.Filled.Star, contentDescription = null, tint = scheme.tertiary, modifier = Modifier.size(12.dp))
                         Spacer(Modifier.width(3.dp))
-                        Text("推荐", color = scheme.tertiary, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                        Text(t("推荐"), color = scheme.tertiary, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -153,7 +155,7 @@ private fun ModelCard(
                 Text(model.description, color = scheme.onSurfaceVariant, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
             }
             Text(
-                "大小: ${formatSize(model.size)} · MNN · v${model.version}",
+                tf("大小: {0} · MNN · v{1}", formatSize(model.size), model.version),
                 color = scheme.onSurfaceVariant,
                 fontSize = 10.sp,
                 modifier = Modifier.padding(top = 2.dp),
@@ -166,7 +168,7 @@ private fun ModelCard(
                     Button(onClick = onDownload, colors = ButtonDefaults.buttonColors(containerColor = scheme.primary)) {
                         Icon(Icons.Filled.Download, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("下载", color = scheme.onPrimary, fontSize = 12.sp)
+                        Text(t("下载"), color = scheme.onPrimary, fontSize = 12.sp)
                     }
                 }
                 is DownloadState.Downloading -> {
@@ -180,17 +182,17 @@ private fun ModelCard(
                         "${formatSize(state.downloadedBytes)} / ${formatSize(state.totalBytes)} (${(state.progress * 100).toInt()}%)",
                         color = scheme.onSurfaceVariant, fontSize = 10.sp, modifier = Modifier.padding(top = 4.dp),
                     )
-                    TextButton(onClick = onPause) { Text("暂停", color = scheme.onSurfaceVariant, fontSize = 11.sp) }
+                    TextButton(onClick = onPause) { Text(t("暂停"), color = scheme.onSurfaceVariant, fontSize = 11.sp) }
                 }
                 is DownloadState.Paused -> {
-                    Text("已暂停", color = scheme.tertiary, fontSize = 11.sp)
+                    Text(t("已暂停"), color = scheme.tertiary, fontSize = 11.sp)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton(onClick = onResume) { Text("继续", color = scheme.primary, fontSize = 11.sp) }
-                        TextButton(onClick = onDelete) { Text("删除", color = scheme.error, fontSize = 11.sp) }
+                        TextButton(onClick = onResume) { Text(t("继续"), color = scheme.primary, fontSize = 11.sp) }
+                        TextButton(onClick = onDelete) { Text(t("删除"), color = scheme.error, fontSize = 11.sp) }
                     }
                 }
                 is DownloadState.Verifying -> {
-                    Text("校验中…", color = scheme.primary, fontSize = 11.sp)
+                    Text(t("校验中…"), color = scheme.primary, fontSize = 11.sp)
                     LinearProgressIndicator(
                         progress = { state.progress },
                         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(50)),
@@ -201,20 +203,20 @@ private fun ModelCard(
                 is DownloadState.Completed -> {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         if (isActive) {
-                            Text("✓ 当前使用", color = scheme.tertiary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text(t("✓ 当前使用"), color = scheme.tertiary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         } else {
                             Button(onClick = onSetActive, colors = ButtonDefaults.buttonColors(containerColor = scheme.primary)) {
-                                Text("切换使用", color = scheme.onPrimary, fontSize = 11.sp)
+                                Text(t("切换使用"), color = scheme.onPrimary, fontSize = 11.sp)
                             }
                         }
-                        TextButton(onClick = onDelete) { Text("删除", color = scheme.error, fontSize = 11.sp) }
+                        TextButton(onClick = onDelete) { Text(t("删除"), color = scheme.error, fontSize = 11.sp) }
                     }
                 }
                 is DownloadState.Failed -> {
-                    Text("失败：${state.error}", color = scheme.error, fontSize = 10.sp)
+                    Text(tf("失败：{0}", state.error), color = scheme.error, fontSize = 10.sp)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton(onClick = onDownload) { Text("重试", color = scheme.primary, fontSize = 11.sp) }
-                        TextButton(onClick = onDelete) { Text("删除", color = scheme.error, fontSize = 11.sp) }
+                        TextButton(onClick = onDownload) { Text(t("重试"), color = scheme.primary, fontSize = 11.sp) }
+                        TextButton(onClick = onDelete) { Text(t("删除"), color = scheme.error, fontSize = 11.sp) }
                     }
                 }
             }
@@ -252,7 +254,7 @@ private fun BackendSelectorCard(container: AppContainer) {
     }
     val npuInfo by produceState(
         initialValue = NpuSupportDetector.NpuSupportInfo(
-            false, "", "", "", NpuSupportDetector.ChipLevel.UNSUPPORTED, "探测中…",
+            false, "", "", "", NpuSupportDetector.ChipLevel.UNSUPPORTED, t("探测中…"),
         ),
     ) {
         value = withContext(Dispatchers.IO) { container.backendManager.deviceCapability.npuInfo }
@@ -266,12 +268,12 @@ private fun BackendSelectorCard(container: AppContainer) {
             .padding(14.dp),
     ) {
         Column {
-            Text("推理后端", color = scheme.onSurface, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text(t("推理后端"), color = scheme.onSurface, fontSize = 15.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(6.dp))
-            BackendStatusRow("MNN CPU", if (mnnCpuReady) "运行时就绪" else "未就绪", mnnCpuReady)
-            BackendStatusRow("MNN OpenCL GPU", if (mnnGpuReady) "运行时就绪" else "运行时未就绪", mnnGpuReady)
-            val npuStatus = if (!npuInfo.supported) "不支持" else "支持 · ${npuInfo.chipLevel.displayName}"
-            BackendStatusRow("MNN QNN NPU", npuStatus + if (mnnNpuReady) "（运行时就绪）" else "", mnnNpuReady)
+            BackendStatusRow("MNN CPU", if (mnnCpuReady) t("运行时就绪") else t("未就绪"), mnnCpuReady)
+            BackendStatusRow("MNN OpenCL GPU", if (mnnGpuReady) t("运行时就绪") else t("运行时未就绪"), mnnGpuReady)
+            val npuStatus = if (!npuInfo.supported) t("不支持") else tf("支持 · {0}", npuInfo.chipLevel.displayName)
+            BackendStatusRow("MNN QNN NPU", npuStatus + if (mnnNpuReady) t("（运行时就绪）") else "", mnnNpuReady)
 
             Spacer(Modifier.height(8.dp))
 
@@ -310,16 +312,16 @@ private fun BackendSelectorCard(container: AppContainer) {
                         )
                         val desc = when (entry) {
                             BackendPreference.AUTO -> when {
-                                mnnGpuReady -> "自动选择（GPU 优先，回退 CPU）"
-                                else -> "自动选择（回退 CPU）"
+                                mnnGpuReady -> t("自动选择（GPU 优先，回退 CPU）")
+                                else -> t("自动选择（回退 CPU）")
                             }
-                            BackendPreference.MNN_CPU -> "兼容性最好，速度最慢"
-                            BackendPreference.MNN_GPU -> if (mnnGpuReady) "MNN OpenCL GPU" else "需 OpenCL 运行时"
-                            BackendPreference.MNN_NPU -> if (mnnNpuReady) "MNN QNN NPU（需解锁/Root）" else "需骁龙 + 解锁/Root"
+                            BackendPreference.MNN_CPU -> t("兼容性最好，速度最慢")
+                            BackendPreference.MNN_GPU -> if (mnnGpuReady) "MNN OpenCL GPU" else t("需 OpenCL 运行时")
+                            BackendPreference.MNN_NPU -> if (mnnNpuReady) t("MNN QNN NPU（需解锁/Root）") else t("需骁龙 + 解锁/Root")
                         }
                         Text(desc, color = scheme.onSurfaceVariant, fontSize = 10.sp)
                     }
-                    if (!enabled) Text("不可用", color = scheme.error, fontSize = 10.sp)
+                    if (!enabled) Text(t("不可用"), color = scheme.error, fontSize = 10.sp)
                 }
             }
         }

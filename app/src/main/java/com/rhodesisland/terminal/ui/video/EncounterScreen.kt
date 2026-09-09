@@ -68,6 +68,9 @@ import com.rhodesisland.terminal.AppContainer
 import com.rhodesisland.terminal.RhodesApp
 import com.rhodesisland.terminal.data.model.SeedanceVideo
 import com.rhodesisland.terminal.data.model.SeedanceVideoState
+import com.rhodesisland.terminal.i18n.L10nRuntime
+import com.rhodesisland.terminal.i18n.t
+import com.rhodesisland.terminal.i18n.tf
 import com.rhodesisland.terminal.ui.applySystemBarIcons
 import com.rhodesisland.terminal.video.SeedanceVideoExporter
 import com.rhodesisland.terminal.video.VideoExportTarget
@@ -135,23 +138,23 @@ fun EncounterScreen(
         if (uri != null && pending != null) {
             videoScope.launch {
                 exporter.exportToUri(pending, uri).onSuccess {
-                    Toast.makeText(context, "视频已保存到所选位置", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, L10nRuntime.t("视频已保存到所选位置"), Toast.LENGTH_SHORT).show()
                 }.onFailure { e ->
-                    Toast.makeText(context, "保存失败：${e.toUserErrorMessage()}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, L10nRuntime.format("保存失败：{0}", e.toUserErrorMessage()), Toast.LENGTH_SHORT).show()
                 }
             }
         }
     }
     val handleExport: (SeedanceVideo) -> Unit = { video ->
         if (video.localVideoPath.isNullOrBlank()) {
-            Toast.makeText(context, "视频文件尚未就绪", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, L10nRuntime.t("视频文件尚未就绪"), Toast.LENGTH_SHORT).show()
         } else {
             when (exportTargetForSdk(Build.VERSION.SDK_INT)) {
                 VideoExportTarget.MediaStoreMovies -> videoScope.launch {
                     exporter.exportToMediaStore(video).onSuccess {
-                        Toast.makeText(context, "视频已保存到相册 Movies/RhodesIslandTerminal", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, L10nRuntime.t("视频已保存到相册 Movies/RhodesIslandTerminal"), Toast.LENGTH_SHORT).show()
                     }.onFailure { e ->
-                        Toast.makeText(context, "保存失败：${e.toUserErrorMessage()}", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, L10nRuntime.format("保存失败：{0}", e.toUserErrorMessage()), Toast.LENGTH_SHORT).show()
                     }
                 }
                 VideoExportTarget.CreateDocument -> {
@@ -290,12 +293,12 @@ private fun EncounterTopBar(onBack: () -> Unit) {
         ) {
             Icon(
                 Icons.AutoMirrored.Outlined.ArrowBack,
-                contentDescription = "返回",
+                contentDescription = t("返回"),
                 tint = Color.White,
             )
         }
         Text(
-            text = "邂逅",
+            text = t("邂逅"),
             color = Color.White,
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
@@ -332,14 +335,14 @@ internal fun EncounterEmptyState(modifier: Modifier = Modifier) {
         }
         Spacer(Modifier.height(18.dp))
         Text(
-            text = "还没有视频故事",
+            text = t("还没有视频故事"),
             color = Color.White.copy(alpha = 0.92f),
             fontSize = 17.sp,
             fontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.height(6.dp))
         Text(
-            text = "开启角色会话的自动视频后，生成的视频会出现在这里",
+            text = t("开启角色会话的自动视频后，生成的视频会出现在这里"),
             color = Color.White.copy(alpha = 0.55f),
             fontSize = 13.sp,
             textAlign = TextAlign.Center,
@@ -379,41 +382,41 @@ internal fun EncounterDetailsDialog(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = "任务详情",
+                    text = t("任务详情"),
                     color = Color.White,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f),
                 )
                 IconButton(onClick = onDismiss) {
-                    Icon(Icons.Outlined.Close, contentDescription = "关闭", tint = Color.White)
+                    Icon(Icons.Outlined.Close, contentDescription = t("关闭"), tint = Color.White)
                 }
             }
             Spacer(Modifier.height(8.dp))
 
-            DetailSection(title = "角色") {
+            DetailSection(title = t("角色")) {
                 DetailText(video.characterNameSnapshot)
                 video.characterRoleSnapshot.takeIf { it.isNotBlank() }?.let { DetailText(it, alpha = 0.6f) }
             }
-            DetailSection(title = "用户") {
+            DetailSection(title = t("用户")) {
                 DetailText(video.userTextSnapshot.ifBlank { "—" })
             }
-            DetailSection(title = "助手") {
+            DetailSection(title = t("助手")) {
                 DetailText(video.assistantTextSnapshot.ifBlank { "—" })
             }
             video.finalPrompt?.takeIf { it.isNotBlank() }?.let {
-                DetailSection(title = "最终提示词") { DetailText(it) }
+                DetailSection(title = t("最终提示词")) { DetailText(it) }
             }
-            DetailSection(title = "生成参数") {
-                ParamRow("模型", video.modelVariant.modelId)
-                ParamRow("分辨率", video.resolution.storageKey)
-                ParamRow("画幅", video.ratio.storageKey)
-                ParamRow("时长", "${video.durationSeconds} 秒")
-                ParamRow("音频", if (video.generateAudio) "开启" else "关闭")
-                ParamRow("水印", if (video.watermark) "开启" else "关闭")
+            DetailSection(title = t("生成参数")) {
+                ParamRow(t("模型"), video.modelVariant.modelId)
+                ParamRow(t("分辨率"), video.resolution.storageKey)
+                ParamRow(t("画幅"), video.ratio.storageKey)
+                ParamRow(t("时长"), tf("{0} 秒", video.durationSeconds))
+                ParamRow(t("音频"), if (video.generateAudio) t("开启") else t("未开启"))
+                ParamRow(t("水印"), if (video.watermark) t("开启") else t("未开启"))
             }
             if (video.errorMessage?.isNotBlank() == true) {
-                DetailSection(title = "错误信息") {
+                DetailSection(title = t("错误信息")) {
                     DetailText(video.errorMessage.orEmpty())
                 }
             }
@@ -421,15 +424,15 @@ internal fun EncounterDetailsDialog(
             Spacer(Modifier.height(24.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (video.state == SeedanceVideoState.READY && onExport != null) {
-                    EncounterActionButton("保存到本地", onExport)
+                    EncounterActionButton(t("保存到本地"), onExport)
                 }
                 when {
                     video.state == SeedanceVideoState.QUEUED && onCancel != null ->
-                        EncounterActionButton("取消", onCancel)
+                        EncounterActionButton(t("取消"), onCancel)
                     video.state == SeedanceVideoState.FAILED_QUERY && onContinueQuery != null ->
-                        EncounterActionButton("继续查询", onContinueQuery)
+                        EncounterActionButton(t("继续查询"), onContinueQuery)
                     video.state == SeedanceVideoState.FAILED_DOWNLOAD && onRetryDownload != null ->
-                        EncounterActionButton("重新下载", onRetryDownload)
+                        EncounterActionButton(t("重新下载"), onRetryDownload)
                     video.state in genericRetryStates && onRetry != null ->
                         EncounterActionButton(retryLabel(video.state), onClick = {
                             if (isCostBearingRetry(video)) confirmRegenerate = true else onRetry()
@@ -443,16 +446,16 @@ internal fun EncounterDetailsDialog(
     if (confirmRegenerate) {
         AlertDialog(
             onDismissRequest = { confirmRegenerate = false },
-            title = { Text("重新生成视频") },
-            text = { Text("该操作可能产生费用，确认重新生成？") },
+            title = { Text(t("重新生成视频")) },
+            text = { Text(t("该操作可能产生费用，确认重新生成？")) },
             confirmButton = {
                 TextButton(onClick = {
                     confirmRegenerate = false
                     onRetry?.invoke()
-                }) { Text("确认") }
+                }) { Text(t("确认")) }
             },
             dismissButton = {
-                TextButton(onClick = { confirmRegenerate = false }) { Text("取消") }
+                TextButton(onClick = { confirmRegenerate = false }) { Text(t("取消")) }
             },
         )
     }

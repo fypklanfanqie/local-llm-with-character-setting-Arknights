@@ -46,6 +46,8 @@ import androidx.media3.common.Player
 import coil.compose.AsyncImage
 import com.rhodesisland.terminal.data.model.SeedanceVideo
 import com.rhodesisland.terminal.data.model.SeedanceVideoState
+import com.rhodesisland.terminal.i18n.t
+import com.rhodesisland.terminal.i18n.tf
 import kotlinx.coroutines.delay
 import java.io.File
 import java.util.Date
@@ -160,16 +162,16 @@ fun EncounterVideoPage(
     if (confirmRegenerate) {
         AlertDialog(
             onDismissRequest = { confirmRegenerate = false },
-            title = { Text("重新生成视频") },
-            text = { Text("该操作可能产生费用，确认重新生成？") },
+            title = { Text(t("重新生成视频")) },
+            text = { Text(t("该操作可能产生费用，确认重新生成？")) },
             confirmButton = {
                 TextButton(onClick = {
                     confirmRegenerate = false
                     onRetry?.invoke()
-                }) { Text("确认") }
+                }) { Text(t("确认")) }
             },
             dismissButton = {
-                TextButton(onClick = { confirmRegenerate = false }) { Text("取消") }
+                TextButton(onClick = { confirmRegenerate = false }) { Text(t("取消")) }
             },
         )
     }
@@ -202,7 +204,7 @@ private fun EncounterStoryCard(
         // 角色名 + 状态胶囊
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = video.characterNameSnapshot.ifBlank { "角色" },
+                text = video.characterNameSnapshot.ifBlank { t("角色") },
                 color = Color.White,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
@@ -272,7 +274,7 @@ private fun EncounterStoryCard(
         video.finalPrompt?.takeIf { it.isNotBlank() }?.let { prompt ->
             Spacer(Modifier.height(4.dp))
             Text(
-                text = "提示词：$prompt",
+                text = tf("提示词：{0}", prompt),
                 color = Color.White.copy(alpha = 0.55f),
                 fontSize = 11.sp,
                 maxLines = 1,
@@ -294,7 +296,7 @@ private fun EncounterStoryCard(
                 ) {
                     Icon(
                         imageVector = if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                        contentDescription = if (playing) "暂停" else "播放",
+                        contentDescription = if (playing) t("暂停") else t("播放"),
                         tint = Color.White,
                         modifier = Modifier.size(20.dp),
                     )
@@ -302,18 +304,18 @@ private fun EncounterStoryCard(
             }
             when {
                 video.state == SeedanceVideoState.READY && onExport != null ->
-                    EncounterPageChip("保存到本地", onExport)
+                    EncounterPageChip(t("保存到本地"), onExport)
                 video.state == SeedanceVideoState.QUEUED && onCancel != null ->
-                    EncounterPageChip("取消", onCancel)
+                    EncounterPageChip(t("取消"), onCancel)
                 video.state == SeedanceVideoState.FAILED_QUERY && onRetry != null ->
-                    EncounterPageChip("继续查询", onRetry)
+                    EncounterPageChip(t("继续查询"), onRetry)
                 video.state == SeedanceVideoState.FAILED_DOWNLOAD && onRetry != null ->
-                    EncounterPageChip("重新下载", onRetry)
+                    EncounterPageChip(t("重新下载"), onRetry)
                 video.state in genericRetryStates && onRetry != null ->
                     EncounterPageChip(retryLabel(video.state), onRetry)
             }
             Spacer(Modifier.weight(1f))
-            EncounterPageChip("详情", onOpenDetails)
+            EncounterPageChip(t("详情"), onOpenDetails)
         }
     }
 }
@@ -358,7 +360,7 @@ private fun EncounterBackdrop(video: SeedanceVideo) {
         if (!imagePath.isNullOrBlank()) {
             AsyncImage(
                 model = File(imagePath),
-                contentDescription = "${video.characterNameSnapshot} 参考图",
+                contentDescription = tf("{0} 参考图", video.characterNameSnapshot),
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
             )

@@ -40,6 +40,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rhodesisland.terminal.data.model.SeedanceVideo
 import com.rhodesisland.terminal.data.model.SeedanceVideoState
+import com.rhodesisland.terminal.i18n.L10nRuntime
+import com.rhodesisland.terminal.i18n.t
 import com.rhodesisland.terminal.util.seedanceUserErrorMessage
 
 /** 视频卡容器 testTag（instrumentation 测试定位用）。 */
@@ -133,16 +135,16 @@ fun SeedanceVideoCard(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         if (onPlay != null) {
-                            CardActionButton("播放", onPlay, leadingIcon = {
+                            CardActionButton(t("播放"), onPlay, leadingIcon = {
                                 Icon(Icons.Outlined.PlayArrow, contentDescription = null, modifier = Modifier.size(12.dp))
                             })
                             // 全屏：Task 8 提供独立入口；未接线时回退到 onPlay（与 Task 7 共用入口兼容）。
-                            CardActionButton("全屏", onFullScreen ?: onPlay, leadingIcon = {
+                            CardActionButton(t("全屏"), onFullScreen ?: onPlay, leadingIcon = {
                                 Icon(Icons.Outlined.Fullscreen, contentDescription = null, modifier = Modifier.size(12.dp))
                             })
                         }
                         if (onExport != null) {
-                            CardActionButton("保存到本地", onExport, leadingIcon = {
+                            CardActionButton(t("保存到本地"), onExport, leadingIcon = {
                                 Icon(Icons.Outlined.SaveAlt, contentDescription = null, modifier = Modifier.size(12.dp))
                             })
                         }
@@ -152,7 +154,7 @@ fun SeedanceVideoCard(
                 SeedanceVideoState.QUEUED -> {
                     if (onCancel != null) {
                         Row(modifier = Modifier.padding(top = 8.dp)) {
-                            CardActionButton("取消", onCancel)
+                            CardActionButton(t("取消"), onCancel)
                         }
                     }
                 }
@@ -191,16 +193,16 @@ fun SeedanceVideoCard(
     if (confirmRegenerate) {
         AlertDialog(
             onDismissRequest = { confirmRegenerate = false },
-            title = { Text("重新生成视频") },
-            text = { Text("该操作可能产生费用，确认重新生成？") },
+            title = { Text(t("重新生成视频")) },
+            text = { Text(t("该操作可能产生费用，确认重新生成？")) },
             confirmButton = {
                 TextButton(onClick = {
                     confirmRegenerate = false
                     onRetry?.invoke()
-                }) { Text("确认") }
+                }) { Text(t("确认")) }
             },
             dismissButton = {
-                TextButton(onClick = { confirmRegenerate = false }) { Text("取消") }
+                TextButton(onClick = { confirmRegenerate = false }) { Text(t("取消")) }
             },
         )
     }
@@ -235,7 +237,7 @@ private fun PreviewPlaceholder(video: SeedanceVideo) {
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    if (video.localVideoPath.isNullOrBlank()) "视频已生成" else "点击播放",
+                    if (video.localVideoPath.isNullOrBlank()) t("视频已生成") else t("点击播放"),
                     color = scheme.onSurfaceVariant,
                     fontSize = 11.sp,
                 )
@@ -269,21 +271,21 @@ private fun CardActionButton(
 
 // ===== 纯逻辑（internal，供 instrumentation 测试断言）=====
 
-/** 状态 -> 主文案。 */
+/** 状态 -> 主文案（非 Composable：读 L10nRuntime 缓存的生效语言）。 */
 internal fun stateText(video: SeedanceVideo): String = when (video.state) {
     SeedanceVideoState.SNAPSHOT_PENDING,
     SeedanceVideoState.PROMPT_PENDING,
-    SeedanceVideoState.PROMPTING -> "正在构思视频…"
+    SeedanceVideoState.PROMPTING -> L10nRuntime.t("正在构思视频…")
     SeedanceVideoState.SUBMISSION_PENDING,
-    SeedanceVideoState.SUBMITTING -> "正在提交…"
-    SeedanceVideoState.QUEUED -> "已排队"
-    SeedanceVideoState.RUNNING -> "正在生成…"
+    SeedanceVideoState.SUBMITTING -> L10nRuntime.t("正在提交…")
+    SeedanceVideoState.QUEUED -> L10nRuntime.t("已排队")
+    SeedanceVideoState.RUNNING -> L10nRuntime.t("正在生成…")
     SeedanceVideoState.DOWNLOAD_PENDING,
-    SeedanceVideoState.DOWNLOADING -> "生成完成，正在保存…"
-    SeedanceVideoState.READY -> "视频已生成"
-    SeedanceVideoState.CANCELLED -> "已取消"
-    SeedanceVideoState.CANCEL_REQUESTED -> "正在取消…"
-    SeedanceVideoState.EXPIRED -> "视频任务已过期"
+    SeedanceVideoState.DOWNLOADING -> L10nRuntime.t("生成完成，正在保存…")
+    SeedanceVideoState.READY -> L10nRuntime.t("视频已生成")
+    SeedanceVideoState.CANCELLED -> L10nRuntime.t("已取消")
+    SeedanceVideoState.CANCEL_REQUESTED -> L10nRuntime.t("正在取消…")
+    SeedanceVideoState.EXPIRED -> L10nRuntime.t("视频任务已过期")
     SeedanceVideoState.FAILED_SNAPSHOT,
     SeedanceVideoState.FAILED_PROMPT,
     SeedanceVideoState.FAILED_PROMPT_CONFIG_CHANGED,
@@ -293,29 +295,29 @@ internal fun stateText(video: SeedanceVideo): String = when (video.state) {
     SeedanceVideoState.FAILED_DOWNLOAD -> defaultFailureText(video.state)
 }
 
-/** FAILED_* 缺少 errorMessage 时的兜底文案。 */
+/** FAILED_* 缺少 errorMessage 时的兜底文案（非 Composable：读 L10nRuntime 缓存的生效语言）。 */
 internal fun defaultFailureText(state: SeedanceVideoState): String = when (state) {
-    SeedanceVideoState.FAILED_SNAPSHOT -> "角色图片快照失败"
-    SeedanceVideoState.FAILED_PROMPT -> "提示词生成失败"
-    SeedanceVideoState.FAILED_PROMPT_CONFIG_CHANGED -> "模型/服务地址已变更，无法继续"
-    SeedanceVideoState.FAILED_SUBMISSION -> "提交失败"
-    SeedanceVideoState.FAILED_REMOTE -> "视频生成失败"
-    SeedanceVideoState.FAILED_QUERY -> "查询任务状态失败"
-    SeedanceVideoState.FAILED_DOWNLOAD -> "视频下载失败"
-    else -> "任务失败"
+    SeedanceVideoState.FAILED_SNAPSHOT -> L10nRuntime.t("角色图片快照失败")
+    SeedanceVideoState.FAILED_PROMPT -> L10nRuntime.t("提示词生成失败")
+    SeedanceVideoState.FAILED_PROMPT_CONFIG_CHANGED -> L10nRuntime.t("模型/服务地址已变更，无法继续")
+    SeedanceVideoState.FAILED_SUBMISSION -> L10nRuntime.t("提交失败")
+    SeedanceVideoState.FAILED_REMOTE -> L10nRuntime.t("视频生成失败")
+    SeedanceVideoState.FAILED_QUERY -> L10nRuntime.t("查询任务状态失败")
+    SeedanceVideoState.FAILED_DOWNLOAD -> L10nRuntime.t("视频下载失败")
+    else -> L10nRuntime.t("任务失败")
 }
 
-/** 失败/过期状态 -> 手动操作按钮文案。 */
+/** 失败/过期状态 -> 手动操作按钮文案（非 Composable：读 L10nRuntime 缓存的生效语言）。 */
 internal fun retryLabel(state: SeedanceVideoState): String = when (state) {
-    SeedanceVideoState.FAILED_QUERY -> "继续查询"
-    SeedanceVideoState.FAILED_DOWNLOAD -> "重新下载"
-    SeedanceVideoState.FAILED_REMOTE -> "重新生成"
-    SeedanceVideoState.EXPIRED -> "重新生成"
-    SeedanceVideoState.FAILED_SUBMISSION -> "重新提交"
-    SeedanceVideoState.FAILED_SNAPSHOT -> "重试快照"
+    SeedanceVideoState.FAILED_QUERY -> L10nRuntime.t("继续查询")
+    SeedanceVideoState.FAILED_DOWNLOAD -> L10nRuntime.t("重新下载")
+    SeedanceVideoState.FAILED_REMOTE -> L10nRuntime.t("重新生成")
+    SeedanceVideoState.EXPIRED -> L10nRuntime.t("重新生成")
+    SeedanceVideoState.FAILED_SUBMISSION -> L10nRuntime.t("重新提交")
+    SeedanceVideoState.FAILED_SNAPSHOT -> L10nRuntime.t("重试快照")
     SeedanceVideoState.FAILED_PROMPT,
-    SeedanceVideoState.FAILED_PROMPT_CONFIG_CHANGED -> "重新生成提示词"
-    else -> "重试"
+    SeedanceVideoState.FAILED_PROMPT_CONFIG_CHANGED -> L10nRuntime.t("重新生成提示词")
+    else -> L10nRuntime.t("重试")
 }
 
 /**
