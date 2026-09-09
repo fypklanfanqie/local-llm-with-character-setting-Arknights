@@ -65,6 +65,9 @@ import com.rhodesisland.terminal.llm.template.ThinkingTemplateCapability
 import com.rhodesisland.terminal.llm.template.ThinkingTemplateCapabilityResolver
 import com.rhodesisland.terminal.llm.thinking.LocalThinkingLevel
 import com.rhodesisland.terminal.llm.thinking.ThinkingPolicyTelemetry
+import com.rhodesisland.terminal.i18n.L10nRuntime
+import com.rhodesisland.terminal.i18n.t
+import com.rhodesisland.terminal.i18n.tf
 import com.rhodesisland.terminal.provider.local.LocalChatProvider
 import com.rhodesisland.terminal.provider.local.ModelPathResolver
 import com.rhodesisland.terminal.ui.glass.GlassListRow
@@ -218,9 +221,9 @@ fun BackendSettingsScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", tint = scheme.onSurface)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = t("返回"), tint = scheme.onSurface)
             }
-            Text("推理引擎设置", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = scheme.onSurface)
+            Text(t("推理引擎设置"), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = scheme.onSurface)
         }
 
         if (configChanged) {
@@ -234,7 +237,7 @@ fun BackendSettingsScreen(
                     .padding(12.dp),
             ) {
                 Text(
-                    "推理参数已变更，下次发送消息时将自动重载模型以生效。",
+                    t("推理参数已变更，下次发送消息时将自动重载模型以生效。"),
                     color = scheme.tertiary, fontSize = 11.sp,
                 )
             }
@@ -248,36 +251,36 @@ fun BackendSettingsScreen(
                 if (am == null) null else am.memoryClass to am.largeMemoryClass
             }
         }
-        GlassListSection(title = "设备能力") {
+        GlassListSection(title = t("设备能力")) {
             val cap = deviceCap
             if (cap == null) {
-                GlassListRow(title = "探测中…", showDivider = false)
+                GlassListRow(title = t("探测中…"), showDivider = false)
             } else {
-                GlassListRow(title = "CPU 核心数", trailing = { ValueText("${cap.cpuCoreCount}") })
-                GlassListRow(title = "总内存", trailing = { ValueText("${cap.totalRAMMB} MB") })
+                GlassListRow(title = t("CPU 核心数"), trailing = { ValueText("${cap.cpuCoreCount}") })
+                GlassListRow(title = t("总内存"), trailing = { ValueText("${cap.totalRAMMB} MB") })
                 heapClasses?.let { (small, large) ->
                     GlassListRow(
-                        title = "应用堆上限（已启用大堆）",
-                        subtitle = "managed heap $small MB / 大堆 $large MB；模型权重与 KV 走 native/mmap，不占用该上限",
+                        title = t("应用堆上限（已启用大堆）"),
+                        subtitle = tf("managed heap {0} MB / 大堆 {1} MB；模型权重与 KV 走 native/mmap，不占用该上限", small, large),
                         showDivider = false,
                     )
                 }
                 GlassListRow(
                     title = "NPU (Hexagon)",
                     subtitle = if (cap.npuInfo.supported)
-                        "支持 · ${cap.npuInfo.chipLevel.displayName} (${cap.npuInfo.socModel})"
-                    else "不支持 (${cap.npuInfo.reason})",
+                        tf("支持 · {0} ({1})", cap.npuInfo.chipLevel.displayName, cap.npuInfo.socModel)
+                    else tf("不支持 ({0})", cap.npuInfo.reason),
                     showDivider = false,
                 )
             }
         }
 
         // ===== 推理性能模式 =====
-        GlassListSection(title = "推理性能模式") {
+        GlassListSection(title = t("推理性能模式")) {
             InferencePerformanceMode.entries.forEachIndexed { idx, mode ->
                 val (title, desc) = when (mode) {
-                    InferencePerformanceMode.BALANCED -> "综合平衡（推荐）" to "兼顾速度、温度、功耗和稳定性"
-                    InferencePerformanceMode.MAXIMUM_SPEED -> "最高速度" to "优先首字和生成速度，仍会在过热、内存不足或后端异常时自动降级"
+                    InferencePerformanceMode.BALANCED -> t("综合平衡（推荐）") to t("兼顾速度、温度、功耗和稳定性")
+                    InferencePerformanceMode.MAXIMUM_SPEED -> t("最高速度") to t("优先首字和生成速度，仍会在过热、内存不足或后端异常时自动降级")
                 }
                 BackendOptionRow(
                     title = title,
@@ -293,7 +296,7 @@ fun BackendSettingsScreen(
 
         // ===== 思考档位（仅本地）=====
         // 全局「深度思考模式」开关决定是否请求思考；本档位只在开启后生效，云端不读取。
-        GlassListSection(title = "思考档位（仅本地）") {
+        GlassListSection(title = t("思考档位（仅本地）")) {
             LocalThinkingLevel.entries.forEachIndexed { idx, level ->
                 BackendOptionRow(
                     title = thinkingLevelTitle(level),
@@ -307,9 +310,9 @@ fun BackendSettingsScreen(
             }
             Text(
                 if (deepThinking) {
-                    "仅在「深度思考模式」开启且使用本地模型时生效；自动档会按问题复杂度调整。"
+                    t("仅在「深度思考模式」开启且使用本地模型时生效；自动档会按问题复杂度调整。")
                 } else {
-                    "仅在「深度思考模式」开启且使用本地模型时生效；当前未开启，可先选择留待启用时使用。"
+                    t("仅在「深度思考模式」开启且使用本地模型时生效；当前未开启，可先选择留待启用时使用。")
                 },
                 color = scheme.onSurfaceVariant,
                 fontSize = 10.sp,
@@ -318,7 +321,7 @@ fun BackendSettingsScreen(
         }
 
         // ===== 后端选项 =====
-        GlassListSection(title = "选择推理后端") {
+        GlassListSection(title = t("选择推理后端")) {
             BackendPreference.entries.forEachIndexed { idx, entry ->
                 val enabled = when (entry) {
                     BackendPreference.MNN_GPU -> mnnGpuReady
@@ -328,8 +331,8 @@ fun BackendSettingsScreen(
                 val selected = pref == entry
                 val desc = when (entry) {
                     BackendPreference.AUTO -> autoSubtitle(activeModelClass, mnnGpuReady)
-                    BackendPreference.MNN_CPU -> "兼容性最好，速度最慢"
-                    BackendPreference.MNN_GPU -> if (mnnGpuReady) "MNN OpenCL GPU（.mnn 模型）" else "需 libMNN.so + OpenCL 运行时"
+                    BackendPreference.MNN_CPU -> t("兼容性最好，速度最慢")
+                    BackendPreference.MNN_GPU -> if (mnnGpuReady) t("MNN OpenCL GPU（.mnn 模型）") else t("需 libMNN.so + OpenCL 运行时")
                     BackendPreference.MNN_NPU -> com.rhodesisland.terminal.llm.backend.MnnSupportDetector.QNN_STANDARD_BUILD_UNAVAILABLE
                 }
                 BackendOptionRow(
@@ -351,30 +354,30 @@ fun BackendSettingsScreen(
         }
 
         // ===== 推理参数 =====
-        GlassListSection(title = "推理参数") {
+        GlassListSection(title = t("推理参数")) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("CPU 线程数", color = scheme.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    Text(t("CPU 线程数"), color = scheme.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                     Spacer(Modifier.weight(1f))
                     Text("$threads", color = scheme.primary, fontSize = 14.sp)
                 }
                 Slider(
                     value = threads.toFloat(),
                     onValueChange = { v ->
-                        val t = v.toInt().coerceIn(1, 8)
-                        if (t != threads) scope.launch { container.settingsRepository.setLlmParams(threads = t) }
+                        val threadCount = v.toInt().coerceIn(1, 8)
+                        if (threadCount != threads) scope.launch { container.settingsRepository.setLlmParams(threads = threadCount) }
                     },
                     // Task 7 review I-2：基准运行期间冻结参数，保证基线 vs 候选在同一配置下测量。
                     enabled = !benchmarkRunning,
                     valueRange = 1f..8f,
                     steps = 6,
                 )
-                Text("实际生效取 min(设定值, 大核数, 温度上限)。超过大核数会跑到小核，反而变慢更耗电。", color = scheme.onSurfaceVariant, fontSize = 10.sp)
+                Text(t("实际生效取 min(设定值, 大核数, 温度上限)。超过大核数会跑到小核，反而变慢更耗电。"), color = scheme.onSurfaceVariant, fontSize = 10.sp)
 
                 Spacer(Modifier.height(6.dp))
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("上下文长度", color = scheme.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    Text(t("上下文长度"), color = scheme.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                     Spacer(Modifier.weight(1f))
                     BasicTextField(
                         value = contextInput,
@@ -409,30 +412,30 @@ fun BackendSettingsScreen(
                     valueRange = MIN_CONTEXT_LEN.toFloat()..MAX_CONTEXT_LEN.toFloat(),
                     steps = (MAX_CONTEXT_LEN - MIN_CONTEXT_LEN) / CONTEXT_LEN_STEP - 1,
                 )
-                Text("越大越占内存；超出模型支持长度会加载失败。改值后下条消息自动重载。", color = scheme.onSurfaceVariant, fontSize = 10.sp)
+                Text(t("越大越占内存；超出模型支持长度会加载失败。改值后下条消息自动重载。"), color = scheme.onSurfaceVariant, fontSize = 10.sp)
                 val memoryText = when (val est = memoryEstimate) {
                     is LlmMemoryEstimator.MemoryEstimate.Value ->
-                        "约 ${LlmMemoryEstimator.formatMemory(est.bytes)} KV cache（按当前模型结构估算）"
+                        tf("约 {0} KV cache（按当前模型结构估算）", LlmMemoryEstimator.formatMemory(est.bytes))
                     LlmMemoryEstimator.MemoryEstimate.Unavailable ->
-                        if (activeModelId.isNullOrBlank()) "选择并下载模型后可显示内存估算"
-                        else "无法读取模型结构，内存估算不可用"
+                        if (activeModelId.isNullOrBlank()) t("选择并下载模型后可显示内存估算")
+                        else t("无法读取模型结构，内存估算不可用")
                 }
                 Text(memoryText, color = scheme.onSurfaceVariant, fontSize = 10.sp)
 
                 Spacer(Modifier.height(6.dp))
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("最大生成长度", color = scheme.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    Text(t("最大生成长度"), color = scheme.onSurface, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                     Spacer(Modifier.weight(1f))
                     Text(
-                        if (maxTokens == AppConfig.LLM.MAX_TOKENS_UNLIMITED) "不限" else "$maxTokens",
+                        if (maxTokens == AppConfig.LLM.MAX_TOKENS_UNLIMITED) t("不限") else "$maxTokens",
                         color = scheme.primary, fontSize = 14.sp,
                     )
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                     listOf(1024, 2048, 4096, AppConfig.LLM.MAX_TOKENS_UNLIMITED).forEach { size ->
                         val selected = maxTokens == size
-                        val label = if (size == AppConfig.LLM.MAX_TOKENS_UNLIMITED) "不限" else "$size"
+                        val label = if (size == AppConfig.LLM.MAX_TOKENS_UNLIMITED) t("不限") else "$size"
                         Box(
                             modifier = Modifier
                                 .weight(1f)
@@ -447,37 +450,37 @@ fun BackendSettingsScreen(
                         }
                     }
                 }
-                Text("单次回复的总 token 上限；开启深度思考时，思考与最终答案共同使用该上限。选「不限」则生成到模型自然结束（EOS）。改后下条消息即生效，无需重载。", color = scheme.onSurfaceVariant, fontSize = 10.sp)
+                Text(t("单次回复的总 token 上限；开启深度思考时，思考与最终答案共同使用该上限。选「不限」则生成到模型自然结束（EOS）。改后下条消息即生效，无需重载。"), color = scheme.onSurfaceVariant, fontSize = 10.sp)
             }
         }
 
         // ===== 本次生成诊断 =====
         // Task 7 Step 2/5：最近一次生成的诊断摘要（模板能力 / 认证状态 / 思考 / 后端 / 计时）。
-        GlassListSection(title = "本次生成诊断") {
+        GlassListSection(title = t("本次生成诊断")) {
             GlassListRow(
-                title = "模型",
-                subtitle = activeModelId ?: "未选择模型",
+                title = t("模型"),
+                subtitle = activeModelId ?: t("未选择模型"),
                 showDivider = true,
             )
             GlassListRow(
-                title = "模板思考能力",
+                title = t("模板思考能力"),
                 subtitle = templateCapabilityText(templateCapability),
                 showDivider = true,
             )
             GlassListRow(
-                title = "实验认证",
+                title = t("实验认证"),
                 subtitle = certificationStatusText(currentCert),
                 showDivider = true,
             )
             benchmarkOutcome?.let { outcome ->
                 val text = when (outcome) {
                     is LookaheadCertificationDecision.Certified ->
-                        "已认证：lookahead 启用（本机已有基准证据）"
+                        t("已认证：lookahead 启用（本机已有基准证据）")
                     is LookaheadCertificationDecision.NotCertified ->
-                        "未认证：${outcome.reasons.joinToString("；")}"
+                        tf("未认证：{0}", outcome.reasons.joinToString("；"))
                 }
                 GlassListRow(
-                    title = "最近一次认证判定",
+                    title = t("最近一次认证判定"),
                     subtitle = text,
                     showDivider = true,
                 )
@@ -485,8 +488,8 @@ fun BackendSettingsScreen(
             val rows = diagnosticRows(lastTurn, templateCapability)
             if (rows.isEmpty()) {
                 GlassListRow(
-                    title = "最近一次生成",
-                    subtitle = "暂无生成记录（发送一条本地消息后展示诊断摘要）",
+                    title = t("最近一次生成"),
+                    subtitle = t("暂无生成记录（发送一条本地消息后展示诊断摘要）"),
                     showDivider = false,
                 )
             } else {
@@ -504,10 +507,10 @@ fun BackendSettingsScreen(
         // legacy 开关：性能模式解析层接管前保留，供高级诊断；不再作为主设置展示。
         val cpuBoost by container.settingsRepository.llmCpuBoost.collectAsState(initial = true)
         val lookahead by container.settingsRepository.llmLookahead.collectAsState(initial = false)
-        GlassListSection(title = "高级（诊断）") {
+        GlassListSection(title = t("高级（诊断）")) {
             GlassListRow(
-                title = "推理提频（旧开关）",
-                subtitle = "性能模式接管前的高级开关；非 root 用系统提频机制推高大核频率，会增加耗电/发热",
+                title = t("推理提频（旧开关）"),
+                subtitle = t("性能模式接管前的高级开关；非 root 用系统提频机制推高大核频率，会增加耗电/发热"),
                 trailing = {
                     Switch(
                         checked = cpuBoost,
@@ -518,8 +521,8 @@ fun BackendSettingsScreen(
                 showDivider = true,
             )
             GlassListRow(
-                title = "Lookahead 投机解码（旧开关）",
-                subtitle = "旧开关（仅 CPU 生效）：需先经「运行基准并认证」取得本机认证后才生效，否则即使打开也不启用",
+                title = t("Lookahead 投机解码（旧开关）"),
+                subtitle = t("旧开关（仅 CPU 生效）：需先经「运行基准并认证」取得本机认证后才生效，否则即使打开也不启用"),
                 trailing = {
                     Switch(
                         checked = lookahead,
@@ -531,8 +534,8 @@ fun BackendSettingsScreen(
             )
             // Task 7 Step 3：基准触发与认证闭环入口（IO 执行；运行中禁用按钮）。
             GlassListRow(
-                title = "运行基准并认证（Lookahead）",
-                subtitle = "跑基线 vs lookahead 两轮固定解码对比：收益 ≥10% 且无 TTFT/内存回归才认证启用（约 1–2 分钟，期间请勿退出）",
+                title = t("运行基准并认证（Lookahead）"),
+                subtitle = t("跑基线 vs lookahead 两轮固定解码对比：收益 ≥10% 且无 TTFT/内存回归才认证启用（约 1–2 分钟，期间请勿退出）"),
                 onClick = {
                     if (benchmarkRunning) return@GlassListRow
                     // Task 7 review M-1：同步置位防双击竞态——Compose 快照写入对同线程后续读取立即可见，
@@ -545,18 +548,18 @@ fun BackendSettingsScreen(
                             } catch (ce: CancellationException) {
                                 throw ce
                             } catch (e: Exception) {
-                                LookaheadCertificationDecision.NotCertified(listOf("基准异常：${e.message}"))
+                                LookaheadCertificationDecision.NotCertified(listOf(L10nRuntime.format("基准异常：{0}", e.message)))
                             }
                         }
                         benchmarkOutcome = result
                         benchmarkRunning = false
                         when (result) {
                             is LookaheadCertificationDecision.Certified ->
-                                Toast.makeText(context, "基准通过：lookahead 已认证（打开旧开关后生效）", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, L10nRuntime.t("基准通过：lookahead 已认证（打开旧开关后生效）"), Toast.LENGTH_SHORT).show()
                             is LookaheadCertificationDecision.NotCertified ->
                                 Toast.makeText(
                                     context,
-                                    "未认证：${result.reasons.firstOrNull() ?: "未知原因"}",
+                                    L10nRuntime.format("未认证：{0}", result.reasons.firstOrNull() ?: L10nRuntime.t("未知原因")),
                                     Toast.LENGTH_LONG,
                                 ).show()
                         }
@@ -566,15 +569,15 @@ fun BackendSettingsScreen(
                     if (benchmarkRunning) {
                         CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                     } else {
-                        Text("运行", color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
+                        Text(t("运行"), color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
                     }
                 },
                 showDivider = true,
             )
             // Wave 3：KV 量化 / 动态量化档位认证入口（同 Lookahead 模式：防双击 + IO + Toast）。
             GlassListRow(
-                title = "运行基准并认证（解码档位）",
-                subtitle = "逐个实测 KV 量化（TQ4/Int8/TQ3，按模型大小）与动态量化候选 vs 基线：收益 ≥10% 且可靠性满分才认证（约 3–6 分钟，发热耗电明显）",
+                title = t("运行基准并认证（解码档位）"),
+                subtitle = t("逐个实测 KV 量化（TQ4/Int8/TQ3，按模型大小）与动态量化候选 vs 基线：收益 ≥10% 且可靠性满分才认证（约 3–6 分钟，发热耗电明显）"),
                 onClick = {
                     if (benchmarkRunning) return@GlassListRow
                     benchmarkRunning = true
@@ -585,18 +588,18 @@ fun BackendSettingsScreen(
                             } catch (ce: CancellationException) {
                                 throw ce
                             } catch (e: Exception) {
-                                DecodeOptionCertificationOutcome.NotCertified(listOf("基准异常：${e.message}"))
+                                DecodeOptionCertificationOutcome.NotCertified(listOf(L10nRuntime.format("基准异常：{0}", e.message)))
                             }
                         }
                         decodeOutcome = result
                         benchmarkRunning = false
                         when (result) {
                             is DecodeOptionCertificationOutcome.Certified ->
-                                Toast.makeText(context, "基准通过：${result.text}", Toast.LENGTH_LONG).show()
+                                Toast.makeText(context, L10nRuntime.format("基准通过：{0}", result.text), Toast.LENGTH_LONG).show()
                             is DecodeOptionCertificationOutcome.NotCertified ->
                                 Toast.makeText(
                                     context,
-                                    "未认证：${result.reasons.firstOrNull() ?: "未知原因"}",
+                                    L10nRuntime.format("未认证：{0}", result.reasons.firstOrNull() ?: L10nRuntime.t("未知原因")),
                                     Toast.LENGTH_LONG,
                                 ).show()
                         }
@@ -606,14 +609,14 @@ fun BackendSettingsScreen(
                     if (benchmarkRunning) {
                         CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                     } else {
-                        Text("运行", color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
+                        Text(t("运行"), color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
                     }
                 },
                 showDivider = true,
             )
             decodeOutcome?.let { outcome ->
                 GlassListRow(
-                    title = "最近一次解码档位认证",
+                    title = t("最近一次解码档位认证"),
                     subtitle = when (outcome) {
                         is DecodeOptionCertificationOutcome.Certified -> outcome.text
                         is DecodeOptionCertificationOutcome.NotCertified ->
@@ -623,8 +626,8 @@ fun BackendSettingsScreen(
                 )
             }
             GlassListRow(
-                title = "CPU vs GPU prefill 基准",
-                subtitle = "同模型同参数分别测 CPU 与 GPU 的 LONG_PREFILL（各 1 预热 + 5 记录轮）：对照 prefill 吞吐与首字延迟（约数分钟，明显发热耗电，请保持前台；不改动已保存的后端设置）",
+                title = t("CPU vs GPU prefill 基准"),
+                subtitle = t("同模型同参数分别测 CPU 与 GPU 的 LONG_PREFILL（各 1 预热 + 5 记录轮）：对照 prefill 吞吐与首字延迟（约数分钟，明显发热耗电，请保持前台；不改动已保存的后端设置）"),
                 onClick = {
                     if (prefillBenchRunning) return@GlassListRow
                     prefillBenchConfirm = true
@@ -633,14 +636,14 @@ fun BackendSettingsScreen(
                     if (prefillBenchRunning) {
                         CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                     } else {
-                        Text("运行", color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
+                        Text(t("运行"), color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
                     }
                 },
                 showDivider = true,
             )
             prefillBenchOutcome?.let { outcome ->
                 GlassListRow(
-                    title = "最近一次 CPU/GPU prefill 对比",
+                    title = t("最近一次 CPU/GPU prefill 对比"),
                     subtitle = when (outcome) {
                         is PrefillBenchmarkOutcome.Done -> outcome.text
                         is PrefillBenchmarkOutcome.Skipped -> outcome.reason
@@ -651,11 +654,11 @@ fun BackendSettingsScreen(
             // Task 15/16：GPU 完整预热（仅当前模型 >7B 时可用；手动触发，加载模型 + 极短生成）。
             val preheatEligible = activeModelClass == AutoBackendModelClass.GPU_ELIGIBLE
             GlassListRow(
-                title = "GPU 完整预热",
+                title = t("GPU 完整预热"),
                 subtitle = when {
-                    !mnnGpuReady -> "设备不支持 OpenCL GPU"
-                    !preheatEligible -> "仅对总参数量 >7B 的模型生效（当前模型默认 CPU，无需预热）"
-                    else -> "加载当前模型并执行一次极短 GPU 生成，预热 OpenCL 图/内核/缓存，降低首次出字延迟（不影响聊天记录与设置）"
+                    !mnnGpuReady -> t("设备不支持 OpenCL GPU")
+                    !preheatEligible -> t("仅对总参数量 >7B 的模型生效（当前模型默认 CPU，无需预热）")
+                    else -> t("加载当前模型并执行一次极短 GPU 生成，预热 OpenCL 图/内核/缓存，降低首次出字延迟（不影响聊天记录与设置）")
                 },
                 onClick = {
                     if (!preheatEligible || !mnnGpuReady || preheatRunning) return@GlassListRow
@@ -667,14 +670,14 @@ fun BackendSettingsScreen(
                             } catch (ce: CancellationException) {
                                 throw ce
                             } catch (e: Exception) {
-                                GpuPreheatCoordinator.PreheatResult.Skipped("预热异常：${e.message}")
+                                GpuPreheatCoordinator.PreheatResult.Skipped(L10nRuntime.format("预热异常：{0}", e.message))
                             }
                         }
                         preheatOutcome = outcome
                         preheatRunning = false
                         when (outcome) {
                             is GpuPreheatCoordinator.PreheatResult.Done ->
-                                Toast.makeText(context, "GPU 预热完成（${outcome.backend.displayName}）", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, L10nRuntime.format("GPU 预热完成（{0}）", outcome.backend.displayName), Toast.LENGTH_SHORT).show()
                             is GpuPreheatCoordinator.PreheatResult.Skipped ->
                                 Toast.makeText(context, outcome.reason, Toast.LENGTH_LONG).show()
                         }
@@ -684,22 +687,22 @@ fun BackendSettingsScreen(
                     if (preheatRunning) {
                         CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                     } else if (preheatEligible && mnnGpuReady) {
-                        Text("预热", color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
+                        Text(t("预热"), color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
                     } else {
-                        Text("不可用", color = MaterialTheme.colorScheme.error, fontSize = 10.sp)
+                        Text(t("不可用"), color = MaterialTheme.colorScheme.error, fontSize = 10.sp)
                     }
                 },
                 showDivider = true,
             )
             preheatOutcome?.let { outcome ->
                 GlassListRow(
-                    title = "最近一次 GPU 预热",
+                    title = t("最近一次 GPU 预热"),
                     subtitle = when (outcome) {
                         is GpuPreheatCoordinator.PreheatResult.Done ->
-                            "完成：实际后端 ${outcome.backend.displayName}" +
+                            tf("完成：实际后端 {0}", outcome.backend.displayName) +
                                 (outcome.ttftMs?.let { "，TTFT ${it}ms" } ?: "") +
                                 (outcome.prefillMs?.let { "，prefill ${it}ms" } ?: "") +
-                                (outcome.loadMs?.let { "，加载 ${it}ms" } ?: "")
+                                (outcome.loadMs?.let { tf("，加载 {0}ms", it) } ?: "")
                         is GpuPreheatCoordinator.PreheatResult.Skipped -> outcome.reason
                     },
                     showDivider = true,
@@ -708,19 +711,19 @@ fun BackendSettingsScreen(
             // final review I3（裁决：文档化延迟）：四象限归档与空回答可靠性验证无生产 UI 入口——
             // 由 CI/真机验收执行（本版本仅提供 Lookahead 认证基准入口）。此处仅说明，不新增入口。
             GlassListRow(
-                title = "四象限基准 / 可靠性验证",
-                subtitle = "四象限基准与空回答可靠性验证由 CI/真机验收执行（本版本仅提供 Lookahead 认证基准入口）",
+                title = t("四象限基准 / 可靠性验证"),
+                subtitle = t("四象限基准与空回答可靠性验证由 CI/真机验收执行（本版本仅提供 Lookahead 认证基准入口）"),
                 showDivider = true,
             )
             GlassListRow(
-                title = "清除后端健康记录",
-                subtitle = "删除全部 OpenCL 探测/冷却/黑名单记录，并重置本次会话的后端失败缓存",
+                title = t("清除后端健康记录"),
+                subtitle = t("删除全部 OpenCL 探测/冷却/黑名单记录，并重置本次会话的后端失败缓存"),
                 onClick = { confirmResetHealth = true },
                 showDivider = true,
             )
             GlassListRow(
-                title = "清除实验认证",
-                subtitle = "删除全部 lookahead/步进认证；此后相关配置回落未认证默认（不生效）",
+                title = t("清除实验认证"),
+                subtitle = t("删除全部 lookahead/步进认证；此后相关配置回落未认证默认（不生效）"),
                 onClick = { confirmResetCert = true },
                 showDivider = false,
             )
@@ -730,8 +733,8 @@ fun BackendSettingsScreen(
         if (confirmResetHealth) {
             AlertDialog(
                 onDismissRequest = { confirmResetHealth = false },
-                title = { Text("清除后端健康记录") },
-                text = { Text("将删除全部后端健康记录（OpenCL 探测/冷却/黑名单），并重置本次会话的后端失败缓存。确定清除？") },
+                title = { Text(t("清除后端健康记录")) },
+                text = { Text(t("将删除全部后端健康记录（OpenCL 探测/冷却/黑名单），并重置本次会话的后端失败缓存。确定清除？")) },
                 confirmButton = {
                     TextButton(onClick = {
                         confirmResetHealth = false
@@ -740,12 +743,12 @@ fun BackendSettingsScreen(
                                 container.backendHealthStore.resetAll()
                                 container.backendManager.resetSessionFailures()
                             }
-                            Toast.makeText(context, "后端健康记录已清除", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, L10nRuntime.t("后端健康记录已清除"), Toast.LENGTH_SHORT).show()
                         }
-                    }) { Text("清除") }
+                    }) { Text(t("清除")) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { confirmResetHealth = false }) { Text("取消") }
+                    TextButton(onClick = { confirmResetHealth = false }) { Text(t("取消")) }
                 },
             )
         }
@@ -754,8 +757,8 @@ fun BackendSettingsScreen(
         if (confirmResetCert) {
             AlertDialog(
                 onDismissRequest = { confirmResetCert = false },
-                title = { Text("清除实验认证") },
-                text = { Text("将删除全部 lookahead/步进基准认证记录；此后相关配置回落未认证默认（即使打开旧开关也不生效）。确定清除？") },
+                title = { Text(t("清除实验认证")) },
+                text = { Text(t("将删除全部 lookahead/步进基准认证记录；此后相关配置回落未认证默认（即使打开旧开关也不生效）。确定清除？")) },
                 confirmButton = {
                     TextButton(onClick = {
                         confirmResetCert = false
@@ -763,12 +766,12 @@ fun BackendSettingsScreen(
                             withContext(Dispatchers.IO) {
                                 container.inferenceCertificationStore.resetAll()
                             }
-                            Toast.makeText(context, "实验认证已清除", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, L10nRuntime.t("实验认证已清除"), Toast.LENGTH_SHORT).show()
                         }
-                    }) { Text("清除") }
+                    }) { Text(t("清除")) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { confirmResetCert = false }) { Text("取消") }
+                    TextButton(onClick = { confirmResetCert = false }) { Text(t("取消")) }
                 },
             )
         }
@@ -777,11 +780,11 @@ fun BackendSettingsScreen(
         if (prefillBenchConfirm) {
             AlertDialog(
                 onDismissRequest = { prefillBenchConfirm = false },
-                title = { Text("运行 CPU/GPU prefill 基准？") },
+                title = { Text(t("运行 CPU/GPU prefill 基准？")) },
                 text = {
                     Text(
-                        "将分别用 CPU 与 GPU 各测一轮长前缀填充基准（各 1 预热 + 5 记录轮），约需数分钟，期间设备会明显发热耗电。" +
-                            "请保持应用前台并先让设备降温。本操作不会修改已保存的后端设置。确定运行？",
+                        t("将分别用 CPU 与 GPU 各测一轮长前缀填充基准（各 1 预热 + 5 记录轮），约需数分钟，期间设备会明显发热耗电。") +
+                            t("请保持应用前台并先让设备降温。本操作不会修改已保存的后端设置。确定运行？"),
                     )
                 },
                 confirmButton = {
@@ -796,42 +799,42 @@ fun BackendSettingsScreen(
                                 } catch (ce: CancellationException) {
                                     throw ce
                                 } catch (e: Exception) {
-                                    PrefillBenchmarkOutcome.Skipped("基准异常：${e.message}")
+                                    PrefillBenchmarkOutcome.Skipped(L10nRuntime.format("基准异常：{0}", e.message))
                                 }
                             }
                             prefillBenchOutcome = outcome
                             prefillBenchRunning = false
                             when (outcome) {
                                 is PrefillBenchmarkOutcome.Done ->
-                                    Toast.makeText(context, "CPU/GPU prefill 基准完成", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, L10nRuntime.t("CPU/GPU prefill 基准完成"), Toast.LENGTH_SHORT).show()
                                 is PrefillBenchmarkOutcome.Skipped ->
                                     Toast.makeText(context, outcome.reason, Toast.LENGTH_LONG).show()
                             }
                         }
-                    }) { Text("运行") }
+                    }) { Text(t("运行")) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { prefillBenchConfirm = false }) { Text("取消") }
+                    TextButton(onClick = { prefillBenchConfirm = false }) { Text(t("取消")) }
                 },
             )
         }
 
         // ===== 回退链 =====
-        GlassListSection(title = "自动回退顺序") {
+        GlassListSection(title = t("自动回退顺序")) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
                     fallbackChain.joinToString("  ›  ") { it.displayName },
                     color = scheme.onSurface, fontSize = 13.sp,
                 )
-                Text("当前激活后端：${activeBackend.displayName}", color = scheme.primary, fontSize = 12.sp)
+                Text(tf("当前激活后端：{0}", activeBackend.displayName), color = scheme.primary, fontSize = 12.sp)
             }
         }
 
         // ===== 说明 =====
-        GlassListSection(title = "说明") {
+        GlassListSection(title = t("说明")) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("• MNN CPU 恒可用（libMNN.so 就绪）；OpenCL GPU 与 QNN NPU 视设备/运行时库就绪而定，不可用时自动回退 CPU。", color = scheme.onSurfaceVariant, fontSize = 10.sp, lineHeight = 15.sp)
-                Text("• QNN NPU 需骁龙设备 + libQnnHtp.so/Skel；且需解锁 bootloader 或 Root 关 SELinux——锁定量产机 SELinux 拒绝 app 访问 CDSP，会原生崩溃。AUTO 不含 NPU，仅显式选择时尝试。", color = scheme.onSurfaceVariant, fontSize = 10.sp, lineHeight = 15.sp)
+                Text(t("• MNN CPU 恒可用（libMNN.so 就绪）；OpenCL GPU 与 QNN NPU 视设备/运行时库就绪而定，不可用时自动回退 CPU。"), color = scheme.onSurfaceVariant, fontSize = 10.sp, lineHeight = 15.sp)
+                Text(t("• QNN NPU 需骁龙设备 + libQnnHtp.so/Skel；且需解锁 bootloader 或 Root 关 SELinux——锁定量产机 SELinux 拒绝 app 访问 CDSP，会原生崩溃。AUTO 不含 NPU，仅显式选择时尝试。"), color = scheme.onSurfaceVariant, fontSize = 10.sp, lineHeight = 15.sp)
             }
         }
     }
@@ -886,13 +889,13 @@ private fun BackendOptionRow(
                     )
                     if (isActive) {
                         Spacer(Modifier.width(8.dp))
-                        Text("使用中", color = scheme.tertiary, fontSize = 10.sp)
+                        Text(t("使用中"), color = scheme.tertiary, fontSize = 10.sp)
                     }
                 }
                 Text(desc, color = scheme.onSurfaceVariant, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
             }
             if (!enabled) {
-                Text("不可用", color = scheme.error, fontSize = 10.sp)
+                Text(t("不可用"), color = scheme.error, fontSize = 10.sp)
             }
         }
         if (showDivider) {
@@ -931,10 +934,10 @@ data class TurnDiagnosticRow(val label: String, val value: String)
  */
 /** 思考档位选项标题（纯函数，JVM 可测）。AUTO 明确标注为推荐默认。 */
 fun thinkingLevelTitle(level: LocalThinkingLevel): String = when (level) {
-    LocalThinkingLevel.AUTO -> "自动（推荐）"
-    LocalThinkingLevel.SHORT -> "短"
-    LocalThinkingLevel.MEDIUM -> "中"
-    LocalThinkingLevel.LONG -> "长"
+    LocalThinkingLevel.AUTO -> L10nRuntime.t("自动（推荐）")
+    LocalThinkingLevel.SHORT -> L10nRuntime.t("短")
+    LocalThinkingLevel.MEDIUM -> L10nRuntime.t("中")
+    LocalThinkingLevel.LONG -> L10nRuntime.t("长")
 }
 
 /**
@@ -945,26 +948,26 @@ fun thinkingLevelTitle(level: LocalThinkingLevel): String = when (level) {
  * 设置」由此真正生效。token 数为估算（按 UTF-8 字节 ×4 换算中文 token）。
  */
 fun thinkingLevelDesc(level: LocalThinkingLevel): String = when (level) {
-    LocalThinkingLevel.AUTO -> "按问题复杂度选择思考深度；思考超档位预算自动截断并直接作答"
-    LocalThinkingLevel.SHORT -> "只做必要核验；思考约 384 token 上限，超预算自动截断并直接作答"
-    LocalThinkingLevel.MEDIUM -> "平衡分析深度与响应速度；思考约 768 token 上限，超预算自动截断并直接作答"
-    LocalThinkingLevel.LONG -> "覆盖更多方案、边界与自检；思考约 1536 token 上限，超预算自动截断并直接作答"
+    LocalThinkingLevel.AUTO -> L10nRuntime.t("按问题复杂度选择思考深度；思考超档位预算自动截断并直接作答")
+    LocalThinkingLevel.SHORT -> L10nRuntime.t("只做必要核验；思考约 384 token 上限，超预算自动截断并直接作答")
+    LocalThinkingLevel.MEDIUM -> L10nRuntime.t("平衡分析深度与响应速度；思考约 768 token 上限，超预算自动截断并直接作答")
+    LocalThinkingLevel.LONG -> L10nRuntime.t("覆盖更多方案、边界与自检；思考约 1536 token 上限，超预算自动截断并直接作答")
 }
 
 /** 档位存储键 -> 中文标签（纯函数，JVM 可测）。 */
 fun thinkingLevelLabel(storageKey: String): String = when (storageKey) {
-    LocalThinkingLevel.AUTO.storageKey -> "自动"
-    LocalThinkingLevel.SHORT.storageKey -> "短"
-    LocalThinkingLevel.MEDIUM.storageKey -> "中"
-    LocalThinkingLevel.LONG.storageKey -> "长"
+    LocalThinkingLevel.AUTO.storageKey -> L10nRuntime.t("自动")
+    LocalThinkingLevel.SHORT.storageKey -> L10nRuntime.t("短")
+    LocalThinkingLevel.MEDIUM.storageKey -> L10nRuntime.t("中")
+    LocalThinkingLevel.LONG.storageKey -> L10nRuntime.t("长")
     else -> storageKey
 }
 
 /** 复杂度枚举名 -> 中文标签（纯函数，JVM 可测）；未知原样保留。 */
 fun thinkingComplexityLabel(name: String?): String? = when (name) {
-    "SIMPLE" -> "简单"
-    "STANDARD" -> "标准"
-    "COMPLEX" -> "复杂"
+    "SIMPLE" -> L10nRuntime.t("简单")
+    "STANDARD" -> L10nRuntime.t("标准")
+    "COMPLEX" -> L10nRuntime.t("复杂")
     else -> name
 }
 
@@ -980,22 +983,27 @@ fun thinkingPolicyRows(policy: ThinkingPolicyTelemetry?): List<TurnDiagnosticRow
     } else {
         thinkingLevelLabel(policy.effectiveLevel)
     }
-    val control = if (policy.controlMode == "NATIVE_BUDGET") "原生预算" else "提示策略（未发现经验证的原生预算能力）"
+    val control = if (policy.controlMode == "NATIVE_BUDGET") L10nRuntime.t("原生预算") else L10nRuntime.t("提示策略（未发现经验证的原生预算能力）")
     return listOf(
-        TurnDiagnosticRow(label = "思考档位", value = levelText),
+        TurnDiagnosticRow(label = L10nRuntime.t("思考档位"), value = levelText),
         TurnDiagnosticRow(
-            label = "思考策略",
-            value = "约 ${policy.targetMinMs / 1000}–${policy.targetMaxMs / 1000} 秒软目标 · " +
-                "${policy.checkpointBudget} 个核验点 · $control · 单次生成，共享最大生成长度",
+            label = L10nRuntime.t("思考策略"),
+            value = L10nRuntime.format(
+                "约 {0}–{1} 秒软目标 · {2} 个核验点 · {3} · 单次生成，共享最大生成长度",
+                policy.targetMinMs / 1000,
+                policy.targetMaxMs / 1000,
+                policy.checkpointBudget,
+                control,
+            ),
         ),
     )
 }
 
 fun templateCapabilityText(cap: ThinkingTemplateCapability?): String = when (cap) {
-    ThinkingTemplateCapability.SUPPORTED -> "模板含思考分支（开关可生效）"
-    ThinkingTemplateCapability.UNSUPPORTED -> "模板不含思考分支（开关无效）"
-    ThinkingTemplateCapability.UNKNOWN -> "模板能力未知：思考开关可能无效"
-    null -> "未选择模型/无法解析"
+    ThinkingTemplateCapability.SUPPORTED -> L10nRuntime.t("模板含思考分支（开关可生效）")
+    ThinkingTemplateCapability.UNSUPPORTED -> L10nRuntime.t("模板不含思考分支（开关无效）")
+    ThinkingTemplateCapability.UNKNOWN -> L10nRuntime.t("模板能力未知：思考开关可能无效")
+    null -> L10nRuntime.t("未选择模型/无法解析")
 }
 
 /**
@@ -1015,37 +1023,37 @@ fun thinkingStatusText(
     templateCapability: ThinkingTemplateCapability?,
 ): String = when {
     thinkingRequested == true && templateCapability == ThinkingTemplateCapability.UNSUPPORTED ->
-        "请求开启 → 模板不支持（开关无效）"
+        L10nRuntime.t("请求开启 → 模板不支持（开关无效）")
     thinkingRequested == true && templateCapability == ThinkingTemplateCapability.UNKNOWN ->
-        "请求开启 → 模板能力未知（开关可能无效）"
+        L10nRuntime.t("请求开启 → 模板能力未知（开关可能无效）")
     thinkingRequested == true && thinkingEffective == ThinkingEffect.ENABLED.name ->
-        "请求开启 → 已生效"
-    thinkingRequested == true -> "请求开启 → 未确认生效"
+        L10nRuntime.t("请求开启 → 已生效")
+    thinkingRequested == true -> L10nRuntime.t("请求开启 → 未确认生效")
     thinkingEffective == ThinkingEffect.THINKING_DISABLE_NOT_EFFECTIVE.name ->
-        "请求关闭 → 关闭未生效（仍出现思考段）"
+        L10nRuntime.t("请求关闭 → 关闭未生效（仍出现思考段）")
     // Task 7 review M-3：效果 UNKNOWN（截断/失败/空响应生成）不是「已生效」的证据，只陈述未能确认。
     thinkingEffective == ThinkingEffect.UNKNOWN.name ->
-        "请求关闭 → 未能确认生效"
-    else -> "请求关闭 → 已生效"
+        L10nRuntime.t("请求关闭 → 未能确认生效")
+    else -> L10nRuntime.t("请求关闭 → 已生效")
 }
 
 /**
  * 回退/降级原因的可读文案：已知枚举映射中文，未知字符串原样保留（不做猜测，也不崩溃）。
  */
 fun downgradeReasonText(reason: String): String = when (reason) {
-    BackendManager.EMPTY_GPU_OUTPUT_FALLBACK -> "GPU 空输出回退 CPU"
-    DowngradeReason.LOOKAHEAD_UNCERTIFIED.name -> "lookahead 未认证（未启用）"
-    DowngradeReason.OPENCL_UNHEALTHY.name -> "OpenCL 健康异常（未入链）"
-    DowngradeReason.QNN_UNAVAILABLE_IN_STANDARD_BUILD.name -> "标准构建不含 QNN（解析为 CPU）"
-    DowngradeReason.THERMAL.name -> "高温降级"
-    DowngradeReason.MEMORY.name -> "内存受限"
-    DowngradeReason.BACKEND_UNAVAILABLE.name -> "后端不可用"
-    DowngradeReason.UNSUPPORTED_SETTING.name -> "设置不再支持"
-    DowngradeReason.AUTO_MODEL_AT_OR_BELOW_7B_CPU.name -> "当前模型 ≤7B，AUTO 用 CPU（GPU 仅 >7B 启用）"
-    DowngradeReason.AUTO_MODEL_PARAMETERS_UNKNOWN_CPU.name -> "模型参数未知，AUTO 默认 CPU"
-    DowngradeReason.GPU_LOAD_FALLBACK.name -> "GPU 加载失败，回退 CPU"
-    DowngradeReason.GPU_GENERATION_FALLBACK.name -> "GPU 生成异常，回退 CPU"
-    LocalChatProvider.THINKING_BUDGET_TRUNCATED -> "思考超过档位预算，已截断并直接作答"
+    BackendManager.EMPTY_GPU_OUTPUT_FALLBACK -> L10nRuntime.t("GPU 空输出回退 CPU")
+    DowngradeReason.LOOKAHEAD_UNCERTIFIED.name -> L10nRuntime.t("lookahead 未认证（未启用）")
+    DowngradeReason.OPENCL_UNHEALTHY.name -> L10nRuntime.t("OpenCL 健康异常（未入链）")
+    DowngradeReason.QNN_UNAVAILABLE_IN_STANDARD_BUILD.name -> L10nRuntime.t("标准构建不含 QNN（解析为 CPU）")
+    DowngradeReason.THERMAL.name -> L10nRuntime.t("高温降级")
+    DowngradeReason.MEMORY.name -> L10nRuntime.t("内存受限")
+    DowngradeReason.BACKEND_UNAVAILABLE.name -> L10nRuntime.t("后端不可用")
+    DowngradeReason.UNSUPPORTED_SETTING.name -> L10nRuntime.t("设置不再支持")
+    DowngradeReason.AUTO_MODEL_AT_OR_BELOW_7B_CPU.name -> L10nRuntime.t("当前模型 ≤7B，AUTO 用 CPU（GPU 仅 >7B 启用）")
+    DowngradeReason.AUTO_MODEL_PARAMETERS_UNKNOWN_CPU.name -> L10nRuntime.t("模型参数未知，AUTO 默认 CPU")
+    DowngradeReason.GPU_LOAD_FALLBACK.name -> L10nRuntime.t("GPU 加载失败，回退 CPU")
+    DowngradeReason.GPU_GENERATION_FALLBACK.name -> L10nRuntime.t("GPU 生成异常，回退 CPU")
+    LocalChatProvider.THINKING_BUDGET_TRUNCATED -> L10nRuntime.t("思考超过档位预算，已截断并直接作答")
     else -> reason
 }
 
@@ -1055,12 +1063,12 @@ fun downgradeReasonText(reason: String): String = when (reason) {
  */
 fun autoSubtitle(modelClass: AutoBackendModelClass, gpuReady: Boolean): String = when (modelClass) {
     AutoBackendModelClass.GPU_ELIGIBLE -> if (gpuReady) {
-        "自动选择（GPU 优先，回退 CPU）"
+        L10nRuntime.t("自动选择（GPU 优先，回退 CPU）")
     } else {
-        "自动选择（GPU 未就绪，回退 CPU）"
+        L10nRuntime.t("自动选择（GPU 未就绪，回退 CPU）")
     }
-    AutoBackendModelClass.CPU_BELOW_OR_EQUAL_THRESHOLD -> "自动选择（当前模型 ≤7B，用 CPU）"
-    AutoBackendModelClass.CPU_UNKNOWN_PARAMETERS -> "自动选择（模型参数未知，默认 CPU）"
+    AutoBackendModelClass.CPU_BELOW_OR_EQUAL_THRESHOLD -> L10nRuntime.t("自动选择（当前模型 ≤7B，用 CPU）")
+    AutoBackendModelClass.CPU_UNKNOWN_PARAMETERS -> L10nRuntime.t("自动选择（模型参数未知，默认 CPU）")
 }
 
 /**
@@ -1089,11 +1097,11 @@ fun previewFallbackChain(
  * null = 该组合无认证记录：lookahead / 多 token 步进均关闭（resolver 门禁默认）。
  */
 fun certificationStatusText(cert: CertifiedInferenceOptions?): String = when {
-    cert == null -> "未认证（lookahead / 步进均关闭）"
-    cert.lookahead && cert.decodeStepTokens > 1 -> "已认证：lookahead + 多 token 步进 ${cert.decodeStepTokens}"
-    cert.lookahead -> "已认证：lookahead"
-    cert.decodeStepTokens > 1 -> "已认证：多 token 步进 ${cert.decodeStepTokens}"
-    else -> "已认证（逐 token 基线）"
+    cert == null -> L10nRuntime.t("未认证（lookahead / 步进均关闭）")
+    cert.lookahead && cert.decodeStepTokens > 1 -> L10nRuntime.format("已认证：lookahead + 多 token 步进 {0}", cert.decodeStepTokens)
+    cert.lookahead -> L10nRuntime.t("已认证：lookahead")
+    cert.decodeStepTokens > 1 -> L10nRuntime.format("已认证：多 token 步进 {0}", cert.decodeStepTokens)
+    else -> L10nRuntime.t("已认证（逐 token 基线）")
 }
 
 /**
@@ -1110,17 +1118,17 @@ fun diagnosticRows(
     if (record == null) return emptyList()
     val rows = mutableListOf<TurnDiagnosticRow>()
     rows += TurnDiagnosticRow(
-        label = "深度思考",
+        label = L10nRuntime.t("深度思考"),
         value = thinkingStatusText(record.thinkingRequested, record.thinkingEffective, templateCapability),
     )
     // Task 5：本地思考档位策略行（仅本地开启深度思考且有计划时存在）。
     rows += thinkingPolicyRows(record.thinkingPolicy)
-    val backend = record.backend?.displayName ?: "未知"
-    val trace = if (record.attemptTrace.isEmpty()) "" else " · 尝试: ${record.attemptTrace.joinToString(" → ")}"
-    rows += TurnDiagnosticRow(label = "实际后端", value = "$backend$trace")
+    val backend = record.backend?.displayName ?: L10nRuntime.t("未知")
+    val trace = if (record.attemptTrace.isEmpty()) "" else L10nRuntime.format(" · 尝试: {0}", record.attemptTrace.joinToString(" → "))
+    rows += TurnDiagnosticRow(label = L10nRuntime.t("实际后端"), value = "$backend$trace")
     if (record.downgradeReasons.isNotEmpty()) {
         rows += TurnDiagnosticRow(
-            label = "回退/降级",
+            label = L10nRuntime.t("回退/降级"),
             value = record.downgradeReasons.joinToString("；") { downgradeReasonText(it) },
         )
     }
@@ -1129,8 +1137,8 @@ fun diagnosticRows(
     val actualCtx = record.actualContextTokens
     if (configuredCtx != null && actualCtx != null && configuredCtx != actualCtx) {
         rows += TurnDiagnosticRow(
-            label = "上下文",
-            value = "$configuredCtx → $actualCtx（仅本次，未修改设置）",
+            label = L10nRuntime.t("上下文"),
+            value = L10nRuntime.format("{0} → {1}（仅本次，未修改设置）", configuredCtx, actualCtx),
         )
     }
     val timings = buildList {
@@ -1138,9 +1146,9 @@ fun diagnosticRows(
         record.decodeMs?.let { add("decode ${it}ms") }
         record.ttftMs?.let { add("TTFT ${it}ms") }
         record.decodeTps?.let { add("${String.format(Locale.US, "%.1f", it)} tok/s") }
-        record.kvReuse?.let { add(if (it) "KV 复用" else "KV 未复用") }
+        record.kvReuse?.let { add(if (it) L10nRuntime.t("KV 复用") else L10nRuntime.t("KV 未复用")) }
     }
-    if (timings.isNotEmpty()) rows += TurnDiagnosticRow(label = "阶段计时", value = timings.joinToString(" · "))
+    if (timings.isNotEmpty()) rows += TurnDiagnosticRow(label = L10nRuntime.t("阶段计时"), value = timings.joinToString(" · "))
     return rows
 }
 
@@ -1210,7 +1218,7 @@ fun decideLookaheadCertification(
         LookaheadCertificationDecision.Certified(options)
     } else {
         LookaheadCertificationDecision.NotCertified(
-            listOf("native 构建身份缺失（握手缺席），无法认证"),
+            listOf(L10nRuntime.t("native 构建身份缺失（握手缺席），无法认证")),
         )
     }
 }
@@ -1234,22 +1242,22 @@ private suspend fun runLookaheadCertification(
     // BackendManager/共享 native 模型，releaseOthers/ensureAttemptLoaded 会中途换/释放已加载
     // 模型，聊天回复损坏或基准样本无效。
     if (container.backendManager.isGenerating()) {
-        return LookaheadCertificationDecision.NotCertified(listOf("当前有生成任务进行中，请稍后再试"))
+        return LookaheadCertificationDecision.NotCertified(listOf(L10nRuntime.t("当前有生成任务进行中，请稍后再试")))
     }
     if (runner.isThermallyHot()) {
-        return LookaheadCertificationDecision.NotCertified(listOf("设备过热，基准未执行（请降温后重试）"))
+        return LookaheadCertificationDecision.NotCertified(listOf(L10nRuntime.t("设备过热，基准未执行（请降温后重试）")))
     }
     val settings = container.settingsRepository
     val snapshot = settings.getLocalInferenceSettingsNow()
     val activeModelId = settings.getActiveLocalModelIdNow()
     val modelPath = if (activeModelId.isNullOrBlank()) null else ModelPathResolver.getLoadPath(context, activeModelId)
     if (activeModelId.isNullOrBlank() || modelPath == null) {
-        return LookaheadCertificationDecision.NotCertified(listOf("未选择本地模型或模型文件缺失"))
+        return LookaheadCertificationDecision.NotCertified(listOf(L10nRuntime.t("未选择本地模型或模型文件缺失")))
     }
     // Task 7 review M-2：native 握手缺席快速失败——此前跑完 2×4 轮才在判定链发现身份缺失，
     // 白费 1-2 分钟。文案与判定链 Reject 原因一致。
     val runtime = MnnBridge.runtimeInfo ?: return LookaheadCertificationDecision.NotCertified(
-        listOf("native 构建身份缺失（握手缺席），无法认证"),
+        listOf(L10nRuntime.t("native 构建身份缺失（握手缺席），无法认证")),
     )
     // 指纹与认证记录键同源（Task 6 M-3）：device = deviceFingerprintOf，model = config.json 内容哈希。
     val deviceFingerprint = BackendHealthCoordinator.deviceFingerprintOf()
@@ -1334,20 +1342,20 @@ private suspend fun runDecodeOptionCertification(
     runner: LocalInferenceBenchmarkRunner,
 ): DecodeOptionCertificationOutcome {
     if (container.backendManager.isGenerating()) {
-        return DecodeOptionCertificationOutcome.NotCertified(listOf("当前有生成任务进行中，请稍后再试"))
+        return DecodeOptionCertificationOutcome.NotCertified(listOf(L10nRuntime.t("当前有生成任务进行中，请稍后再试")))
     }
     if (runner.isThermallyHot()) {
-        return DecodeOptionCertificationOutcome.NotCertified(listOf("设备过热，基准未执行（请降温后重试）"))
+        return DecodeOptionCertificationOutcome.NotCertified(listOf(L10nRuntime.t("设备过热，基准未执行（请降温后重试）")))
     }
     val settings = container.settingsRepository
     val snapshot = settings.getLocalInferenceSettingsNow()
     val activeModelId = settings.getActiveLocalModelIdNow()
     val modelPath = if (activeModelId.isNullOrBlank()) null else ModelPathResolver.getLoadPath(context, activeModelId)
     if (activeModelId.isNullOrBlank() || modelPath == null) {
-        return DecodeOptionCertificationOutcome.NotCertified(listOf("未选择本地模型或模型文件缺失"))
+        return DecodeOptionCertificationOutcome.NotCertified(listOf(L10nRuntime.t("未选择本地模型或模型文件缺失")))
     }
     val runtime = MnnBridge.runtimeInfo ?: return DecodeOptionCertificationOutcome.NotCertified(
-        listOf("native 构建身份缺失（握手缺席），无法认证"),
+        listOf(L10nRuntime.t("native 构建身份缺失（握手缺席），无法认证")),
     )
     val deviceFingerprint = BackendHealthCoordinator.deviceFingerprintOf()
     val modelFingerprint = modelConfigFingerprint(modelPath)
@@ -1386,7 +1394,7 @@ private suspend fun runDecodeOptionCertification(
 
     val candidates = DecodeOptionCertification.candidatesFor(paramsB).filter { DecodeOptionCertification.whitelisted(it) }
     if (candidates.isEmpty()) {
-        return DecodeOptionCertificationOutcome.NotCertified(listOf("无可用候选档位"))
+        return DecodeOptionCertificationOutcome.NotCertified(listOf(L10nRuntime.t("无可用候选档位")))
     }
 
     val candidateSamples = mutableMapOf<DecodeOptionCertification.Candidate, BenchmarkSample>()
@@ -1406,7 +1414,7 @@ private suspend fun runDecodeOptionCertification(
     val chosen = winner
         ?: return DecodeOptionCertificationOutcome.NotCertified(
             rejectReasons.flatMap { (label, reasons) -> listOf("[$label] " + reasons.joinToString("；")) }
-                .ifEmpty { listOf("所有候选均未达标") },
+                .ifEmpty { listOf(L10nRuntime.t("所有候选均未达标")) },
         )
 
     // 胜者可靠性复核：零空响应/乱码/复读/回退才允许落盘。
@@ -1420,7 +1428,7 @@ private suspend fun runDecodeOptionCertification(
     val reliability = runner.runReliability(case, rounds = DecodeOptionCertification.RELIABILITY_ROUNDS)
     val veto = DecodeOptionCertification.reliabilityVeto(reliability)
     if (veto.isNotEmpty()) {
-        return DecodeOptionCertificationOutcome.NotCertified(listOf("[${chosen.label} 可靠性否决] " + veto.joinToString("；")))
+        return DecodeOptionCertificationOutcome.NotCertified(listOf(L10nRuntime.format("[{0} 可靠性否决] ", chosen.label) + veto.joinToString("；")))
     }
 
     val certCase = InferenceBenchmarkCase(
@@ -1441,7 +1449,7 @@ private suspend fun runDecodeOptionCertification(
         dynamicOption = chosen.dynamicOption,
         configHash = configHash,
         nowElapsedMs = SystemClock.elapsedRealtime(),
-    ) ?: return DecodeOptionCertificationOutcome.NotCertified(listOf("native 构建身份缺失，无法认证"))
+    ) ?: return DecodeOptionCertificationOutcome.NotCertified(listOf(L10nRuntime.t("native 构建身份缺失，无法认证")))
 
     container.inferenceCertificationStore.save(options)
     val gain = if (baselineSample.decodeTpsMedian > 0) {
@@ -1453,7 +1461,7 @@ private suspend fun runDecodeOptionCertification(
         "?"
     }
     return DecodeOptionCertificationOutcome.Certified(
-        text = "${chosen.label}（decode +$gain，可靠性 ${reliability.totalRounds} 轮满分）",
+        text = L10nRuntime.format("{0}（decode +{1}，可靠性 {2} 轮满分）", chosen.label, gain, reliability.totalRounds),
         options = options,
     )
 }
@@ -1477,14 +1485,14 @@ sealed interface PrefillBenchmarkOutcome {
 fun prefillComparisonText(cpu: BenchmarkScenarioResult, gpu: BenchmarkScenarioResult): String {
     fun fmt(r: BenchmarkScenarioResult): String {
         val prefill = r.summary.medianPrefillTps
-            ?.let { "prefill ${String.format(Locale.US, "%.1f", it)} tok/s" } ?: "prefill 无数据"
+            ?.let { "prefill ${String.format(Locale.US, "%.1f", it)} tok/s" } ?: L10nRuntime.t("prefill 无数据")
         val ttft = r.summary.medianTtftMs
-            ?.let { "TTFT ${it.toInt()}ms" } ?: "TTFT 无数据"
+            ?.let { "TTFT ${it.toInt()}ms" } ?: L10nRuntime.t("TTFT 无数据")
         val decode = r.summary.medianDecodeTps
-            ?.let { "decode ${String.format(Locale.US, "%.1f", it)} tok/s" } ?: "decode 无数据"
+            ?.let { "decode ${String.format(Locale.US, "%.1f", it)} tok/s" } ?: L10nRuntime.t("decode 无数据")
         val backend = r.actualBackendCounts?.entries?.joinToString(" ") { "${it.key}=${it.value}" }
-            ?.let { " | 实际后端: $it" }.orEmpty()
-        val kv = r.summary.kvReuseRate?.let { " | KV复用率 ${String.format(Locale.US, "%.2f", it)}" }.orEmpty()
+            ?.let { L10nRuntime.format(" | 实际后端: {0}", it) }.orEmpty()
+        val kv = r.summary.kvReuseRate?.let { L10nRuntime.format(" | KV复用率 {0}", String.format(Locale.US, "%.2f", it)) }.orEmpty()
         return "$prefill / $ttft / $decode$backend$kv"
     }
     return "CPU: ${fmt(cpu)}\nGPU: ${fmt(gpu)}"
@@ -1503,20 +1511,20 @@ private suspend fun runPrefillCpuVsGpu(
     runner: LocalInferenceBenchmarkRunner,
 ): PrefillBenchmarkOutcome {
     if (container.backendManager.isGenerating()) {
-        return PrefillBenchmarkOutcome.Skipped("当前有生成任务进行中，请稍后再试")
+        return PrefillBenchmarkOutcome.Skipped(L10nRuntime.t("当前有生成任务进行中，请稍后再试"))
     }
     if (runner.isThermallyHot()) {
-        return PrefillBenchmarkOutcome.Skipped("设备过热，基准未执行（请降温后重试）")
+        return PrefillBenchmarkOutcome.Skipped(L10nRuntime.t("设备过热，基准未执行（请降温后重试）"))
     }
     if (!container.backendManager.mnnGpuSupported) {
-        return PrefillBenchmarkOutcome.Skipped("设备不支持 OpenCL GPU，无法对比")
+        return PrefillBenchmarkOutcome.Skipped(L10nRuntime.t("设备不支持 OpenCL GPU，无法对比"))
     }
     val settings = container.settingsRepository
     val snapshot = settings.getLocalInferenceSettingsNow()
     val activeModelId = settings.getActiveLocalModelIdNow()
     val modelPath = if (activeModelId.isNullOrBlank()) null else ModelPathResolver.getLoadPath(context, activeModelId)
     if (activeModelId.isNullOrBlank() || modelPath == null) {
-        return PrefillBenchmarkOutcome.Skipped("未选择本地模型或模型文件缺失")
+        return PrefillBenchmarkOutcome.Skipped(L10nRuntime.t("未选择本地模型或模型文件缺失"))
     }
     val deviceFingerprint = BackendHealthCoordinator.deviceFingerprintOf()
     val configHash = DeviceRuntimeFingerprint.compute(
@@ -1537,7 +1545,9 @@ private suspend fun runPrefillCpuVsGpu(
         target = BenchmarkTarget.CPU_OPTIMIZED,
     )
     if (cpu.recordedSampleCount == 0) {
-        return PrefillBenchmarkOutcome.Skipped("CPU 基准零样本（日志见上；剔除原因：${cpu.discardedReasons.joinToString("；")}）")
+        return PrefillBenchmarkOutcome.Skipped(
+            L10nRuntime.format("CPU 基准零样本（日志见上；剔除原因：{0}）", cpu.discardedReasons.joinToString("；")),
+        )
     }
     val gpu = runner.run(
         scenario = InferenceBenchmarkScenario.LONG_PREFILL,
@@ -1549,7 +1559,7 @@ private suspend fun runPrefillCpuVsGpu(
     )
     if (gpu.recordedSampleCount == 0) {
         return PrefillBenchmarkOutcome.Skipped(
-            "GPU 基准零样本（可能 OpenCL 不可用或全量回退 CPU；剔除原因：${gpu.discardedReasons.joinToString("；")}）",
+            L10nRuntime.format("GPU 基准零样本（可能 OpenCL 不可用或全量回退 CPU；剔除原因：{0}）", gpu.discardedReasons.joinToString("；")),
         )
     }
     return PrefillBenchmarkOutcome.Done(prefillComparisonText(cpu, gpu))
@@ -1569,7 +1579,7 @@ private suspend fun runGpuPreheat(
     val modelId = settings.getActiveLocalModelIdNow()
     val modelPath = if (modelId.isNullOrBlank()) null else ModelPathResolver.getLoadPath(context, modelId)
     if (modelId.isNullOrBlank() || modelPath == null) {
-        return GpuPreheatCoordinator.PreheatResult.Skipped("未选择本地模型或模型文件缺失")
+        return GpuPreheatCoordinator.PreheatResult.Skipped(L10nRuntime.t("未选择本地模型或模型文件缺失"))
     }
     return coordinator.preheat(modelId, modelPath)
 }
