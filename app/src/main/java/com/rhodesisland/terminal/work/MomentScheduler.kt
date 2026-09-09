@@ -73,6 +73,19 @@ object MomentScheduler {
     }
 
     /**
+     * 严格轮询选角色（自动发圈 Worker 与设置页「测试连接」共用同一条轮换链）：
+     * 发上一位（moment_last_char_id）的下一个；无记录/记录失效则从排序后的第一位开始。
+     * 调用方在成功投递后写回 [SettingsRepository.setMomentLastCharId] 推进轮换。
+     */
+    suspend fun pickNextCharacter(settings: SettingsRepository, charIds: Set<String>): String {
+        if (charIds.size == 1) return charIds.first()
+        val sorted = charIds.sorted()
+        val last = settings.getMomentLastCharIdNow()
+        val idx = last?.let { sorted.indexOf(it).takeIf { i -> i >= 0 } }
+        return if (idx != null) sorted[(idx + 1) % sorted.size] else sorted.first()
+    }
+
+    /**
      * 下一次触发绝对时间（epoch ms）= now + intervalHours ± 12.5% 抖动，并钳制到发圈时段内
      * （落进 [AppConfig.Moment.HOUR_START]–[HOUR_END] 之外则推到下一个时段起点）。纯函数。
      */

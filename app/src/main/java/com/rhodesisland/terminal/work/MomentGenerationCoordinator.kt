@@ -90,7 +90,8 @@ class MomentGenerationCoordinator(
         var images: List<String> = emptyList()
         var degraded = false
         val imageGenConfig = settings.getMomentImageGenConfigNow()
-        if (imageCount > 0 && imageGenConfig.isConfigured && parsed.imagePrompt.isNotBlank()) {
+        val imageGenEnabled = settings.getMomentImageGenEnabledNow()
+        if (imageCount > 0 && imageGenEnabled && imageGenConfig.isConfigured && parsed.imagePrompt.isNotBlank()) {
             images = try {
                 imageGenClient.generateAndSave(
                     config = imageGenConfig,
@@ -103,9 +104,10 @@ class MomentGenerationCoordinator(
                 android.util.Log.w("MomentGen", "生图失败，降级纯文字发圈", e)
                 emptyList()
             }
-        } else if (imageCount > 0 && !imageGenConfig.isConfigured) {
+        } else if (imageCount > 0 && imageGenEnabled && !imageGenConfig.isConfigured) {
             degraded = true
         }
+        // 开关关闭 = 有意纯文字发圈，不算降级
 
         val postId = momentRepository.addCharacterPost(
             characterId = characterId,

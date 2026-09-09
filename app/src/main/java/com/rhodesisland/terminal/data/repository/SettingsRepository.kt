@@ -142,6 +142,11 @@ class SettingsRepository(private val store: SettingsStore) {
     val momentCoverPath: Flow<String> = store.momentCoverPath
     suspend fun setMomentCoverPath(path: String?) = store.setMomentCoverPath(path)
 
+    /** 朋友圈生图开关（关闭=角色发圈纯文字，即使生图 API 已配置；默认开）。 */
+    val momentImageGenEnabled: Flow<Boolean> = store.momentImageGenEnabled
+    suspend fun getMomentImageGenEnabledNow(): Boolean = dataStoreFirst(momentImageGenEnabled, true)
+    suspend fun setMomentImageGenEnabled(enabled: Boolean) = store.setMomentImageGenEnabled(enabled)
+
     /** 自动发圈配置（开关/间隔/角色集）。 */
     val momentAutoConfig: Flow<MomentAutoConfig> = store.momentAutoConfig
     suspend fun getMomentAutoConfigNow(): MomentAutoConfig = store.getMomentAutoConfigNow()

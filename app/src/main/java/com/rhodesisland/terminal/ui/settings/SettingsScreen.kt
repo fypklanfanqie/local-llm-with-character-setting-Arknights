@@ -1925,11 +1925,17 @@ private fun MomentsSection(container: AppContainer, scope: CoroutineScope) {
     // 云端辅助功能与聊天 Provider 切换解耦：只看是否配置过云端 API
     val apiCfg by settings.apiConfig.collectAsState(initial = ApiConfig())
     val cloudReady = apiCfg.apiKey.isNotBlank() || isFreeProxyBaseUrl(apiCfg.baseUrl)
+    // 朋友圈生图开关（关闭 = 角色发圈纯文字，生图 API 配置保留）
+    val imageGenEnabled by settings.momentImageGenEnabled.collectAsState(initial = true)
 
     CollapsibleSection(
         title = "朋友圈",
         key = "moment",
-        summary = if (baseUrl.isNotBlank() && apiKey.isNotBlank() && model.isNotBlank()) "生图已配置" else "未配置生图 API",
+        summary = when {
+            !imageGenEnabled -> "生图已关闭 · 纯文字发圈"
+            baseUrl.isNotBlank() && apiKey.isNotBlank() && model.isNotBlank() -> "生图已配置"
+            else -> "未配置生图 API"
+        },
     ) {
         GlassListRow(
             title = "自动发圈",
@@ -2002,6 +2008,29 @@ private fun MomentsSection(container: AppContainer, scope: CoroutineScope) {
                 TextButton(onClick = { showReplyPicker = true }) { Text("选择", fontSize = 12.sp) }
             }
 
+            // 朋友圈生图开关：关闭后角色发圈一律纯文字（生图 API 配置保留，随时可再打开）
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "朋友圈生图",
+                        color = scheme.onSurface, fontSize = 13.sp,
+                    )
+                    Text(
+                        if (imageGenEnabled) "角色发圈会尝试配图（按下方生图 API）"
+                        else "已关闭：角色发圈一律纯文字，不调用生图 API",
+                        color = scheme.onSurfaceVariant, fontSize = 11.sp,
+                    )
+                }
+                Switch(
+                    checked = imageGenEnabled,
+                    onCheckedChange = { on -> scope.launch { settings.setMomentImageGenEnabled(on) } },
+                )
+            }
+
             Text(
                 "生图 API（自动适配三类端点：OpenAI 聊天格式出图、gpt-image 类 Responses 端点、任务制媒体 API 如 lk888 的 /media/generate；Base URL 一般填到 /v1 或 /api/v1；生图与对话模型分开配置，留空则角色朋友圈为纯文字）。",
                 color = scheme.onSurfaceVariant, fontSize = 11.sp,
@@ -2025,32 +2054,38 @@ private fun MomentsSection(container: AppContainer, scope: CoroutineScope) {
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = scheme.primary.copy(alpha = 0.16f)),
                 ) { Text(if (saved) "✓ 已保存" else "保存生图配置", color = scheme.primary, fontSize = 13.sp) }
-                // 测试连接：按一下 = 保存当前配置 + 立刻真实发一条朋友圈（验证云端连接）
+                // 测试连接：按一下 = 保存当前配置 + 立刻真实发一条朋友圈（验证云端连接）；
+                // 发圈角色按「发圈角色」列表严格轮换（与自动发圈同一条轮换链），多次测试依次换人
                 TextButton(
                     onClick = {
                         if (!cloudReady) {
                             probeResult = "连接失败：请先在上方配置云端 AI API"
                             return@TextButton
                         }
-                        val charId = autoEnabled.characterIds.firstOrNull() ?: characters.firstOrNull()?.id
-                        if (charId == null) {
+                        val selectedIds = autoEnabled.characterIds
+                        val fallbackId = characters.firstOrNull()?.id
+                        if (selectedIds.isEmpty() && fallbackId == null) {
                             probeResult = "连接失败：请先选择发圈角色"
                             return@TextButton
                         }
-                        val charName = characters.firstOrNull { it.id == charId }?.name ?: "角色"
                         probeRunning = true
                         probeResult = null
                         scope.launch {
                             try {
+                                val charId = if (selectedIds.isEmpty()) fallbackId!!
+                                else com.rhodesisland.terminal.work.MomentScheduler.pickNextCharacter(settings, selectedIds)
+                                val charName = characters.firstOrNull { it.id == charId }?.name ?: "角色"
                                 settings.setMomentImageGenConfig(
                                     com.rhodesisland.terminal.data.model.MomentImageGenConfig(
                                         baseUrl = baseUrl, apiKey = apiKey, model = model,
                                     ),
                                 )
                                 saved = true
-                                // 生图 API 齐全则带 1 张图（全链路验证）；留空则纯文字
-                                val imageCount = if (com.rhodesisland.terminal.data.model.MomentImageGenConfig(baseUrl, apiKey, model).isConfigured) 1 else 0
+                                // 生图开关打开且 API 齐全则带 1 张图（全链路验证）；否则纯文字
+                                val imageCount = if (imageGenEnabled && com.rhodesisland.terminal.data.model.MomentImageGenConfig(baseUrl, apiKey, model).isConfigured) 1 else 0
                                 val post = container.momentGenerationCoordinator.generateAndPost(charId, imageCount)
+                                // 成功投递后写回轮换记录（与自动发圈 Worker 同语义，测试也推进轮换）
+                                runCatching { settings.setMomentLastCharId(charId) }
                                 probeResult = when {
                                     imageCount > 0 && post.degradedToTextOnly ->
                                         "连接成功：「$charName」已发一条朋友圈（生图失败已降级纯文字，请检查生图 API 配置）"
@@ -2074,7 +2109,7 @@ private fun MomentsSection(container: AppContainer, scope: CoroutineScope) {
             }
             if (probeResult == null) {
                 Text(
-                    "点「测试连接」会保存当前生图配置，并立刻让一位发圈角色真实发一条朋友圈（生图 API 已填则带图），当场验证连接是否可用。",
+                    "点「测试连接」会保存当前生图配置，并立刻让一位发圈角色真实发一条朋友圈（生图 API 已填则带图），当场验证连接是否可用；多次点击会按「发圈角色」列表轮换发帖人。",
                     color = scheme.onSurfaceVariant, fontSize = 11.sp,
                 )
             }

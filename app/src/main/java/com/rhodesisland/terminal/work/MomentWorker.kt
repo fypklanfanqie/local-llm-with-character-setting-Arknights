@@ -6,10 +6,8 @@ import androidx.work.WorkerParameters
 import com.rhodesisland.terminal.AppContainer
 import com.rhodesisland.terminal.RhodesApp
 import com.rhodesisland.terminal.config.AppConfig
-import com.rhodesisland.terminal.data.model.ChatProviderType
 import kotlinx.coroutines.delay
 import java.util.Calendar
-import kotlin.random.Random
 
 /**
  * 自动发圈 Worker：由 [MomentScheduler] 的 PeriodicWork 每 15 分钟驱动。检查
@@ -64,8 +62,8 @@ class MomentWorker(
         }
         if (now < nextFire) return Result.success()
 
-        // 3. 到点：轮换选角色并生成
-        val charId = pickCharacter(settings, state.charIds)
+        // 3. 到点：轮换选角色并生成（与设置页「测试连接」共用同一条轮换链）
+        val charId = MomentScheduler.pickNextCharacter(settings, state.charIds)
         val delivered = try {
             container.momentGenerationCoordinator.generateAndPost(charId, imageCount = 1)
             true
@@ -102,19 +100,6 @@ class MomentWorker(
             if (attempt < GATING_READ_ATTEMPTS - 1) delay(GATING_READ_RETRY_MS)
         }
         return null
-    }
-
-    /** 严格轮询（与 GreetingWorker.pickCharacter 语义一致）。 */
-    private suspend fun pickCharacter(
-        settings: com.rhodesisland.terminal.data.repository.SettingsRepository,
-        charIds: Set<String>,
-    ): String {
-        if (charIds.size == 1) return charIds.first()
-        val sorted = charIds.sorted()
-        val last = settings.getMomentLastCharIdNow()
-        val idx = last?.let { sorted.indexOf(it).takeIf { i -> i >= 0 } }
-        return if (idx != null) sorted[(idx + 1) % sorted.size]
-        else sorted[Random.nextInt(sorted.size)]
     }
 
     private suspend fun withTimeoutOrNullCompat(block: suspend () -> Unit) {

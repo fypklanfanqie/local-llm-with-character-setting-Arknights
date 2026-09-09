@@ -194,6 +194,8 @@ class SettingsStore(
         val MOMENT_IMAGEGEN_MODEL = stringPreferencesKey("moment_imagegen_model")
         // 朋友圈封面图内部存储路径（空=默认渐变）
         val MOMENT_COVER_PATH = stringPreferencesKey("moment_cover_path")
+        // 朋友圈生图开关（关闭则角色发圈为纯文字，即使生图 API 已配置；默认开）
+        val MOMENT_IMAGEGEN_ENABLED = booleanPreferencesKey("moment_imagegen_enabled")
         // 自动发圈：开关 + 间隔（小时）+ 参与角色集 + 下次触发时间 + 上次发帖角色（轮换）
         val MOMENT_AUTO_ENABLED = booleanPreferencesKey("moment_auto_enabled")
         val MOMENT_AUTO_INTERVAL_HOURS = intPreferencesKey("moment_auto_interval_hours")
@@ -345,6 +347,14 @@ class SettingsStore(
         dataStore.edit { p ->
             if (path.isNullOrBlank()) p.remove(Keys.MOMENT_COVER_PATH) else p[Keys.MOMENT_COVER_PATH] = path
         }
+    }
+
+    // 朋友圈生图开关（默认开；关闭则角色发圈纯文字）
+    val momentImageGenEnabled: Flow<Boolean> =
+        dataStore.data.map { p -> p[Keys.MOMENT_IMAGEGEN_ENABLED] ?: true }
+
+    suspend fun setMomentImageGenEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.MOMENT_IMAGEGEN_ENABLED] = enabled }
     }
 
     val momentAutoConfig: Flow<MomentAutoConfig> = dataStore.data.map { p ->
