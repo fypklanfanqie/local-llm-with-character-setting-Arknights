@@ -34,7 +34,10 @@ param(
     [string]$SrcRoot,
     [string[]]$Dir,
     [switch]$List,
-    [int]$Top = 25
+    [int]$Top = 25,
+    # 不翻译的路径（方案：LLM 提示词 / 角色人设 / 词典自身 / 提示词生成器）。
+    # 需要审计 llm/ 里的诊断层文案时传更宽松的正则，例如：-SkipPathRegex '([\\/]config[\\/]|[\\/]i18n[\\/]|Prompt)'
+    [string]$SkipPathRegex = '(?i)([\\/]llm[\\/]|[\\/]config[\\/]|[\\/]i18n[\\/]|Prompt)'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -48,8 +51,6 @@ $DefaultDirs = @(
     'ui', 'work', 'notification', 'util', 'provider', 'conversationexport', 'manager',
     'tts', 'service', 'perfmon', 'data'
 )
-# 不翻译的路径（方案：LLM 提示词 / 角色人设 / 词典自身 / 提示词生成器）
-$SkipPathRegex = '(?i)([\\/]llm[\\/]|[\\/]config[\\/]|[\\/]i18n[\\/]|Prompt)'
 $CjkRegex = '[\u4e00-\u9fff\u3400-\u4dbf\u3040-\u30ff]'
 
 function Get-KotlinStringLiterals {
@@ -98,8 +99,46 @@ function Get-KotlinStringLiterals {
             $i++
             while ($i -lt $n) {
                 $ch = $Text[$i]
-                if ($ch -eq '\') { if (($i + 1) -lt $n) { [void]$sb.Append($Text[$i + 1]) }; $i += 2; continue }
+                if ($ch -eq '\') {
+                    # 保留转义原样（\n / \" / \$），报告里的字符串与 Kotlin 源码字面量一致，可直接当词典 key
+                    if (($i + 1) -lt $n) { [void]$sb.Append($ch); [void]$sb.Append($Text[$i + 1]) }
+                    $i += 2
+                    continue
+                }
                 if ($ch -eq '"') { break }
+                # ${...} 模板表达式：整体吃掉（含内部嵌套字符串/花括号），否则内部引号会被误当字符串结尾
+                if ($ch -eq '$' -and ($i + 1) -lt $n -and $Text[$i + 1] -eq '{') {
+                    [void]$sb.Append('${')
+                    $i += 2
+                    $depth = 1
+                    while ($i -lt $n -and $depth -gt 0) {
+                        $c2 = $Text[$i]
+                        if ($c2 -eq '{') { $depth++ }
+                        elseif ($c2 -eq '}') { $depth-- }
+                        elseif ($c2 -eq '"') {
+                            [void]$sb.Append($c2)
+                            $i++
+                            while ($i -lt $n -and $Text[$i] -ne '"') {
+                                if ($Text[$i] -eq '\') {
+                                    [void]$sb.Append($Text[$i])
+                                    $i++
+                                    if ($i -lt $n) { [void]$sb.Append($Text[$i]); $i++ }
+                                    continue
+                                }
+                                if ($Text[$i] -eq "`n") { $line++ }
+                                [void]$sb.Append($Text[$i])
+                                $i++
+                            }
+                            if ($i -lt $n) { [void]$sb.Append('"'); $i++ }
+                            continue
+                        }
+                        if ($c2 -eq "`n") { $line++ }
+                        [void]$sb.Append($c2)
+                        $i++
+                    }
+                    if ($i -lt $n -and $Text[$i] -eq '}') { [void]$sb.Append('}'); $i++ }
+                    continue
+                }
                 if ($ch -eq "`n") { $line++ }
                 [void]$sb.Append($ch)
                 $i++
@@ -114,11 +153,11 @@ function Get-KotlinStringLiterals {
                 $k = $j - 1
                 while ($k -ge 0 -and [char]::IsWhiteSpace($Text[$k])) { $k-- }
                 $end = $k
-                while ($k -ge 0 -and ([char]::IsLetterOrDigit($Text[$k]) -or $Text[$k] -eq '_')) { $k-- }
+                while ($k -ge 0 -and ([char]::IsLetterOrDigit($Text[$k]) -or $Text[$k] -eq '_' -or $Text[$k] -eq '.')) { $k-- }
                 if ($end -ge ($k + 1)) { $prefix = $Text.Substring($k + 1, $end - $k) }
             }
 
-            $out.Add([pscustomobject]@{ Line = $startLine; Value = $sb.ToString(); Prefix = $prefix })
+            $out.Add([pscustomobject]@{ Line = $startLine; Pos = $start; Value = $sb.ToString(); Prefix = $prefix })
             continue
         }
         # 字符字面量
@@ -143,58 +182,115 @@ if (-not $Dir -or $Dir.Count -eq 0) { $Dir = $DefaultDirs }
 
 $SrcRoot = (Resolve-Path -LiteralPath $SrcRoot).Path
 $files = foreach ($d in $Dir) {
-    $p = Join-Path $SrcRoot $d
-    if (Test-Path -LiteralPath $p) {
-        Get-ChildItem -LiteralPath $p -Recurse -File -Filter *.kt
+    foreach ($one in ($d -split ',')) {
+        $p = Join-Path $SrcRoot $one.Trim()
+        if (Test-Path -LiteralPath $p) {
+            Get-ChildItem -LiteralPath $p -Recurse -File -Filter *.kt
+        }
     }
 }
 $files = $files | Where-Object { $_.FullName -notmatch $SkipPathRegex } | Sort-Object FullName -Unique
 
+# 词典已收录的 key（中文原文）：数据驱动内容（如 ui/guide 的内容层）在渲染处包装，
+# 源码字面量本身不会被 t() 包住，用「是否已进词典」衡量这部分进度。
+$dictKeys = New-Object 'System.Collections.Generic.HashSet[string]'
+$dictDir = Join-Path $SrcRoot 'i18n\dict'
+if (Test-Path -LiteralPath $dictDir) {
+    foreach ($df in (Get-ChildItem -LiteralPath $dictDir -File -Filter 'En*.kt')) {
+        $dtext = [System.IO.File]::ReadAllText($df.FullName, [System.Text.Encoding]::UTF8)
+        foreach ($m in [regex]::Matches($dtext, '(?m)^\s*"((?:[^"\\]|\\.)*)"\s+to\s+"')) {
+            [void]$dictKeys.Add($m.Groups[1].Value)
+        }
+    }
+}
+
 $rows = [System.Collections.Generic.List[object]]::new()
 $totalZh = 0
 $wrappedZh = 0
+$inDictZh = 0
+$logZh = 0
+$ignoredZh = 0
+# 调试日志（Log.d/w/i/e、CrashCapture.logEvent）按方案不翻译：不计入分母
+$LogCallRegex = '(?s)(Log\.[dwiev]\(|CrashCapture\.log\w*\(|\.logEvent\()[^)]*$'
+# 认定「已包装」的调用前缀（严格白名单，避免把 String.format("中文…") 误判成已翻译）
+$WrappedPrefixes = @('t', 'tf', 'L10n.t', 'L10n.format', 'L10nRuntime.t', 'L10nRuntime.format')
 
 foreach ($f in $files) {
     $text = [System.IO.File]::ReadAllText($f.FullName, [System.Text.Encoding]::UTF8)
+    $fileLines = $text -split "`r?`n"
     foreach ($lit in (Get-KotlinStringLiterals -Text $text)) {
         if ($lit.Value -notmatch $CjkRegex) { continue }
+        $ctxStart = [Math]::Max(0, $lit.Pos - 120)
+        $ctx = $text.Substring($ctxStart, $lit.Pos - $ctxStart)
+        $isLog = $ctx -match $LogCallRegex
+        if ($isLog) { $logZh++; continue }
+        # 显式豁免：源码行含 `l10n:ignore`（如 TTS 文本规范化、协议常量等非界面文案）
+        $srcLine = if ($lit.Line -ge 1 -and $lit.Line -le $fileLines.Count) { $fileLines[$lit.Line - 1] } else { '' }
+        if ($srcLine -match 'l10n:ignore') { $ignoredZh++; continue }
         $totalZh++
-        $isWrapped = $lit.Prefix -eq 't' -or $lit.Prefix -eq 'tf'
+        $isWrapped = $WrappedPrefixes -contains $lit.Prefix
         if ($isWrapped) { $wrappedZh++ }
+        $inDict = $dictKeys.Contains($lit.Value)
+        if ($inDict) { $inDictZh++ }
         $rows.Add([pscustomobject]@{
             File    = $f.FullName.Substring($SrcRoot.Length).TrimStart('\', '/')
             Line    = $lit.Line
             Wrapped = $isWrapped
+            InDict  = $inDict
             Value   = $lit.Value
         })
     }
 }
 
-$unwrapped = $rows | Where-Object { -not $_.Wrapped }
-$coverage = if ($totalZh -eq 0) { 100 } else { [math]::Round(100.0 * $wrappedZh / $totalZh, 1) }
+$pending = @($rows | Where-Object { -not $_.Wrapped -and -not $_.InDict })
+# 已包 t()/tf() 但词典里没有这条 key —— 切到英/日会静默回退中文，必须补齐（每批 QA 门禁）
+$missingDict = @($rows | Where-Object { $_.Wrapped -and -not $_.InDict })
+$covered = @($rows | Where-Object { $_.Wrapped -or $_.InDict })
+# 词典有这条 key、但源码里这句中文没被 t()/tf() 包住（数据驱动内容在渲染处包属正常；否则是漏包）
+$unwrappedInDict = @($rows | Where-Object { $_.InDict -and -not $_.Wrapped })
+$coverage = if ($totalZh -eq 0) { 100 } else { [math]::Round(100.0 * $covered.Count / $totalZh, 1) }
+$wrapRate = if ($totalZh -eq 0) { 100 } else { [math]::Round(100.0 * $wrappedZh / $totalZh, 1) }
 
 Write-Output "扫描根目录 : $SrcRoot"
 Write-Output "扫描文件数 : $($files.Count)"
-Write-Output "中文字面量 : $totalZh  (已包装 $wrappedZh / 未包装 $($unwrapped.Count))"
-Write-Output "词典覆盖度 : $coverage%"
+Write-Output "中文字面量 : $totalZh  (已包装 $wrappedZh / 已进词典 $inDictZh / 待处理 $($pending.Count)；另有 $logZh 条调试日志、$ignoredZh 条 l10n:ignore 豁免，均不翻译)"
+Write-Output "包装率     : $wrapRate%   词典覆盖度（包装 + 已进词典）: $coverage%"
+if ($missingDict.Count -gt 0) {
+    Write-Output "已包装但缺词条 : $($missingDict.Count) 条（切到英/日会回退中文，需补词典）"
+}
+if ($unwrappedInDict.Count -gt 0) {
+    Write-Output "已进词典但未包装 : $($unwrappedInDict.Count) 条（数据驱动内容可忽略，其余是漏包）"
+}
 Write-Output ''
 
-Write-Output '--- 按目录（未包装条数）---'
-$unwrapped |
+if ($List -and $missingDict.Count -gt 0) {
+    Write-Output '--- 已包装但缺词条 ---'
+    $missingDict | Sort-Object File, Line | ForEach-Object { '{0}:{1}  {2}' -f $_.File, $_.Line, $_.Value }
+    Write-Output ''
+}
+
+if ($List -and $unwrappedInDict.Count -gt 0) {
+    Write-Output '--- 已进词典但未包装 ---'
+    $unwrappedInDict | Sort-Object File, Line | ForEach-Object { '{0}:{1}  {2}' -f $_.File, $_.Line, $_.Value }
+    Write-Output ''
+}
+
+Write-Output '--- 按目录（待处理条数）---'
+$pending |
     Group-Object { ($_.File -split '[\\/]')[0..1] -join '\' } |
     Sort-Object Count -Descending |
     ForEach-Object { '{0,6}  {1}' -f $_.Count, $_.Name }
 Write-Output ''
 
-Write-Output "--- 未包装最多的文件（前 $Top）---"
-$byFile = $unwrapped | Group-Object File | Sort-Object Count -Descending
+Write-Output "--- 待处理最多的文件（前 $Top）---"
+$byFile = $pending | Group-Object File | Sort-Object Count -Descending
 if ($Top -gt 0) { $byFile = $byFile | Select-Object -First $Top }
 $byFile | ForEach-Object { '{0,6}  {1}' -f $_.Count, $_.Name }
 
 if ($List) {
     Write-Output ''
-    Write-Output '--- 未包装明细 ---'
-    $unwrapped | Sort-Object File, Line | ForEach-Object {
+    Write-Output '--- 待处理明细 ---'
+    $pending | Sort-Object File, Line | ForEach-Object {
         '{0}:{1}  {2}' -f $_.File, $_.Line, $_.Value
     }
 }
