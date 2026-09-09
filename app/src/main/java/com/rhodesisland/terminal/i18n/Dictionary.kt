@@ -23,7 +23,9 @@ internal val EnDictionaries: List<Pair<String, List<Pair<String, String>>>> = li
     "07Moment" to En07MomentEntries,
     "08Novel" to En08NovelEntries,
     "09System" to En09SystemEntries,
+    "09SystemB" to En09SystemBEntries,
     "10Export" to En10ExportEntries,
+    "11Diagnostics" to En11DiagnosticsEntries,
 )
 
 /** 日文词典注册表，顺序与 [EnDictionaries] 一致。 */
@@ -41,7 +43,9 @@ internal val JaDictionaries: List<Pair<String, List<Pair<String, String>>>> = li
     "07Moment" to Ja07MomentEntries,
     "08Novel" to Ja08NovelEntries,
     "09System" to Ja09SystemEntries,
+    "09SystemB" to Ja09SystemBEntries,
     "10Export" to Ja10ExportEntries,
+    "11Diagnostics" to Ja11DiagnosticsEntries,
 )
 
 /** 合并各批次词典；重复 key 保留最先出现的译文。 */
