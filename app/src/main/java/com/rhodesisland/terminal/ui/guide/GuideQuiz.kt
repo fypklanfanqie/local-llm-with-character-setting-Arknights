@@ -39,6 +39,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.rhodesisland.terminal.i18n.t
+import com.rhodesisland.terminal.i18n.tf
 import com.rhodesisland.terminal.ui.theme.GlassShapes
 import kotlinx.coroutines.delay
 
@@ -70,7 +72,7 @@ private val QUIZ_QUESTIONS: List<QuizQuestion> = listOf(
             "层数 × 上下文长度 × 词表大小 × 2字节",
         ),
         answerIndex = 1,
-        note = "LlmMemoryEstimator 精确公式（contextTokens×layerCount×2×kvHeads×headDim×bytesPerElement）；干扰项全是“看起来像显存估算”的假公式。",
+        note = "LlmMemoryEstimator 精确公式（contextTokens×layerCount×2×kvHeads×headDim×bytesPerElement）；干扰项全是“看起来像显存估算”的假公式。", // l10n:ignore 源码注释考察点，永不展示
     ),
 
     QuizQuestion(
@@ -82,7 +84,7 @@ private val QUIZ_QUESTIONS: List<QuizQuestion> = listOf(
             "AUTO 后端在任何设备上都会自动启用",
         ),
         answerIndex = 0,
-        note = "门禁在 profile resolver 层（device+model+CPU_OPTIMIZED+native 组合认证），认证前候选恒回落 lookahead=false；“最高速度模式”是最强诱饵。",
+        note = "门禁在 profile resolver 层（device+model+CPU_OPTIMIZED+native 组合认证），认证前候选恒回落 lookahead=false；“最高速度模式”是最强诱饵。", // l10n:ignore 源码注释考察点，永不展示
     ),
 
     QuizQuestion(
@@ -94,7 +96,7 @@ private val QUIZ_QUESTIONS: List<QuizQuestion> = listOf(
             "URL 包含 anthropic/claude 字样，或路径以 /v1/messages 结尾",
         ),
         answerIndex = 3,
-        note = "DirectLlmClient 按 baseUrl 字符串特征判定而非域名/请求头/模型名。",
+        note = "DirectLlmClient 按 baseUrl 字符串特征判定而非域名/请求头/模型名。", // l10n:ignore 源码注释考察点，永不展示
     ),
 
     QuizQuestion(
@@ -106,7 +108,7 @@ private val QUIZ_QUESTIONS: List<QuizQuestion> = listOf(
             "usage 里的 completion_tokens_details",
         ),
         answerIndex = 1,
-        note = "云端字段是 reasoning_content 再包装 <think>；A 极具迷惑性——<think> 标签直读是本地 MNN 才有的路径。",
+        note = "云端字段是 reasoning_content 再包装 <think>；A 极具迷惑性——<think> 标签直读是本地 MNN 才有的路径。", // l10n:ignore 源码注释考察点，永不展示
     ),
 
     QuizQuestion(
@@ -118,7 +120,7 @@ private val QUIZ_QUESTIONS: List<QuizQuestion> = listOf(
             "Room 数据库的一张加密表里，首次联网时下载",
         ),
         answerIndex = 2,
-        note = "ModelProviders：key 存 Cloudflare Worker 加密环境变量（App → Cloudflare 注入 key → 硅基流动），key 不出 Cloudflare，客户端 requiresApiKey=false。",
+        note = "ModelProviders：key 存 Cloudflare Worker 加密环境变量（App → Cloudflare 注入 key → 硅基流动），key 不出 Cloudflare，客户端 requiresApiKey=false。", // l10n:ignore 源码注释考察点，永不展示
     ),
 
     QuizQuestion(
@@ -130,7 +132,7 @@ private val QUIZ_QUESTIONS: List<QuizQuestion> = listOf(
             "设备必须连接 Wi-Fi 网络",
         ),
         answerIndex = 3,
-        note = "负向题；约束集合 = 周期心跳 + next_fire_at + 时段 + 配额 + 严格轮询，从未有网络类型判断。",
+        note = "负向题；约束集合 = 周期心跳 + next_fire_at + 时段 + 配额 + 严格轮询，从未有网络类型判断。", // l10n:ignore 源码注释考察点，永不展示
     ),
 
     QuizQuestion(
@@ -142,7 +144,7 @@ private val QUIZ_QUESTIONS: List<QuizQuestion> = listOf(
             "所有群成员依次作答",
         ),
         answerIndex = 2,
-        note = "MAX_REPLIES_PER_USER_MESSAGE = 4；A 用 discuss 轮人数概念混淆。",
+        note = "MAX_REPLIES_PER_USER_MESSAGE = 4；A 用 discuss 轮人数概念混淆。", // l10n:ignore 源码注释考察点，永不展示
     ),
 
     QuizQuestion(
@@ -154,7 +156,7 @@ private val QUIZ_QUESTIONS: List<QuizQuestion> = listOf(
             "复用 /chat/completions 并附加 video 模态参数",
         ),
         answerIndex = 0,
-        note = "双协议按 base URL 特征自动识别（SeedanceClient MEDIA_RELAY）；B 是官方真协议，恰是本题陷阱。",
+        note = "双协议按 base URL 特征自动识别（SeedanceClient MEDIA_RELAY）；B 是官方真协议，恰是本题陷阱。", // l10n:ignore 源码注释考察点，永不展示
     ),
 
     QuizQuestion(
@@ -166,7 +168,7 @@ private val QUIZ_QUESTIONS: List<QuizQuestion> = listOf(
             "仅在递归扫描第二遍时才会被注入",
         ),
         answerIndex = 2,
-        note = "SillyTavern 语义 constant=常驻；D 用递归扫描概念混淆。",
+        note = "SillyTavern 语义 constant=常驻；D 用递归扫描概念混淆。", // l10n:ignore 源码注释考察点，永不展示
     ),
 
     QuizQuestion(
@@ -178,7 +180,7 @@ private val QUIZ_QUESTIONS: List<QuizQuestion> = listOf(
             "经 ReplaceFileCorruptionHandler 删除损坏文件并以默认值重建",
         ),
         answerIndex = 3,
-        note = "DataStoreCorruption.tolerantCorruptionHandler 防闪退的删档重建设计；与 Room 无任何备份关系。",
+        note = "DataStoreCorruption.tolerantCorruptionHandler 防闪退的删档重建设计；与 Room 无任何备份关系。", // l10n:ignore 源码注释考察点，永不展示
     ),
 )
 
@@ -238,13 +240,13 @@ fun JiahaoQuizPage(
             // ---- 自绘头部：标题 + 进度（不放关闭钮，杜绝失败弹窗逃逸口）----
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "🏆 嘉豪认证考试",
+                    t("🏆 嘉豪认证考试"),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = scheme.onSurface,
                     modifier = Modifier.weight(1f),
                 )
-                Text("第 ${index + 1} / $QUIZ_TOTAL 题", color = scheme.onSurfaceVariant, fontSize = 12.sp)
+                Text(tf("第 {0} / {1} 题", index + 1, QUIZ_TOTAL), color = scheme.onSurfaceVariant, fontSize = 12.sp)
             }
             Box(
                 modifier = Modifier
@@ -274,7 +276,7 @@ fun JiahaoQuizPage(
             }
 
             Text(
-                question.question,
+                t(question.question),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
                 color = scheme.onSurface,
@@ -311,13 +313,13 @@ fun JiahaoQuizPage(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         Text("${OPTION_LETTERS[optionIndex]}.", color = scheme.primary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                        Text(option, color = scheme.onSurface, fontSize = 12.5.sp, lineHeight = 18.sp)
+                        Text(t(option), color = scheme.onSurface, fontSize = 12.5.sp, lineHeight = 18.sp)
                     }
                 }
             }
 
             Text(
-                "选定后立即锁定，无法修改",
+                t("选定后立即锁定，无法修改"),
                 color = scheme.onSurfaceVariant, fontSize = 10.sp,
             )
 
@@ -348,9 +350,9 @@ fun JiahaoQuizPage(
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
                     if (quizResult) {
-                        Text("🎉 恭喜你", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = scheme.primary)
+                        Text(t("🎉 恭喜你"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = scheme.primary)
                         Text(
-                            "恭喜你，你确实有几把刷子，凭此弹窗的截图可以找我，有奖励！",
+                            t("恭喜你，你确实有几把刷子，凭此弹窗的截图可以找我，有奖励！"),
                             color = scheme.onSurface, fontSize = 14.sp, lineHeight = 21.sp,
                         )
                         Button(
@@ -361,12 +363,12 @@ fun JiahaoQuizPage(
                             colors = ButtonDefaults.buttonColors(containerColor = scheme.primary),
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Text("收下奖励", color = scheme.onPrimary)
+                            Text(t("收下奖励"), color = scheme.onPrimary)
                         }
                     } else {
-                        Text("💔 很遗憾", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = scheme.error)
+                        Text(t("💔 很遗憾"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = scheme.error)
                         Text(
-                            "很遗憾嘉豪你没有通过测试，本软件不再为你提供任何服务",
+                            t("很遗憾嘉豪你没有通过测试，本软件不再为你提供任何服务"),
                             color = scheme.onSurface, fontSize = 14.sp, lineHeight = 21.sp,
                         )
                         Button(
@@ -378,7 +380,7 @@ fun JiahaoQuizPage(
                             colors = ButtonDefaults.buttonColors(containerColor = scheme.error),
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Text("我知道了", color = scheme.onError)
+                            Text(t("我知道了"), color = scheme.onError)
                         }
                     }
                 }
