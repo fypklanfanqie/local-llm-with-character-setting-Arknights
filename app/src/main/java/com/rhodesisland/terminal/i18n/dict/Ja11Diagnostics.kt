@@ -43,4 +43,39 @@ internal val Ja11DiagnosticsEntries: List<Pair<String, String>> = listOf(
     "冷却期已过，重新探测验证" to "クールダウンが明けたため、再検出して検証します",
     "冷却中（跳过 OpenCL 尝试）" to "クールダウン中（OpenCL の試行をスキップ）",
 
+    // ===== ベンチマーク／認証の否決理由（静的な文言のみ）=====
+    "可靠性未执行（totalRounds=0）" to "信頼性テストは未実行（totalRounds=0）",
+    "设备过热，可靠性基准未执行" to "端末が高温のため、信頼性ベンチマークは実行されませんでした",
+    "候选正确性校验未通过（UTF-8/EOS/复读/KV 失配）" to
+        "候補は正確性チェックに合格しませんでした（UTF-8/EOS/繰り返し/KV の不一致）",
+    "正确性校验未通过（UTF-8/EOS/复读/KV 失配）" to
+        "正確性チェックに合格しませんでした（UTF-8/EOS/繰り返し/KV の不一致）",
+    "热启动样本无效，需冷启重测" to "ウォームスタートのサンプルが無効です。コールドスタートから再測定してください",
+    "候选 native 身份缺失（mnnCommit/nativeBuildId 空白）" to
+        "候補のネイティブ識別情報がありません（mnnCommit/nativeBuildId が空）",
+    "基线 native 身份缺失" to "ベースラインのネイティブ識別情報がありません",
+    "候选身份与基线相同（mnnCommit/nativeBuildId 未变化，无升级价值）" to
+        "候補の識別情報がベースラインと同じです（mnnCommit/nativeBuildId が未変更で昇格の価値なし）",
+    "GPU 候选实际 GPU 样本数不足（全回退不可作为 GPU 收益证据）" to
+        "GPU 候補の実際の GPU サンプル数が不足しています（全回フォールバックは GPU 効果の証拠になりません）",
+    "prefill 证据缺失（需完整 prefill 样本的 prefillTps 与 TTFT；KV 复用污染样本不计）" to
+        "prefill の証拠がありません（完全な prefill サンプルの prefillTps と TTFT が必要。KV 再利用で汚染されたサンプルは無効）",
+
+    // ===== ベンチマーク場面 / 四象限の名称 =====
+    "冷启动加载" to "コールドスタート読み込み",
+    "短首字延迟" to "短い TTFT",
+    "长前缀填充" to "長いプレフィックスの prefill",
+    "固定长度解码" to "固定長デコード",
+    "第二轮 KV 复用" to "2 周目の KV 再利用",
+    "空回答检查" to "空応答チェック",
+    "CPU 思考关" to "CPU・思考オフ",
+    "CPU 思考开" to "CPU・思考オン",
+    "GPU 思考关" to "GPU・思考オフ",
+    "GPU 思考开" to "GPU・思考オン",
+
+    // ===== 思考レベル（LocalThinkingLevel。「中」は設定画面のサイズ項目と衝突するため未収録）=====
+    "自动" to "自動",
+    "短" to "短",
+    "长" to "長",
+
 )
