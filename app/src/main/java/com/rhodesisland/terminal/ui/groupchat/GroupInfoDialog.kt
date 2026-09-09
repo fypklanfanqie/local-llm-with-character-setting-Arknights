@@ -48,6 +48,9 @@ import com.rhodesisland.terminal.ui.theme.GlassShapes
 import com.rhodesisland.terminal.ui.theme.fieldTextColor
 import com.rhodesisland.terminal.data.model.LorebookScopeType
 import com.rhodesisland.terminal.data.model.WorldviewTargetType
+import com.rhodesisland.terminal.i18n.L10nRuntime
+import com.rhodesisland.terminal.i18n.t
+import com.rhodesisland.terminal.i18n.tf
 import com.rhodesisland.terminal.ui.glass.frostedGlass
 import com.rhodesisland.terminal.util.GroupCoverStore
 import kotlinx.coroutines.Dispatchers
@@ -96,9 +99,9 @@ fun GroupInfoDialog(
                 .padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text("群聊信息", color = scheme.onSurface, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text(t("群聊信息"), color = scheme.onSurface, fontSize = 15.sp, fontWeight = FontWeight.Bold)
 
-            Text("群封面", color = scheme.onSurfaceVariant, fontSize = 11.sp)
+            Text(t("群封面"), color = scheme.onSurfaceVariant, fontSize = 11.sp)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 val preview: Any? = when {
                     pendingCover != null -> pendingCover
@@ -124,19 +127,19 @@ fun GroupInfoDialog(
                         .clickable { picker.launch(arrayOf("image/*")) },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(if (preview == null) "＋ 封面" else "更换", color = scheme.primary, fontSize = 11.sp)
+                    Text(if (preview == null) t("＋ 封面") else t("更换"), color = scheme.primary, fontSize = 11.sp)
                 }
                 if (preview != null) {
                     TextButton(onClick = {
                         pendingCover = null
                         coverCleared = true
                         coverError = null
-                    }) { Text("清除", color = scheme.error, fontSize = 12.sp) }
+                    }) { Text(t("清除"), color = scheme.error, fontSize = 12.sp) }
                 }
             }
             coverError?.let { Text(it, color = scheme.error, fontSize = 10.sp) }
 
-            Text("群名称", color = scheme.onSurfaceVariant, fontSize = 11.sp)
+            Text(t("群名称"), color = scheme.onSurfaceVariant, fontSize = 11.sp)
             BasicTextField(
                 value = name,
                 onValueChange = { name = it },
@@ -156,11 +159,11 @@ fun GroupInfoDialog(
             ) {
                 if (onDeleted != null) {
                     TextButton(onClick = { deleteConfirm = true }) {
-                        Text("删除群聊", color = scheme.error, fontSize = 12.sp)
+                        Text(t("删除群聊"), color = scheme.error, fontSize = 12.sp)
                     }
                 }
                 Spacer(Modifier.weight(1f))
-                TextButton(onClick = onDismiss) { Text("取消", color = scheme.onSurfaceVariant, fontSize = 13.sp) }
+                TextButton(onClick = onDismiss) { Text(t("取消"), color = scheme.onSurfaceVariant, fontSize = 13.sp) }
                 Spacer(Modifier.width(4.dp))
                 Button(
                     onClick = {
@@ -171,7 +174,7 @@ fun GroupInfoDialog(
                             if (chosen != null) {
                                 val savedCover = withContext(Dispatchers.IO) { GroupCoverStore.save(context, chosen) }
                                 if (savedCover == null) {
-                                    coverError = "封面保存失败"
+                                    coverError = L10nRuntime.t("封面保存失败")
                                     saving = false
                                     return@launch
                                 }
@@ -189,7 +192,7 @@ fun GroupInfoDialog(
                     },
                     enabled = !saving,
                 ) {
-                    Text(if (saving) "保存中…" else "保存", fontSize = 13.sp)
+                    Text(if (saving) t("保存中…") else t("保存"), fontSize = 13.sp)
                 }
             }
         }
@@ -199,8 +202,8 @@ fun GroupInfoDialog(
         AlertDialog(
             onDismissRequest = { deleteConfirm = false },
             containerColor = scheme.surfaceContainerHigh,
-            title = { Text("删除群聊", color = scheme.onSurface) },
-            text = { Text("确定删除「${group.title.ifBlank { "群聊" }}」？该群的全部消息将被清除。", color = scheme.onSurfaceVariant) },
+            title = { Text(t("删除群聊"), color = scheme.onSurface) },
+            text = { Text(tf("确定删除「{0}」？该群的全部消息将被清除。", group.title.ifBlank { t("群聊") }), color = scheme.onSurfaceVariant) },
             confirmButton = {
                 TextButton(onClick = {
                     deleteConfirm = false
@@ -216,10 +219,10 @@ fun GroupInfoDialog(
                         onDeleted?.invoke()
                         onDismiss()
                     }
-                }) { Text("删除", color = scheme.error) }
+                }) { Text(t("删除"), color = scheme.error) }
             },
             dismissButton = {
-                TextButton(onClick = { deleteConfirm = false }) { Text("取消", color = scheme.onSurfaceVariant) }
+                TextButton(onClick = { deleteConfirm = false }) { Text(t("取消"), color = scheme.onSurfaceVariant) }
             },
         )
     }

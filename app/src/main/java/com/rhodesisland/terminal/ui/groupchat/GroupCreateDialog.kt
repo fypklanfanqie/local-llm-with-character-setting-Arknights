@@ -50,6 +50,9 @@ import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import com.rhodesisland.terminal.AppContainer
 import com.rhodesisland.terminal.config.AppConfig
+import com.rhodesisland.terminal.i18n.L10nRuntime
+import com.rhodesisland.terminal.i18n.t
+import com.rhodesisland.terminal.i18n.tf
 import com.rhodesisland.terminal.ui.glass.frostedGlass
 import com.rhodesisland.terminal.ui.theme.GlassShapes
 import com.rhodesisland.terminal.ui.theme.fieldTextColor
@@ -98,7 +101,7 @@ fun GroupCreateDialog(
                 .frostedGlass(GlassShapes.card, borderWidth = 1.dp, blurRadius = 20.dp)
                 .padding(18.dp),
         ) {
-            Text("新建群聊", color = scheme.onSurface, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text(t("新建群聊"), color = scheme.onSurface, fontSize = 15.sp, fontWeight = FontWeight.Bold)
 
             // 弹窗整体可滚（小屏不为难用户），成员列表内部固定高度独立滚动
             Column(
@@ -132,21 +135,21 @@ fun GroupCreateDialog(
                             .clickable { picker.launch(arrayOf("image/*")) },
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text(if (preview == null) "＋ 封面" else "更换", color = scheme.primary, fontSize = 11.sp)
+                        Text(if (preview == null) t("＋ 封面") else t("更换"), color = scheme.primary, fontSize = 11.sp)
                     }
                     if (preview != null) {
                         TextButton(onClick = {
                             pendingCover = null
                             coverCleared = true
-                        }) { Text("清除", color = scheme.error, fontSize = 12.sp) }
+                        }) { Text(t("清除"), color = scheme.error, fontSize = 12.sp) }
                     }
                     Column {
-                        Text("群封面（选填）", color = scheme.onSurfaceVariant, fontSize = 11.sp)
+                        Text(t("群封面（选填）"), color = scheme.onSurfaceVariant, fontSize = 11.sp)
                         coverError?.let { Text(it, color = scheme.error, fontSize = 10.sp) }
                     }
                 }
 
-                Text("群名称（选填，默认「群聊」）", color = scheme.onSurfaceVariant, fontSize = 11.sp)
+                Text(t("群名称（选填，默认「群聊」）"), color = scheme.onSurfaceVariant, fontSize = 11.sp)
                 BasicTextField(
                     value = name,
                     onValueChange = { name = it },
@@ -166,11 +169,11 @@ fun GroupCreateDialog(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        "选择成员（已选 ${selectedIds.size}，2–${AppConfig.GroupChat.MAX_MEMBERS} 人）",
+                        tf("选择成员（已选 {0}，2–{1} 人）", selectedIds.size, AppConfig.GroupChat.MAX_MEMBERS),
                         color = scheme.onSurfaceVariant, fontSize = 11.sp,
                     )
                     TextButton(onClick = { selectedIds = emptySet() }) {
-                        Text("清空", color = scheme.error, fontSize = 12.sp)
+                        Text(t("清空"), color = scheme.error, fontSize = 12.sp)
                     }
                 }
                 // 搜索：按中文名 / 英文 ID 快速筛选全量干员与自定义角色。
@@ -187,7 +190,7 @@ fun GroupCreateDialog(
                         .padding(horizontal = 10.dp, vertical = 8.dp),
                     decorationBox = { inner ->
                         if (memberSearch.isEmpty()) {
-                            Text("搜索角色名 / ID（如 能天使 / exusiai）", color = scheme.onSurfaceVariant, fontSize = 12.sp)
+                            Text(t("搜索角色名 / ID（如 能天使 / exusiai）"), color = scheme.onSurfaceVariant, fontSize = 12.sp)
                         }
                         inner()
                     },
@@ -207,7 +210,11 @@ fun GroupCreateDialog(
                                 .fillMaxWidth()
                                 .clickable {
                                     if (atCap) {
-                                        Toast.makeText(context, "最多选择 ${AppConfig.GroupChat.MAX_MEMBERS} 名成员", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(
+                                            context,
+                                            L10nRuntime.format("最多选择 {0} 名成员", AppConfig.GroupChat.MAX_MEMBERS),
+                                            Toast.LENGTH_SHORT,
+                                        ).show()
                                     } else {
                                         selectedIds = if (checked) selectedIds - c.id else selectedIds + c.id
                                     }
@@ -232,12 +239,12 @@ fun GroupCreateDialog(
             }
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onDismiss) { Text("取消", color = scheme.onSurfaceVariant, fontSize = 13.sp) }
+                TextButton(onClick = onDismiss) { Text(t("取消"), color = scheme.onSurfaceVariant, fontSize = 13.sp) }
                 Spacer(Modifier.width(4.dp))
                 Button(
                     onClick = {
                         if (selectedIds.size < 2) {
-                            Toast.makeText(context, "至少选择 2 名成员", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, L10nRuntime.t("至少选择 2 名成员"), Toast.LENGTH_SHORT).show()
                             return@Button
                         }
                         scope.launch {
@@ -247,7 +254,7 @@ fun GroupCreateDialog(
                             if (chosen != null) {
                                 cover = withContext(Dispatchers.IO) { GroupCoverStore.save(context, chosen) }
                                 if (cover == null) {
-                                    coverError = "封面保存失败"
+                                    coverError = L10nRuntime.t("封面保存失败")
                                     creating = false
                                     return@launch
                                 }
@@ -260,7 +267,7 @@ fun GroupCreateDialog(
                     },
                     enabled = !creating,
                 ) {
-                    Text(if (creating) "创建中…" else "创建", fontSize = 13.sp)
+                    Text(if (creating) t("创建中…") else t("创建"), fontSize = 13.sp)
                 }
             }
         }

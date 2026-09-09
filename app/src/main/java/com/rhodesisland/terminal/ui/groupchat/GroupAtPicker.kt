@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.rhodesisland.terminal.data.model.Character
+import com.rhodesisland.terminal.i18n.t
 import com.rhodesisland.terminal.ui.chat.ChatAvatar
 import com.rhodesisland.terminal.ui.glass.frostedGlass
 import com.rhodesisland.terminal.ui.theme.GlassShapes
@@ -45,7 +46,7 @@ fun GroupAtPicker(
                 .padding(16.dp),
         ) {
             Text(
-                "选择要 @ 的成员",
+                t("选择要 @ 的成员"),
                 color = scheme.onSurface,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
@@ -68,7 +69,7 @@ fun GroupAtPicker(
             }
             Spacer(Modifier.height(4.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.End) {
-                TextButton(onClick = onDismiss) { Text("取消", color = scheme.onSurfaceVariant, fontSize = 13.sp) }
+                TextButton(onClick = onDismiss) { Text(t("取消"), color = scheme.onSurfaceVariant, fontSize = 13.sp) }
             }
         }
     }

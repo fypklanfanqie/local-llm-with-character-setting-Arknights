@@ -51,6 +51,8 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import coil.compose.AsyncImage
 import com.rhodesisland.terminal.AppContainer
 import com.rhodesisland.terminal.data.model.Conversation
+import com.rhodesisland.terminal.i18n.t
+import com.rhodesisland.terminal.i18n.tf
 import com.rhodesisland.terminal.ui.applySystemBarIcons
 import com.rhodesisland.terminal.ui.glass.GlassButton
 import com.rhodesisland.terminal.ui.glass.GlassButtonStyle
@@ -107,12 +109,12 @@ fun GroupListScreen(
                     .clickable(onClick = onBack),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回", tint = scheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = t("返回"), tint = scheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
             }
             Spacer(Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text("群聊", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = scheme.onSurface)
-                Text("${state.rows.size} 个群聊", color = scheme.onSurfaceVariant, fontSize = 11.sp)
+                Text(t("群聊"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = scheme.onSurface)
+                Text(tf("{0} 个群聊", state.rows.size), color = scheme.onSurfaceVariant, fontSize = 11.sp)
             }
             GlassButton(
                 onClick = { showCreate = true },
@@ -122,7 +124,7 @@ fun GroupListScreen(
             ) {
                 Icon(Icons.Filled.Add, contentDescription = null, tint = scheme.primary, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(4.dp))
-                Text("新建", color = scheme.primary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                Text(t("新建"), color = scheme.primary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
             }
         }
 
@@ -132,7 +134,7 @@ fun GroupListScreen(
                     Icon(Icons.Outlined.Groups, contentDescription = null, tint = scheme.onSurfaceVariant.copy(alpha = 0.6f), modifier = Modifier.size(48.dp))
                     Spacer(Modifier.height(12.dp))
                     Text(
-                        "还没有群聊\n点右上角「新建」创建一个吧",
+                        t("还没有群聊\n点右上角「新建」创建一个吧"),
                         color = scheme.onSurfaceVariant,
                         fontSize = 13.sp,
                         textAlign = TextAlign.Center,
@@ -220,7 +222,7 @@ private fun GroupListRowItem(
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                row.group.title.ifBlank { "群聊" },
+                row.group.title.ifBlank { t("群聊") },
                 color = scheme.onSurface,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
@@ -228,7 +230,7 @@ private fun GroupListRowItem(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                row.preview ?: "暂无消息",
+                row.preview ?: t("暂无消息"),
                 color = scheme.onSurfaceVariant,
                 fontSize = 11.sp,
                 maxLines = 1,
@@ -244,7 +246,7 @@ private fun GroupListRowItem(
                 )
             }
             IconButton(onClick = onEdit, modifier = Modifier.size(30.dp)) {
-                Icon(Icons.Outlined.Edit, contentDescription = "群信息", tint = scheme.onSurfaceVariant, modifier = Modifier.size(14.dp))
+                Icon(Icons.Outlined.Edit, contentDescription = t("群信息"), tint = scheme.onSurfaceVariant, modifier = Modifier.size(14.dp))
             }
         }
     }

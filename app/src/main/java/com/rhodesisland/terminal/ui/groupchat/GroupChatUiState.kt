@@ -3,6 +3,7 @@ package com.rhodesisland.terminal.ui.groupchat
 import com.rhodesisland.terminal.data.model.Character
 import com.rhodesisland.terminal.data.model.ChatProviderType
 import com.rhodesisland.terminal.data.model.DisplayMessage
+import com.rhodesisland.terminal.i18n.L10nRuntime
 
 /**
  * 群聊页 UI 状态。独立于单角色 [com.rhodesisland.terminal.ui.chat.ChatUiState]：
@@ -11,8 +12,8 @@ import com.rhodesisland.terminal.data.model.DisplayMessage
 data class GroupChatUiState(
     /** 群聊会话 id（null = 尚未解析）。 */
     val conversationId: Long? = null,
-    /** 群名称（来自群会话行 title）。 */
-    val groupName: String = "群聊",
+    /** 群名称（来自群会话行 title；空/未解析时按当前界面语言显示「群聊」）。 */
+    val groupName: String = L10nRuntime.t("群聊"),
     /** 群封面 file:// 路径（空=未设置，用成员头像拼图占位）。 */
     val groupCoverPath: String = "",
     /** 群成员角色 id 列表（按设置顺序）。 */

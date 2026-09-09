@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.rhodesisland.terminal.data.model.DisplayMessage
+import com.rhodesisland.terminal.i18n.t
 import com.rhodesisland.terminal.ui.chat.ChatAutoScrollPolicy
 import com.rhodesisland.terminal.ui.chat.ChatUiState
 import com.rhodesisland.terminal.ui.chat.MessageBubble
@@ -151,7 +152,7 @@ fun GroupChatMessageList(
             ) {
                 Icon(
                     Icons.Filled.KeyboardArrowDown,
-                    contentDescription = "回到底部",
+                    contentDescription = t("回到底部"),
                     tint = Color.White,
                 )
             }

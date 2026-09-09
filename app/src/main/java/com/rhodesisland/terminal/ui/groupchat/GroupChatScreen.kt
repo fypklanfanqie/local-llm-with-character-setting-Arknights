@@ -37,6 +37,9 @@ import coil.compose.AsyncImage
 import com.rhodesisland.terminal.AppContainer
 import com.rhodesisland.terminal.data.model.Character
 import com.rhodesisland.terminal.data.model.Conversation
+import com.rhodesisland.terminal.i18n.L10nRuntime
+import com.rhodesisland.terminal.i18n.t
+import com.rhodesisland.terminal.i18n.tf
 import com.rhodesisland.terminal.ui.applySystemBarIcons
 import com.rhodesisland.terminal.ui.chat.ChatAvatar
 import com.rhodesisland.terminal.ui.glass.frostedGlass
@@ -132,7 +135,7 @@ fun GroupChatScreen(
                 val after = new.count { it == '@' }
                 if (after > before) {
                     if (state.members.isEmpty()) {
-                        viewModel.notifyError("请先到「设置 → 群聊」选择群成员")
+                        viewModel.notifyError(L10nRuntime.t("请先到「设置 → 群聊」选择群成员"))
                     } else {
                         showAtPicker = true
                     }
@@ -198,7 +201,7 @@ private fun GroupChatTopBar(
             modifier = Modifier.size(34.dp).clip(CircleShape).frostedGlass(CircleShape, borderWidth = 1.dp, blurRadius = 16.dp).clickable(onClick = onBack),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回", tint = scheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = t("返回"), tint = scheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
         }
         Spacer(Modifier.width(10.dp))
         // 群封面（未设置时用「群」图标占位）
@@ -232,7 +235,7 @@ private fun GroupChatTopBar(
                 .padding(vertical = 2.dp),
         ) {
             Text(
-                name.ifBlank { "群聊" },
+                name.ifBlank { t("群聊") },
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = scheme.onSurface,
@@ -241,9 +244,9 @@ private fun GroupChatTopBar(
             )
             Text(
                 when {
-                    !enabled -> "未开启自动聊天（到设置开启）"
-                    memberCount == 0 -> "尚未选择成员"
-                    else -> "$memberCount 名成员 · 空闲时自动聊天"
+                    !enabled -> t("未开启自动聊天（到设置开启）")
+                    memberCount == 0 -> t("尚未选择成员")
+                    else -> tf("{0} 名成员 · 空闲时自动聊天", memberCount)
                 },
                 color = scheme.onSurfaceVariant,
                 fontSize = 11.sp,
@@ -279,10 +282,10 @@ private fun GroupWelcomeHint() {
     val scheme = MaterialTheme.colorScheme
     Box(modifier = Modifier.fillMaxSize().padding(horizontal = 28.dp), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("罗德岛干员群聊", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = scheme.onBackground)
+            Text(t("罗德岛干员群聊"), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = scheme.onBackground)
             Spacer(Modifier.height(8.dp))
             Text(
-                "在这里和多名干员一起聊天；空闲时他们也会自己聊起来并主动找你。",
+                t("在这里和多名干员一起聊天；空闲时他们也会自己聊起来并主动找你。"),
                 color = scheme.onSurfaceVariant,
                 fontSize = 13.sp,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -326,7 +329,7 @@ private fun GroupChatInputBar(
             cursorBrush = SolidColor(scheme.primary),
             decorationBox = { inner ->
                 if (text.isEmpty()) {
-                    Text("发消息到群聊…", color = scheme.onSurfaceVariant, fontSize = 14.5.sp)
+                    Text(t("发消息到群聊…"), color = scheme.onSurfaceVariant, fontSize = 14.5.sp)
                 }
                 inner()
             },
@@ -348,7 +351,7 @@ private fun GroupChatInputBar(
             } else {
                 Icon(
                     Icons.AutoMirrored.Outlined.Send,
-                    contentDescription = "发送",
+                    contentDescription = t("发送"),
                     tint = scheme.onPrimary,
                     modifier = Modifier.size(17.dp),
                 )

@@ -2,6 +2,7 @@ package com.rhodesisland.terminal.data.repository
 
 import com.rhodesisland.terminal.data.model.ChatMessage
 import com.rhodesisland.terminal.data.model.Conversation
+import com.rhodesisland.terminal.i18n.L10nRuntime
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -21,7 +22,7 @@ class GroupChatRepository(
         /** 群聊会话的哨兵 characterId（碰撞不到内置/自定义 id）。 */
         const val GROUP_CHARACTER_ID = "group_chat"
 
-        /** 新群默认标题。 */
+        /** 新群默认标题（中文原文 = 词典 key；落库时按当前界面语言解析，见 [createGroup]）。 */
         const val GROUP_TITLE = "群聊"
     }
 
@@ -37,7 +38,8 @@ class GroupChatRepository(
 
     /** 新建群聊：落普通字段 -> 标记群聊 -> 写成员 -> 写封面。返回群 id。 */
     suspend fun createGroup(name: String, coverPath: String?, memberIds: List<String>): Long {
-        val id = conversationRepository.create(GROUP_CHARACTER_ID, name.ifBlank { GROUP_TITLE })
+        // 空名兜底「群聊」按当前界面语言落库：标题会显示在群列表/顶栏，不该在中英日界面下都是中文
+        val id = conversationRepository.create(GROUP_CHARACTER_ID, name.ifBlank { L10nRuntime.t(GROUP_TITLE) })
         conversationRepository.markGroup(id)
         conversationRepository.setGroupMembers(id, memberIds)
         if (!coverPath.isNullOrBlank()) {
@@ -48,7 +50,7 @@ class GroupChatRepository(
 
     /** 重命名群。 */
     suspend fun setGroupName(id: Long, name: String) {
-        conversationRepository.rename(id, name.ifBlank { GROUP_TITLE })
+        conversationRepository.rename(id, name.ifBlank { L10nRuntime.t(GROUP_TITLE) })
     }
 
     /** 更新群封面（null=清除）。 */

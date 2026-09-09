@@ -14,6 +14,7 @@ import com.rhodesisland.terminal.data.model.DisplayMessage
 import com.rhodesisland.terminal.data.model.matchesScope
 import com.rhodesisland.terminal.data.model.WorldviewTargetType
 import com.rhodesisland.terminal.data.repository.GroupChatRepository
+import com.rhodesisland.terminal.i18n.L10nRuntime
 import com.rhodesisland.terminal.llm.LorebookEngine
 import com.rhodesisland.terminal.ui.chat.PendingFinal
 import com.rhodesisland.terminal.util.MarkdownParser
@@ -115,7 +116,7 @@ class GroupChatViewModel(
         try {
             val group = container.groupChatRepository.getGroup(groupId)
             if (group == null) {
-                _uiState.update { it.copy(errorMessage = "群聊不存在（可能已被删除）") }
+                _uiState.update { it.copy(errorMessage = L10nRuntime.t("群聊不存在（可能已被删除）")) }
                 return
             }
             val members = group.memberIds
@@ -127,7 +128,7 @@ class GroupChatViewModel(
             }
             _uiState.update {
                 it.copy(
-                    groupName = group.title.ifBlank { GroupChatRepository.GROUP_TITLE },
+                    groupName = group.title.ifBlank { L10nRuntime.t(GroupChatRepository.GROUP_TITLE) },
                     groupCoverPath = group.coverImagePath ?: "",
                     memberIds = members.map { c -> c.id },
                     members = members,
@@ -139,7 +140,7 @@ class GroupChatViewModel(
             throw e
         } catch (e: Exception) {
             Log.e(TAG, "群信息加载失败", e)
-            _uiState.update { it.copy(errorMessage = "群信息加载失败：${e.toUserErrorMessage()}") }
+            _uiState.update { it.copy(errorMessage = L10nRuntime.format("群信息加载失败：{0}", e.toUserErrorMessage())) }
         }
     }
 
@@ -198,12 +199,12 @@ class GroupChatViewModel(
         if (text.isEmpty()) return
         val convId = _conversationId.value
         if (convId == null) {
-            _uiState.update { it.copy(errorMessage = "群聊尚未就绪，请稍候再试") }
+            _uiState.update { it.copy(errorMessage = L10nRuntime.t("群聊尚未就绪，请稍候再试")) }
             return
         }
         val members = state.members
         if (members.isEmpty()) {
-            _uiState.update { it.copy(errorMessage = "请先到「设置 → 群聊」选择群成员") }
+            _uiState.update { it.copy(errorMessage = L10nRuntime.t("请先到「设置 → 群聊」选择群成员")) }
             return
         }
 
@@ -219,7 +220,7 @@ class GroupChatViewModel(
         streamingJob = viewModelScope.launch {
             // 云端 LLM 直接调用：与聊天 Provider 切换解耦（本地聊天也可用群聊），只要配置过云端 API
             if (!container.settingsRepository.isCloudApiReady()) {
-                _uiState.update { it.copy(errorMessage = "请先在设置中配置云端 AI API", isStreaming = false, showTyping = false) }
+                _uiState.update { it.copy(errorMessage = L10nRuntime.t("请先在设置中配置云端 AI API"), isStreaming = false, showTyping = false) }
                 return@launch
             }
             var userMsgId = 0L
@@ -235,7 +236,7 @@ class GroupChatViewModel(
                     members.map { it.id }.toSet(), mentionIds,
                 )
                 val speakers = speakerIds.mapNotNull { id -> members.firstOrNull { it.id == id } }
-                if (speakers.isEmpty()) throw Exception("请先到「设置 → 群聊」选择群成员")
+                if (speakers.isEmpty()) throw Exception(L10nRuntime.t("请先到「设置 → 群聊」选择群成员"))
                 _uiState.update { it.copy(typingCharacterId = speakers.first().id) }
 
                 val userMessage = ChatMessage(role = "user", content = text)
@@ -318,9 +319,9 @@ class GroupChatViewModel(
                     val clean = when (normalized) {
                         is GroupChatReplyNormalization.Valid -> normalized.text
                         is GroupChatReplyNormalization.ForeignSpeakerPrefix ->
-                            throw IllegalStateException("本轮回复未能确认发言角色，请稍后重试")
+                            throw IllegalStateException(L10nRuntime.t("本轮回复未能确认发言角色，请稍后重试"))
                         GroupChatReplyNormalization.Empty ->
-                            throw IllegalStateException("本轮没有生成有效回复，请稍后重试")
+                            throw IllegalStateException(L10nRuntime.t("本轮没有生成有效回复，请稍后重试"))
                     }
                     val rowId = container.groupChatRepository.sendMemberMessage(convId, speaker.id, clean)
                     repliesOk++
