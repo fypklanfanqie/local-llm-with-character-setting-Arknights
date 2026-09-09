@@ -6,5 +6,5 @@ package com.rhodesisland.terminal.llm
  */
 object OutputLanguage {
     const val ZH_DIRECTIVE =
-        "\n\n[语言要求] 全程使用简体中文输出，人名与既有专有名词可保留原文；如需输出思考过程，思考也必须使用简体中文。"
+        "\n\n[语言要求] 全程使用简体中文输出，人名与既有专有名词可保留原文；如需输出思考过程，思考也必须使用简体中文。" // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
 }

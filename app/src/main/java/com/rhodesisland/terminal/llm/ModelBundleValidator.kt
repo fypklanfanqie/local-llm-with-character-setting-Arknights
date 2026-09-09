@@ -58,7 +58,7 @@ object ModelBundleValidator {
                 valid = false,
                 modelFingerprint = "",
                 requiredFiles = emptyList(),
-                errors = listOf("模型目录不存在: $root"),
+                errors = listOf("模型目录不存在: $root"), // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
             )
         }
 
@@ -69,17 +69,17 @@ object ModelBundleValidator {
 
         // 1. config.json 必须存在且 JSON 可解析。
         if (!configFile.exists()) {
-            errors += "缺少 config.json"
+            errors += "缺少 config.json" // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
         } else {
             parseJsonObject(configFile)?.let { obj ->
                 collectReferencedPaths(obj, root, referenced, optionalReferenced, errors)
-            } ?: run { errors += "config.json 不是合法 JSON" }
+            } ?: run { errors += "config.json 不是合法 JSON" } // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
         }
 
         // 2. llm_config.json 若存在则必须可解析（可选文件）。
         if (llmConfigFile.exists()) {
             if (parseJsonObject(llmConfigFile) == null) {
-                errors += "llm_config.json 不是合法 JSON"
+                errors += "llm_config.json 不是合法 JSON" // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
             }
         }
 
@@ -102,11 +102,11 @@ object ModelBundleValidator {
                 .firstOrNull { it.exists() }
             when {
                 existing == null -> {
-                    errors += "缺少必需 tokenizer 文件（tokenizer.txt 或 tokenizer.mtok）"
+                    errors += "缺少必需 tokenizer 文件（tokenizer.txt 或 tokenizer.mtok）" // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
                     tokenizerPresent = null
                 }
                 existing.length() <= 0L -> {
-                    errors += "tokenizer 文件为空: ${existing.name}"
+                    errors += "tokenizer 文件为空: ${existing.name}" // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
                     tokenizerPresent = null
                 }
                 else -> tokenizerPresent = existing.name
@@ -115,14 +115,14 @@ object ModelBundleValidator {
         // 3b. 可选多模态文件（visual/audio）：缺失仅告警，不阻止加载纯文本模型。
         for (rel in optionalReferenced) {
             if (!File(root, rel).exists()) {
-                warnings += "可选多模态文件缺失: $rel"
+                warnings += "可选多模态文件缺失: $rel" // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
             }
         }
 
         // 4. 分片残留 -> 警告（下载未完成/合并失败）。
         val parts = root.listFiles { f -> PART_SUFFIX.containsMatchIn(f.name) }?.toList() ?: emptyList()
         if (parts.isNotEmpty()) {
-            warnings += "存在 ${parts.size} 个未合并分片（.partN）"
+            warnings += "存在 ${parts.size} 个未合并分片（.partN）" // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
         }
 
         // 5. 模型指纹：文件清单（名 + 大小 + mtime）规范化哈希（含实际 tokenizer，保证切换
@@ -149,22 +149,22 @@ object ModelBundleValidator {
     ) {
         val canonical = runCatching { file.canonicalFile }.getOrNull()
         if (canonical == null || !canonical.path.startsWith(root.path + File.separator)) {
-            errors += "路径逃逸模型目录: $rel"
+            errors += "路径逃逸模型目录: $rel" // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
             return
         }
         if (PART_SUFFIX.containsMatchIn(file.name)) {
-            errors += "必需文件仍是分片: $rel"
+            errors += "必需文件仍是分片: $rel" // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
             return
         }
         if (!file.exists()) {
-            errors += "缺少必需文件: $rel"
+            errors += "缺少必需文件: $rel" // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
             return
         }
         if (file.length() <= 0L) {
-            errors += "必需文件为空: $rel"
+            errors += "必需文件为空: $rel" // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
         }
         if (file.name.endsWith(".json") && parseJsonObject(file) == null) {
-            errors += "JSON 文件不可解析: $rel"
+            errors += "JSON 文件不可解析: $rel" // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
         }
     }
 
@@ -195,7 +195,7 @@ object ModelBundleValidator {
                         target += s
                         val resolved = File(root, s).canonicalFile
                         if (!resolved.path.startsWith(root.path + File.separator)) {
-                            errors += "config 引用路径逃逸模型目录: $s"
+                            errors += "config 引用路径逃逸模型目录: $s" // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
                         }
                     }
                 } else {

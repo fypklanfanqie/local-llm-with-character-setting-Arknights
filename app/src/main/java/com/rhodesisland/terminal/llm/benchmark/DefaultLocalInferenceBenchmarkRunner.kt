@@ -226,7 +226,7 @@ open class DefaultLocalInferenceBenchmarkRunner(
     }
 
     override suspend fun runReliability(case: InferenceBenchmarkCase, rounds: Int): ReliabilityResult {
-        require(rounds >= 0) { "rounds 必须 >= 0" }
+        require(rounds >= 0) { "rounds 必须 >= 0" } // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
         // Task 5 review M-3：热守卫入口早退——热降频同样污染可靠性样本。ReliabilityResult 无
         // coolRun 拒绝通道（与 run() 的 rejectedResult 语义不同型，返回全 NO_RECORD 会被误当
         // 伪有效结果归档），故抛异常让调用方明确感知（本函数既有 require 亦为抛错风格）；
@@ -383,15 +383,15 @@ open class DefaultLocalInferenceBenchmarkRunner(
      *   不引入随机性。
      */
     private fun longDeterministicPrompt(targetEstimatedTokens: Int, roundNonce: String = ""): List<ChatMessage> {
-        val block = "这是用于评估长前缀填充吞吐的固定文本。它不包含随机内容，因此每次基准的 prompt 完全一致。" +
-            "请忽略这段内容的含义，只需完整复述其中的事实要点。"
+        val block = "这是用于评估长前缀填充吞吐的固定文本。它不包含随机内容，因此每次基准的 prompt 完全一致。" + // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
+            "请忽略这段内容的含义，只需完整复述其中的事实要点。" // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
         val repeatCount = (targetEstimatedTokens * 2) / block.length + 1
         val body = buildString {
-            if (roundNonce.isNotEmpty()) append("基准轮次标记 $roundNonce。")
+            if (roundNonce.isNotEmpty()) append("基准轮次标记 $roundNonce。") // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
             repeat(repeatCount) { append(block) }
         }
         return listOf(
-            ChatMessage(role = "system", content = "你是中文测试助手。"),
+            ChatMessage(role = "system", content = "你是中文测试助手。"), // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
             ChatMessage(role = "user", content = body),
         )
     }
@@ -401,23 +401,23 @@ open class DefaultLocalInferenceBenchmarkRunner(
      * [runOneRound] 的 maxTokensOverride 传入）与提示共同约束，不用应用层思考 cap。
      */
     private fun fixedDecodePrompt(targetOutputTokens: Int): List<ChatMessage> {
-        val instruction = "请连续列出 $targetOutputTokens 个不同的中文词汇，每个一行，不要额外解释。"
+        val instruction = "请连续列出 $targetOutputTokens 个不同的中文词汇，每个一行，不要额外解释。" // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
         return listOf(
-            ChatMessage(role = "system", content = "你是中文测试助手。"),
+            ChatMessage(role = "system", content = "你是中文测试助手。"), // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
             ChatMessage(role = "user", content = instruction),
         )
     }
 
     /** EMPTY_RESPONSE_CHECK 探针：极短 prompt，最大化空输出可观测性（可靠性维度，不做吞吐）。 */
     private fun emptyResponseProbe(): List<ChatMessage> = listOf(
-        ChatMessage(role = "system", content = "你是中文测试助手。"),
-        ChatMessage(role = "user", content = "你好。"),
+        ChatMessage(role = "system", content = "你是中文测试助手。"), // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
+        ChatMessage(role = "user", content = "你好。"), // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
     )
 
     /**
      * SECOND_TURN_KV_REUSE：在同一已加载 backend 上先跑第一轮（短探针），捕获 assistant 原始
      * 流式文本（onToken 逐段拼接 = modelContent 等价物），用其构造第二轮消息
-     * [system, user, assistant(raw), user("请针对以上内容继续补充。")]。
+     * [system, user, assistant(raw), user("请针对以上内容继续补充。")]。 // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
      * 第一轮只构造第二轮，**不计数**；随后 [run] 的预热/记录轮全部使用第二轮——真实两轮前缀，
      * 而非静态的伪多轮消息。
      */
@@ -463,7 +463,7 @@ open class DefaultLocalInferenceBenchmarkRunner(
         // content 与 modelContent 同时写入原始文本：后端渲染按任一字段都不会丢 KV 前缀文本。
         return firstTurn +
             ChatMessage(role = "assistant", content = assistantRaw, modelContent = assistantRaw) +
-            ChatMessage(role = "user", content = "请针对以上内容继续补充。")
+            ChatMessage(role = "user", content = "请针对以上内容继续补充。") // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
     }
 
     /**
@@ -550,11 +550,11 @@ open class DefaultLocalInferenceBenchmarkRunner(
         val PROBE_MESSAGES: List<ChatMessage> = listOf(
             ChatMessage(
                 role = "system",
-                content = "你是中文测试助手。你的每条回复都必须以中文为主，可以适当包含 emoji 表情符号。",
+                content = "你是中文测试助手。你的每条回复都必须以中文为主，可以适当包含 emoji 表情符号。", // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
             ),
             ChatMessage(
                 role = "user",
-                content = "请用三句话介绍你自己，必须包含中文，并带上一个 emoji。",
+                content = "请用三句话介绍你自己，必须包含中文，并带上一个 emoji。", // l10n:ignore 提示词片段
             ),
         )
 

@@ -77,11 +77,11 @@ class BackendManager(
     @Volatile
     private var fingerprintCacheValue: String = ""
 
-    /** MNN NPU 初始化失败缓存（会话级）：QNN 不可用/非 QNN 模型变体/库缺失时，首次失败后不再重试 */
+    /** MNN NPU 初始化失败缓存（会话级）：QNN 不可用/非 QNN 模型变体/库缺失时，首次失败后不再重试 */ // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
     @Volatile
     private var mnnNpuFailed: Boolean = false
 
-    /** MNN GPU 初始化失败缓存（会话级）：OpenCL 不可达时，首次失败后回退 MNN_CPU */
+    /** MNN GPU 初始化失败缓存（会话级）：OpenCL 不可达时，首次失败后回退 MNN_CPU */ // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
     @Volatile
     private var mnnGpuFailed: Boolean = false
 
@@ -232,9 +232,9 @@ class BackendManager(
         // final review C1：v2 capability 门禁见 generate 内 [effectiveDecodeStepTokens]。
         decodeStepTokens: Int = 1,
     ): GenerationResult = generationMutex.withLock {
-        val plan = resolvedPlan ?: throw IllegalStateException("Task 7 起 generate 必须提供 resolvedPlan")
+        val plan = resolvedPlan ?: throw IllegalStateException("Task 7 起 generate 必须提供 resolvedPlan") // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
         val attempts = plan.attempts
-        if (attempts.isEmpty()) throw IllegalStateException("resolvedPlan.attempts 为空")
+        if (attempts.isEmpty()) throw IllegalStateException("resolvedPlan.attempts 为空") // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
         // final review C1：v2 capability 门禁。旧 native（握手缺席或无 summary_v2 能力）会静默
         // 忽略 nativeGenerateStream 多余的 decodeStepTokens 栈参数（JNI 按符号名解析、不校验实参
         // 个数），本地构建 APK 将静默跑 v1 语义。门禁把「静默忽略」显式化：强制回落 1（v1 语义
@@ -292,9 +292,9 @@ class BackendManager(
                 }
 
                 if (!ok) {
-                    val reason = backendFor(attempt.backend).lastErrorMessage ?: "初始化失败"
+                    val reason = backendFor(attempt.backend).lastErrorMessage ?: "初始化失败" // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
                     failureReasons += "${attempt.variant.name}: $reason"
-                    Log.w(TAG, "${attempt.variant.name} 初始化失败: $reason")
+                    Log.w(TAG, "${attempt.variant.name} 初始化失败: $reason") // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
                     // CPU 优化失败推进到 CPU 兼容（下一变体），不黑名单 CPU；GPU/NPU 失败记会话级黑名单。
                     if (attempt.backend == BackendType.MNN_GPU) {
                         markSessionFailed(BackendType.MNN_GPU)
@@ -441,7 +441,7 @@ class BackendManager(
                         )
                     }
                     Log.w(TAG, "${attempt.variant.name} 生成失败，尝试下一后端: ${e.message}")
-                    failureReasons += "${attempt.variant.name}: 生成失败 - ${e.message}"
+                    failureReasons += "${attempt.variant.name}: 生成失败 - ${e.message}" // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
                     if (attempt.backend == BackendType.MNN_GPU) {
                         markSessionFailed(BackendType.MNN_GPU)
                         // Task 15：GPU 生成异常回退 CPU 的可见原因（并入后续 attempt 遥测）。
@@ -474,10 +474,10 @@ class BackendManager(
             }
 
             // 所有尝试均失败：详细原因只写日志，UI 侧拿到固定异常文案。
-            val detail = if (failureReasons.isEmpty()) "所有后端尝试均初始化失败"
-                else "本地模型加载失败（所有后端尝试均失败）。${failureReasons.joinToString("；")}"
+            val detail = if (failureReasons.isEmpty()) "所有后端尝试均初始化失败" // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
+                else "本地模型加载失败（所有后端尝试均失败）。${failureReasons.joinToString("；")}" // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
             Log.e(TAG, detail)
-            throw IllegalStateException("本地推理后端暂不可用，请检查模型文件或稍后重试", lastError)
+            throw IllegalStateException("本地推理后端暂不可用，请检查模型文件或稍后重试", lastError) // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
         } finally {
             // 本地推理保活收尾：结束前台服务 + 释放 WakeLock（幂等；异常吞掉，不影响生成结果返回）。
             runCatching { inferenceSession.end() }

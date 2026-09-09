@@ -50,7 +50,7 @@ object ModelAdmissionController {
             AdmissionDecision.Allowed(contextTokens = 0)
         } else {
             AdmissionDecision.Rejected(
-                userMessage = "存储空间不足，无法下载模型",
+                userMessage = "存储空间不足，无法下载模型", // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
                 details = mapOf("requiredBytes" to required, "availableBytes" to availableBytes),
             )
         }
@@ -98,7 +98,7 @@ object ModelAdmissionController {
         val budget = saturatingSub(inputs.availMemBytes - inputs.thresholdBytes, guard)
         if (budget <= 0L) {
             return AdmissionDecision.Rejected(
-                userMessage = "可用内存不足，无法加载模型",
+                userMessage = "可用内存不足，无法加载模型", // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
                 details = mapOf("availableBytes" to budget),
             )
         }
@@ -126,7 +126,7 @@ object ModelAdmissionController {
         val minIncremental = incrementalBytes(inputs, minCtx)
         val minFootprint = saturatingAdd(inputs.currentProcessPssBytes, minIncremental)
         return AdmissionDecision.Rejected(
-            userMessage = "模型过大或上下文过长，无法在可用内存下运行",
+            userMessage = "模型过大或上下文过长，无法在可用内存下运行", // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
             details = mapOf(
                 "requiredBytes" to (inputs.priorMeasuredTotalPssBytes?.let { maxOf(minFootprint, it) } ?: minFootprint),
                 "availableBytes" to budget,

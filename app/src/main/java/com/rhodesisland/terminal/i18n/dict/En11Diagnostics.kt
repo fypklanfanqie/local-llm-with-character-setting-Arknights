@@ -102,4 +102,20 @@ internal val En11DiagnosticsEntries: List<Pair<String, String>> = listOf(
         "Reliability not perfect ({0} < 1.0; includes empty/garbled/repetition rounds)",
     "出现后端回退（{0} 轮）" to "Backend fallback occurred ({0} rounds)",
 
+    // ===== NPU 原因（数据层已模板化）=====
+    "支持 NPU: {0}" to "NPU supported: {0}",
+    "非高通设备 ({0}), NPU 后端仅支持骁龙芯片" to
+        "Non-Qualcomm device ({0}); the NPU backend only supports Snapdragon chips",
+    "标准构建不含 QNN 运行时，NPU 不可用（QNN 仅实验 flavor 支持）" to
+        "The standard build has no QNN runtime, so NPU is unavailable (QNN is only in the experimental flavor)",
+
+    // ===== GPU 预热原因（数据层已模板化）=====
+    "OpenCL 健康检查未通过（{0}），未执行预热" to
+        "OpenCL health check failed ({0}); preheat was skipped",
+    "GPU 预热未生效：实际走了 {0}（OpenCL 加载/生成失败回退；耗 {1}ms）" to
+        "GPU preheat had no effect: actually ran on {0} (fell back after an OpenCL load/generation failure; took {1}ms)",
+
+    // ===== 思考策略遥测 =====
+    "旧两阶段记录兼容；新记录恒为 0" to "Legacy two-phase records; always 0 for new records",
+
 )

@@ -1,6 +1,7 @@
 package com.rhodesisland.terminal.llm.backend
 
 import android.content.Context
+import com.rhodesisland.terminal.i18n.L10nRuntime
 import android.os.Build
 
 /**
@@ -47,7 +48,7 @@ object NpuSupportDetector {
         if (!isQualcomm) {
             return NpuSupportInfo(
                 false, socMfr, socModel, hardware, ChipLevel.UNSUPPORTED,
-                "非高通设备 ($socMfr), NPU 后端仅支持骁龙芯片",
+                L10nRuntime.format("非高通设备 ({0}), NPU 后端仅支持骁龙芯片", socMfr),
             )
         }
 
@@ -55,7 +56,7 @@ object NpuSupportDetector {
         val supported = chipLevel != ChipLevel.UNSUPPORTED
         return NpuSupportInfo(
             supported, socMfr, socModel, hardware, chipLevel,
-            if (supported) "支持 NPU: $chipLevel" else "芯片等级不足以支持 NPU 推理",
+            if (supported) L10nRuntime.format("支持 NPU: {0}", chipLevel) else L10nRuntime.t("芯片等级不足以支持 NPU 推理"),
         )
     }
 

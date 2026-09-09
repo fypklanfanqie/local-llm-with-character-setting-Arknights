@@ -34,13 +34,13 @@ object RollingSummary {
      * [oldSummary] 为空表示首次折叠（占位「无」）。
      */
     fun buildFoldPrompt(oldSummary: String, batchLines: List<String>): String = buildString {
-        appendLine("请把下面的「待归档对话」与「已有前情提要」合并压缩成一段新的前情提要。")
+        appendLine("请把下面的「待归档对话」与「已有前情提要」合并压缩成一段新的前情提要。") // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
         // 四要素与长度约束为产品设计规格（滚动摘要上下文压缩方案表），不得弱化
-        appendLine("要求：保留人物关系变化、双方的承诺与约定、未解决的伏笔、当前情绪基调；" +
-            "用第三人称中文叙述；总长不超过300字；直接输出提要正文，不要任何解释或格式标记。")
-        appendLine("【已有前情提要】")
-        appendLine(oldSummary.trim().ifEmpty { "无" })
-        appendLine("【待归档对话】")
+        appendLine("要求：保留人物关系变化、双方的承诺与约定、未解决的伏笔、当前情绪基调；" + // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
+            "用第三人称中文叙述；总长不超过300字；直接输出提要正文，不要任何解释或格式标记。") // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
+        appendLine("【已有前情提要】") // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
+        appendLine(oldSummary.trim().ifEmpty { "无" }) // l10n:ignore 提示词片段
+        appendLine("【待归档对话】") // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
         batchLines.forEachIndexed { idx, line ->
             append(idx + 1).append(". ").appendLine(line)
         }

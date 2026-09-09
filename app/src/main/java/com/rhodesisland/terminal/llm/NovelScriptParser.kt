@@ -26,7 +26,7 @@ object NovelScriptParser {
 
     private val thinkRegex = Regex("<think>.*?</think>", RegexOption.DOT_MATCHES_ALL)
     private val fenceRegex = Regex("```[a-zA-Z]*\\n?([\\s\\S]*?)```")
-    private val headerRegex = Regex("^[#*>\\-\\s]*(?:第[0-9一二三四五六七八九十百千]+[话章节幕])?.*[#*>\\-\\s]*$")
+    private val headerRegex = Regex("^[#*>\\-\\s]*(?:第[0-9一二三四五六七八九十百千]+[话章节幕])?.*[#*>\\-\\s]*$") // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
 
     /**
      * 解析 AI 输出为脚本行列表。

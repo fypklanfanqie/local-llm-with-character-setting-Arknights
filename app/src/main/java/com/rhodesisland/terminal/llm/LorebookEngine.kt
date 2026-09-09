@@ -55,10 +55,10 @@ object LorebookEngine {
     private const val RANK_RECURSIVE = 2
 
     /** 静态头包裹语（constant 条目段）；动态尾用 [TAIL_HEAD]，两者措辞区分便于模型理解时效性。 */
-    private const val STATIC_HEAD = "\n【世界背景设定】以下为常驻世界观，请在对话中始终遵循：\n"
+    private const val STATIC_HEAD = "\n【世界背景设定】以下为常驻世界观，请在对话中始终遵循：\n" // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
 
     /** 动态尾包裹语（关键词命中段）。 */
-    private const val TAIL_HEAD = "【相关设定】本轮对话涉及以下背景，请自然融入回应：\n"
+    private const val TAIL_HEAD = "【相关设定】本轮对话涉及以下背景，请自然融入回应：\n" // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
 
     /**
      * [books] 建议由调用方先按作用域过滤（data.model.matchesScope）再传入；

@@ -130,13 +130,13 @@ class MnnBackend(
     ): Boolean = mutex.withLock {
         lastErrorMessage = null  // 清旧值，避免跨调用残留误导诊断
         if (!MnnBridge.nativeAvailable) {
-            lastErrorMessage = "MNN native 不可用（libMNN/libmnn_jni 未加载）"
+            lastErrorMessage = "MNN native 不可用（libMNN/libmnn_jni 未加载）" // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
             Log.e(TAG, lastErrorMessage!!)
             return@withLock false
         }
         val configFile = File(modelPath)
         if (!configFile.exists()) {
-            lastErrorMessage = "模型配置文件不存在"
+            lastErrorMessage = "模型配置文件不存在" // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
             Log.e(TAG, "config.json 不存在: $modelPath")
             return@withLock false
         }
@@ -154,15 +154,15 @@ class MnnBackend(
         val h = try {
             bridge.nativeCreate(modelPath, nativeConfigJson)
         } catch (e: Throwable) {
-            lastErrorMessage = "模型加载失败"
+            lastErrorMessage = "模型加载失败" // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
             Log.e(TAG, "nativeCreate 异常", e)
             0L
         }
         if (h == 0L) {
             // nativeCreate 返回 0：取 native 侧真实失败原因，供 BackendManager 汇总上报。
             val nativeErr = runCatching { bridge.nativeGetLastError() }.getOrDefault("").orEmpty()
-            lastErrorMessage = "模型加载失败"
-            Log.e(TAG, "模型加载失败 (backend=${mode.mnnBackendType}): ${nativeErr.ifBlank { "unknown" }}")
+            lastErrorMessage = "模型加载失败" // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
+            Log.e(TAG, "模型加载失败 (backend=${mode.mnnBackendType}): ${nativeErr.ifBlank { "unknown" }}") // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
             return@withLock false
         }
         handle = h
@@ -211,7 +211,7 @@ class MnnBackend(
         configuredContextTokens: Int?,
         actualContextTokens: Int?,
     ): NativeGenerationSummary? = mutex.withLock {
-        if (handle == 0L) throw IllegalStateException("MNN 后端未加载模型")
+        if (handle == 0L) throw IllegalStateException("MNN 后端未加载模型") // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
         currentCoroutineContext().ensureActive()
         // Task 16：阶段边界 PSS 采样（入口 = 模型已加载后基线；首 delta = prefill 完成后峰值近似；
         // finally = 生成后）。不逐 token 采样（getProcessMemoryInfo 数十 ms 级开销会拖慢推理）。

@@ -1,6 +1,7 @@
 package com.rhodesisland.terminal.llm.backend
 
 import android.content.Context
+import com.rhodesisland.terminal.i18n.L10nRuntime
 import android.os.SystemClock
 import com.rhodesisland.terminal.config.AppConfig
 import com.rhodesisland.terminal.data.model.AutoBackendModelClass
@@ -58,7 +59,9 @@ class GpuPreheatCoordinator(
         val modelFingerprint = modelConfigFingerprint(modelPath)
         val health = healthCoordinator.resolveForGpu(modelFingerprint)
         if (health.state != OpenClHealthState.PROBE_OK && health.state != OpenClHealthState.MODEL_OK) {
-            return PreheatResult.Skipped("OpenCL 健康检查未通过（${health.reason ?: health.state.name}），未执行预热")
+            return PreheatResult.Skipped(
+                L10nRuntime.format("OpenCL 健康检查未通过（{0}），未执行预热", health.reason ?: health.state.name),
+            )
         }
         val snapshot = settings.getLocalInferenceSettingsNow()
         // 显式 GPU 计划（预热目的明确：测 GPU 路径本身；失败自然回退 CPU 并如实报告）。
@@ -99,7 +102,11 @@ class GpuPreheatCoordinator(
                     loadMs = record?.coldLoadMs ?: record?.warmLoadMs,
                 )
                 else -> PreheatResult.Skipped(
-                    "GPU 预热未生效：实际走了 ${result.usedBackend.displayName}（OpenCL 加载/生成失败回退；耗 ${SystemClock.elapsedRealtime() - t0}ms）",
+                    L10nRuntime.format(
+                        "GPU 预热未生效：实际走了 {0}（OpenCL 加载/生成失败回退；耗 {1}ms）",
+                        L10nRuntime.t(result.usedBackend.displayName),
+                        SystemClock.elapsedRealtime() - t0,
+                    ),
                 )
             }
         } finally {
@@ -115,8 +122,8 @@ class GpuPreheatCoordinator(
 
         /** 预热探针：极短 prompt，无思考。 */
         private val PREHEAT_MESSAGES: List<ChatMessage> = listOf(
-            ChatMessage(role = "system", content = "你是中文测试助手。"),
-            ChatMessage(role = "user", content = "你好。"),
+            ChatMessage(role = "system", content = "你是中文测试助手。"), // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
+            ChatMessage(role = "user", content = "你好。"), // l10n:ignore 非界面文案（提示词/正则/内部消息，仅日志或经映射）
         )
     }
 }
