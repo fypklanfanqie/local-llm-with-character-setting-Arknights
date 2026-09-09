@@ -224,12 +224,12 @@ fun SettingsScreen(
             .verticalScroll(rememberScrollState())
             .padding(bottom = 100.dp),
     ) {
-        GlassLargeTitle("设置")
+        GlassLargeTitle(t("设置"))
 
         GlassListSection {
             GlassListRow(
-                title = "使用指南",
-                subtitle = "快速了解全部功能与配置",
+                title = t("使用指南"),
+                subtitle = t("快速了解全部功能与配置"),
                 onClick = { showGuide = true },
                 trailing = { Chevron() },
                 showDivider = false,
@@ -239,8 +239,8 @@ fun SettingsScreen(
         // ===== 崩溃日志（诊断：让受影响用户无需 adb 即可把崩溃堆栈发给开发者）=====
         GlassListSection {
             GlassListRow(
-                title = "崩溃日志",
-                subtitle = "查看并分享应用崩溃 / 启动异常日志",
+                title = t("崩溃日志"),
+                subtitle = t("查看并分享应用崩溃 / 启动异常日志"),
                 onClick = { showCrashLogs = true },
                 trailing = { Chevron() },
                 showDivider = false,
@@ -252,19 +252,19 @@ fun SettingsScreen(
 
         // ===== 本地 AI 引擎 =====
         CollapsibleSection(
-            title = "本地 AI 引擎",
+            title = t("本地 AI 引擎"),
             key = "local_ai",
-            summary = if (liquidGlass) "推理引擎 · 性能浮窗开" else "推理引擎",
+            summary = if (liquidGlass) t("推理引擎 · 性能浮窗开") else t("推理引擎"),
         ) {
             GlassListRow(
-                title = "推理引擎设置",
-                subtitle = "CPU / GPU / NPU 后端与参数",
+                title = t("推理引擎设置"),
+                subtitle = t("CPU / GPU / NPU 后端与参数"),
                 onClick = onNavigateToBackendSettings,
                 trailing = { Chevron() },
             )
             GlassListRow(
-                title = "性能浮窗液态玻璃",
-                subtitle = "背景模糊 + 虹彩光晕（Android 12+）",
+                title = t("性能浮窗液态玻璃"),
+                subtitle = t("背景模糊 + 虹彩光晕（Android 12+）"),
                 trailing = {
                     Switch(
                         checked = liquidGlass,
@@ -277,14 +277,14 @@ fun SettingsScreen(
 
         // ===== LLM API 配置 =====
         CollapsibleSection(
-            title = "LLM API 配置",
+            title = t("LLM API 配置"),
             key = "llm_api",
             initiallyExpanded = true,
             keepContent = true,
-            summary = apiConfig.model.ifBlank { "未配置模型" },
+            summary = apiConfig.model.ifBlank { t("未配置模型") },
         ) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                FieldLabel("模型商")
+                FieldLabel(t("模型商"))
                 ProviderDropdown(
                     selectedProvider = selectedProvider,
                     expanded = providerExpanded,
@@ -323,7 +323,7 @@ fun SettingsScreen(
                     },
                 )
                 if (!isCustom && selectedProvider != null) {
-                    FieldLabel("模型")
+                    FieldLabel(t("模型"))
                     ModelDropdown(
                         provider = selectedProvider!!,
                         selectedModel = selectedModel,
@@ -340,11 +340,13 @@ fun SettingsScreen(
                 }
                 if (isFreeProvider) {
                     // 内置免费服务商：key 由 Cloudflare 代理注入，客户端无需填写
-                    PasswordField("API KEY", "通过云端代理（无需密钥）", true, {}, {})
+                    PasswordField("API KEY", t("通过云端代理（无需密钥）"), true, {}, {})
                 } else {
                     PasswordField("API KEY", apiKey, showApiKey, { apiKey = it }, { showApiKey = !showApiKey })
                 }
                 // 测试连接：用当前输入实时验证（未保存也测）。自定义提供商 400/404/401 当场可见原因。
+                val llmProbeOkTemplate = t("连接成功：{0}")
+                val llmProbeFailTemplate = t("连接失败：{0}")
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     TextButton(
                         onClick = {
@@ -360,20 +362,20 @@ fun SettingsScreen(
                                         apiKey = key,
                                         model = model,
                                         messages = listOf(ChatMessageDto("user", JsonPrimitive("你好，请回复「测试通过」")))
-                                    ).take(60).let { "连接成功：$it" }
+                                    ).take(60).let { llmProbeOkTemplate.replace("{0}", it) }
                                 }.onFailure {
                                     // 技术异常只写日志；UI 统一显示固定文案。
                                     android.util.Log.w("SettingsScreen", "LLM 测试连接失败", it)
-                                }.exceptionOrNull()?.let { "连接失败：${it.toUserErrorMessage()}" }
+                                }.exceptionOrNull()?.let { llmProbeFailTemplate.replace("{0}", it.toUserErrorMessage()) }
                                 probeRunning = false
                             }
                         },
                         enabled = !probeRunning,
-                    ) { Text(if (probeRunning) "测试中…" else "测试连接", fontSize = 12.sp) }
+                    ) { Text(if (probeRunning) t("测试中…") else t("测试连接"), fontSize = 12.sp) }
                     probeResult?.let {
                         Text(
                             it,
-                            color = if (it.startsWith("连接成功")) scheme.tertiary else scheme.error,
+                            color = if (it.startsWith(t("连接成功"))) scheme.tertiary else scheme.error,
                             fontSize = 10.sp,
                             lineHeight = 13.sp,
                             modifier = Modifier.weight(1f),
@@ -383,7 +385,7 @@ fun SettingsScreen(
             }
         }
         SaveButton(
-            text = "保存 API 设置",
+            text = t("保存 API 设置"),
             saved = apiSaved,
             onClick = {
                 scope.launch {
@@ -400,22 +402,22 @@ fun SettingsScreen(
         // ===== 云端生成参数（仅云端 AI 生效；布局参照大众版同名区）=====
         // 「留空/关闭=不带字段」直接映射请求层的可空注入：不发送 temperature/max_tokens，
         // 由模型商决定默认值。上下文压缩节奏驱动滚动摘要（单聊云端），始终生效。
-        CollapsibleSection(title = "生成参数（仅云端 AI）", key = "gen_params", initiallyExpanded = false) {
+        CollapsibleSection(title = t("生成参数（仅云端 AI）"), key = "gen_params", initiallyExpanded = false) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                FieldLabel("单次回复上限 max_tokens")
+                FieldLabel(t("单次回复上限 max_tokens"))
                 GlassInputField(
                     value = cloudMaxTokensText,
                     onValueChange = { cloudMaxTokensText = it.filter { c -> c.isDigit() }.take(6) },
-                    placeholder = "留空使用模型商默认",
+                    placeholder = t("留空使用模型商默认"),
                 )
                 Text(
-                    "限制模型单次回复的最大 token 数，防止单条回复过长；留空则由模型商决定。",
+                    t("限制模型单次回复的最大 token 数，防止单条回复过长；留空则由模型商决定。"),
                     color = scheme.onSurfaceVariant, fontSize = 10.sp,
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        if (tempCustomEnabled) String.format(java.util.Locale.US, "温度 %.2f", tempValue)
-                        else "温度：跟随模型商默认",
+                        if (tempCustomEnabled) tf("温度 {0}", String.format(java.util.Locale.US, "%.2f", tempValue))
+                        else t("温度：跟随模型商默认"),
                         color = scheme.onSurface, fontSize = 12.sp,
                         modifier = Modifier.weight(1f),
                     )
@@ -428,24 +430,26 @@ fun SettingsScreen(
                     valueRange = 0f..1.5f,
                 )
                 Text(
-                    "越高越有创造性、也越容易跑偏；角色扮演建议 0.7~0.9。区间 0~1.5。",
+                    t("越高越有创造性、也越容易跑偏；角色扮演建议 0.7~0.9。区间 0~1.5。"),
                     color = scheme.onSurfaceVariant, fontSize = 10.sp,
                 )
-                FieldLabel("上下文压缩：每 N 条折叠一次")
+                FieldLabel(t("上下文压缩：每 N 条折叠一次"))
                 GlassInputField(
                     value = foldIntervalText,
                     onValueChange = { foldIntervalText = it.filter { c -> c.isDigit() }.take(3) },
                     placeholder = AppConfig.RollingSummary.DEFAULT_FOLD_BATCH.toString(),
                 )
                 Text(
-                    "每隔这么多条原文，把最旧一批连同旧摘要压成一段「前情提要」。" +
-                        "默认 ${AppConfig.RollingSummary.DEFAULT_FOLD_BATCH}；" +
-                        "范围 ${AppConfig.RollingSummary.MIN_FOLD_BATCH}~${AppConfig.RollingSummary.MAX_FOLD_BATCH}" +
-                        "（上限受历史存储约束）。留空恢复默认。",
+                    tf(
+                        "每隔这么多条原文，把最旧一批连同旧摘要压成一段「前情提要」。默认 {0}；范围 {1}~{2}（上限受历史存储约束）。留空恢复默认。",
+                        AppConfig.RollingSummary.DEFAULT_FOLD_BATCH,
+                        AppConfig.RollingSummary.MIN_FOLD_BATCH,
+                        AppConfig.RollingSummary.MAX_FOLD_BATCH,
+                    ),
                     color = scheme.onSurfaceVariant, fontSize = 10.sp,
                 )
                 SaveButton(
-                    text = "保存生成参数",
+                    text = t("保存生成参数"),
                     saved = cloudParamsSaved,
                     onClick = {
                         scope.launch {
@@ -470,26 +474,26 @@ fun SettingsScreen(
             AlertDialog(
                 onDismissRequest = { showFreeTip = false },
                 containerColor = scheme.surfaceContainerHigh,
-                title = { Text("免费对话", color = scheme.primary) },
+                title = { Text(t("免费对话"), color = scheme.primary) },
                 text = {
                     Text(
-                        "此为免费模型，参数量为7b，如果出现错误稍等就行，免费的服务请大家谅解！",
+                        t("此为免费模型，参数量为7b，如果出现错误稍等就行，免费的服务请大家谅解！"),
                         color = scheme.onSurface,
                         fontSize = 14.sp,
                         lineHeight = 20.sp,
                     )
                 },
                 confirmButton = {
-                    TextButton(onClick = { showFreeTip = false }) { Text("知道了", color = scheme.primary) }
+                    TextButton(onClick = { showFreeTip = false }) { Text(t("知道了"), color = scheme.primary) }
                 },
             )
         }
 
         // ===== 对话 =====
-        CollapsibleSection(title = "对话", summary = if (deepThinking) "深度思考开" else "深度思考关") {
+        CollapsibleSection(title = t("对话"), summary = if (deepThinking) t("深度思考开") else t("深度思考关")) {
             GlassListRow(
-                title = "深度思考模式",
-                subtitle = "展示并折叠模型推理过程",
+                title = t("深度思考模式"),
+                subtitle = t("展示并折叠模型推理过程"),
                 trailing = {
                     Switch(
                         checked = deepThinking,
@@ -513,17 +517,17 @@ fun SettingsScreen(
 
         // ===== 语音合成（朗读）=====
         CollapsibleSection(
-            title = "语音合成 (TTS) · 朗读",
+            title = t("语音合成 (TTS) · 朗读"),
             key = "tts",
             keepContent = true,
-            summary = "引擎：${ttsEngineEdit.label}",
+            summary = tf("引擎：{0}", t(ttsEngineEdit.label)),
         ) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    "手机系统语音：离线、免费、开箱即用；云端（火山豆包）：支持声音复刻音色与中日双语，需配置凭据。",
+                    t("手机系统语音：离线、免费、开箱即用；云端（火山豆包）：支持声音复刻音色与中日双语，需配置凭据。"),
                     color = scheme.onSurfaceVariant, fontSize = 11.sp,
                 )
-                FieldLabel("朗读引擎")
+                FieldLabel(t("朗读引擎"))
                 SeedanceDropdown(
                     items = TtsEngine.entries.map { it to it.label },
                     selected = ttsEngineEdit,
@@ -534,9 +538,9 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text("自动朗读角色回复", color = scheme.onSurface, fontSize = 13.sp)
+                        Text(t("自动朗读角色回复"), color = scheme.onSurface, fontSize = 13.sp)
                         Text(
-                            "角色完整回复生成后自动使用当前朗读引擎播放；手动停止的部分回复不朗读。",
+                            t("角色完整回复生成后自动使用当前朗读引擎播放；手动停止的部分回复不朗读。"),
                             color = scheme.onSurfaceVariant, fontSize = 10.sp,
                         )
                     }
@@ -548,23 +552,26 @@ fun SettingsScreen(
                     )
                 }
                 if (ttsEngineEdit == TtsEngine.SYSTEM) {
-                    FieldLabel("声音模板")
+                    FieldLabel(t("声音模板"))
                     SeedanceDropdown(
-                        items = SystemVoiceTemplate.entries.map { it to it.label },
+                        items = SystemVoiceTemplate.entries.map { it to t(it.label) },
                         selected = ttsTemplateEdit,
                         onSelect = { ttsTemplateEdit = it },
                     )
                     Text(
-                        "模板按手机已装语音自动匹配；无匹配语音时自动回落默认语音（语速/音调仍按模板生效）。音量跟随系统媒体音量。",
+                        t("模板按手机已装语音自动匹配；无匹配语音时自动回落默认语音（语速/音调仍按模板生效）。音量跟随系统媒体音量。"),
                         color = scheme.onSurfaceVariant, fontSize = 10.sp,
                     )
                 } else {
                     Text(
-                        "从火山引擎「API Key 管理」复制 API Key。下方为每个角色分别配置中文/日文 speaker_id；日语模式必须配置日文 speaker_id。资源版本已自动配置，无需填写 App ID、Access Key 或 Resource ID。",
+                        t("从火山引擎「API Key 管理」复制 API Key。下方为每个角色分别配置中文/日文 speaker_id；日语模式必须配置日文 speaker_id。资源版本已自动配置，无需填写 App ID、Access Key 或 Resource ID。"),
                         color = scheme.onSurfaceVariant, fontSize = 10.sp,
                     )
-                    PasswordField("火山引擎 API Key", ttsApiKey, showTtsKey, { ttsApiKey = it }, { showTtsKey = !showTtsKey })
+                    PasswordField(t("火山引擎 API Key"), ttsApiKey, showTtsKey, { ttsApiKey = it }, { showTtsKey = !showTtsKey })
                 }
+                val ttsNoVoiceMessage = t("请先配置至少一个角色音色")
+                val ttsSystemPreviewText = t("你好，这是朗读语音的试听效果。")
+                val ttsClonedPreviewText = t("你好，这是声音复刻朗读的试听效果。")
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     TextButton(
                         onClick = {
@@ -573,13 +580,13 @@ fun SettingsScreen(
                                 ttsPreviewError = null
                                 val result = runCatching {
                                     if (ttsEngineEdit == TtsEngine.SYSTEM) {
-                                        container.ttsManager.previewSystem("你好，这是朗读语音的试听效果。", ttsTemplateEdit)
+                                        container.ttsManager.previewSystem(ttsSystemPreviewText, ttsTemplateEdit)
                                     } else {
                         val characterId = ttsPreviewCharacterId
                             ?: voiceCharacters.firstOrNull()?.id
-                            ?: throw IllegalStateException("请先配置至少一个角色音色")
+                            ?: throw IllegalStateException(ttsNoVoiceMessage)
                         container.ttsManager.speak(
-                            if (container.settingsRepository.getTtsLanguageNow() == TtsLanguage.JA) "こんにちは、これは日本語の音声テストです。" else "你好，这是声音复刻朗读的试听效果。",
+                            if (container.settingsRepository.getTtsLanguageNow() == TtsLanguage.JA) "こんにちは、これは日本語の音声テストです。" else ttsClonedPreviewText,
                             characterId,
                         )
                                     }
@@ -589,14 +596,14 @@ fun SettingsScreen(
                             }
                         },
                         enabled = !ttsPreviewBusy,
-                    ) { Text(if (ttsPreviewBusy) "试听中…" else "试听", fontSize = 12.sp) }
+                    ) { Text(if (ttsPreviewBusy) t("试听中…") else t("试听"), fontSize = 12.sp) }
                     ttsPreviewError?.let {
                         Text(it, color = scheme.error, fontSize = 10.sp, modifier = Modifier.weight(1f))
                     }
                 }
             }
             SaveButton(
-                text = "保存 TTS 设置",
+                text = t("保存 TTS 设置"),
                 saved = ttsSaved,
                 onClick = {
                     scope.launch {
@@ -620,23 +627,23 @@ fun SettingsScreen(
         }
 
         // ===== 角色双语音色 =====
-        CollapsibleSection(title = "角色双语音色（speaker_id）", key = "tts_voices", keepContent = true) {
+        CollapsibleSection(title = t("角色双语音色（speaker_id）"), key = "tts_voices", keepContent = true) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    "每个角色分别填写中文和日文 speaker_id。日语模式只使用日文音色，缺失时会提示配置，不会用中文音色硬读日文。",
+                    t("每个角色分别填写中文和日文 speaker_id。日语模式只使用日文音色，缺失时会提示配置，不会用中文音色硬读日文。"),
                     color = scheme.onSurfaceVariant, fontSize = 11.sp,
                 )
                 // 角色音色表：嵌套折叠区（默认收起），替代旧 TextButton 裸 if 展开
                 CollapsibleSection(
-                    title = "角色音色表",
+                    title = t("角色音色表"),
                     key = "tts_voice_table",
-                    summary = "搜索角色后逐个配置中 / 日 speaker_id",
+                    summary = t("搜索角色后逐个配置中 / 日 speaker_id"),
                 ) {
                     // 搜索框：按中文名或英文 ID 快速筛选全量干员（384）与自定义角色。
                     GlassInputField(
                         value = voiceSearch,
                         onValueChange = { voiceSearch = it },
-                        placeholder = "搜索角色名 / ID（如 阿米娅 / amiya）",
+                        placeholder = t("搜索角色名 / ID（如 阿米娅 / amiya）"),
                     )
                     Spacer(Modifier.height(2.dp))
                     val filtered = if (voiceSearch.isBlank()) {
@@ -651,8 +658,8 @@ fun SettingsScreen(
                     }
                     if (filtered.isEmpty()) {
                         Text(
-                            if (voiceSearch.isBlank()) "尚未配置任何角色音色，输入角色名搜索后开始配置。"
-                            else "未找到「${voiceSearch.trim()}」，试试中文名或英文 ID。",
+                            if (voiceSearch.isBlank()) t("尚未配置任何角色音色，输入角色名搜索后开始配置。")
+                            else tf("未找到「{0}」，试试中文名或英文 ID。", voiceSearch.trim()),
                             color = scheme.onSurfaceVariant, fontSize = 11.sp,
                         )
                     }
@@ -662,13 +669,13 @@ fun SettingsScreen(
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(char.name, color = scheme.primary, fontSize = 12.sp, maxLines = 1, modifier = Modifier.weight(1f))
-                                Text(if (pair.zh.voiceId.isBlank()) "中 未配置" else "中 已配置", color = if (pair.zh.voiceId.isBlank()) scheme.error else scheme.tertiary, fontSize = 10.sp)
+                                Text(if (pair.zh.voiceId.isBlank()) t("中 未配置") else t("中 已配置"), color = if (pair.zh.voiceId.isBlank()) scheme.error else scheme.tertiary, fontSize = 10.sp)
                                 Spacer(Modifier.width(8.dp))
-                                Text(if (pair.ja.voiceId.isBlank()) "日 未配置" else "日 已配置", color = if (pair.ja.voiceId.isBlank()) scheme.error else scheme.tertiary, fontSize = 10.sp)
+                                Text(if (pair.ja.voiceId.isBlank()) t("日 未配置") else t("日 已配置"), color = if (pair.ja.voiceId.isBlank()) scheme.error else scheme.tertiary, fontSize = 10.sp)
                             }
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 VoiceField(
-                                    label = "中文 speaker_id",
+                                    label = t("中文 speaker_id"),
                                     value = pair.zh.voiceId,
                                     onValueChange = { value ->
                                         val cur = voiceEdit[id] ?: VoicePair()
@@ -678,7 +685,7 @@ fun SettingsScreen(
                                 )
                                 Spacer(Modifier.width(6.dp))
                                 VoiceField(
-                                    label = "日文 speaker_id",
+                                    label = t("日文 speaker_id"),
                                     value = pair.ja.voiceId,
                                     onValueChange = { value ->
                                         val cur = voiceEdit[id] ?: VoicePair()
@@ -692,7 +699,7 @@ fun SettingsScreen(
                 }
             }
             SaveButton(
-                text = "保存角色双语音色",
+                text = t("保存角色双语音色"),
                 saved = voiceSaved,
                 onClick = {
                     scope.launch {
@@ -707,19 +714,19 @@ fun SettingsScreen(
         }
 
         // ===== 关于（含主题模式静态展示，合并为一组）=====
-        CollapsibleSection(title = "关于", key = "about", summary = "版本 · 免责声明 · 主题") {
+        CollapsibleSection(title = t("关于"), key = "about", summary = t("版本 · 免责声明 · 主题")) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("罗德岛通讯终端", color = scheme.onSurface, fontSize = 16.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-                Text("Android 版 ${com.rhodesisland.terminal.BuildConfig.VERSION_NAME}", color = scheme.onSurfaceVariant, fontSize = 12.sp)
-                Text("明日方舟同人 AI 角色扮演聊天应用", color = scheme.onSurfaceVariant, fontSize = 12.sp)
+                Text(t("罗德岛通讯终端"), color = scheme.onSurface, fontSize = 16.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                Text(tf("Android 版 {0}", com.rhodesisland.terminal.BuildConfig.VERSION_NAME), color = scheme.onSurfaceVariant, fontSize = 12.sp)
+                Text(t("明日方舟同人 AI 角色扮演聊天应用"), color = scheme.onSurfaceVariant, fontSize = 12.sp)
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "内置 384 位罗德岛干员（20 位含语音/本地立绘 + 364 位自动生成）。项目为明日方舟同人作品，所有角色、立绘、音乐版权归 Hypergryph / 鹰角网络所有，仅用于学习交流，不作商业用途。",
+                    t("内置 384 位罗德岛干员（20 位含语音/本地立绘 + 364 位自动生成）。项目为明日方舟同人作品，所有角色、立绘、音乐版权归 Hypergryph / 鹰角网络所有，仅用于学习交流，不作商业用途。"),
                     color = scheme.onSurfaceVariant, fontSize = 10.sp, lineHeight = 15.sp,
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "主题模式：深色主题（PRTS 终端风，固定）",
+                    t("主题模式：深色主题（PRTS 终端风，固定）"),
                     color = scheme.onSurfaceVariant, fontSize = 12.sp,
                 )
             }
@@ -801,6 +808,7 @@ private fun CrashLogDialog(onDismiss: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val shareCrashLogsLabel = t("分享崩溃日志")
     // 打开时扫描一次日志文件（最新在前）。
     val logFiles = remember {
         CrashCapture.crashLogDir(context).listFiles()
@@ -812,14 +820,14 @@ private fun CrashLogDialog(onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = scheme.surfaceContainerHigh,
-        title = { Text("崩溃日志", color = scheme.onSurface) },
+        title = { Text(t("崩溃日志"), color = scheme.onSurface) },
         text = {
             if (logFiles.isEmpty()) {
-                Text("暂无崩溃日志。", color = scheme.onSurfaceVariant)
+                Text(t("暂无崩溃日志。"), color = scheme.onSurfaceVariant)
             } else {
                 Column {
                     Text(
-                        "共 ${logFiles.size} 条。点击条目即可分享给开发者（内容含机型 / 系统 / ABI 与崩溃堆栈）。",
+                        tf("共 {0} 条。点击条目即可分享给开发者（内容含机型 / 系统 / ABI 与崩溃堆栈）。", logFiles.size),
                         color = scheme.onSurfaceVariant,
                         fontSize = 12.sp,
                     )
@@ -840,7 +848,7 @@ private fun CrashLogDialog(onDismiss: () -> Unit) {
                                                     putExtra(Intent.EXTRA_TEXT, content)
                                                 }
                                                 runCatching {
-                                                    context.startActivity(Intent.createChooser(intent, "分享崩溃日志"))
+                                                    context.startActivity(Intent.createChooser(intent, shareCrashLogsLabel))
                                                 }
                                             }
                                         }
@@ -851,12 +859,12 @@ private fun CrashLogDialog(onDismiss: () -> Unit) {
                                 Column(Modifier.weight(1f)) {
                                     Text(file.name, color = scheme.onSurface, fontSize = 13.sp)
                                     Text(
-                                        "大小 ${(file.length() + 1023) / 1024} KB",
+                                        tf("大小 {0} KB", (file.length() + 1023) / 1024),
                                         color = scheme.onSurfaceVariant,
                                         fontSize = 11.sp,
                                     )
                                 }
-                                Text("分享", color = scheme.primary, fontSize = 13.sp)
+                                Text(t("分享"), color = scheme.primary, fontSize = 13.sp)
                             }
                         }
                     }
@@ -864,7 +872,7 @@ private fun CrashLogDialog(onDismiss: () -> Unit) {
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("关闭") }
+            TextButton(onClick = onDismiss) { Text(t("关闭")) }
         },
     )
 }
@@ -881,7 +889,7 @@ private fun SaveButton(text: String, saved: Boolean, onClick: () -> Unit) {
             Text(text, color = scheme.onPrimary)
         }
         if (saved) {
-            Text("✓ 已保存", color = MaterialTheme.colorScheme.tertiary, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+            Text(t("✓ 已保存"), color = MaterialTheme.colorScheme.tertiary, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
         }
     }
 }
@@ -900,10 +908,10 @@ private fun TtsGuideButton() {
             modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.buttonColors(containerColor = scheme.primary),
         ) {
-            Text("了解语音合成使用指南", color = scheme.onPrimary)
+            Text(t("了解语音合成使用指南"), color = scheme.onPrimary)
         }
         Text(
-            "视频为网站端设置演示，与本软件逻辑相同（视频分 P，可在 B 站内选集）",
+            t("视频为网站端设置演示，与本软件逻辑相同（视频分 P，可在 B 站内选集）"),
             color = scheme.onSurfaceVariant,
             fontSize = 11.sp,
             modifier = Modifier.padding(top = 4.dp),
@@ -986,7 +994,7 @@ private fun PasswordField(
             IconButton(onClick = onToggle) {
                 Icon(
                     imageVector = if (show) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                    contentDescription = if (show) "隐藏密钥" else "显示密钥",
+                    contentDescription = if (show) t("隐藏密钥") else t("显示密钥"),
                 )
             }
         }
@@ -1038,13 +1046,13 @@ private fun ChatBackgroundSection(container: AppContainer, scope: CoroutineScope
     }
 
     CollapsibleSection(
-        title = "聊天背景",
+        title = t("聊天背景"),
         key = "chat_background",
-        summary = if (bgConfig.enabled) "已启用 · ${bgConfig.paths.size} 张" else "未启用",
+        summary = if (bgConfig.enabled) tf("已启用 · {0} 张", bgConfig.paths.size) else t("未启用"),
     ) {
         GlassListRow(
-            title = "自定义背景图片",
-            subtitle = "从相册选择图片作为聊天背景轮播（最多 ${ChatBackgroundRepository.MAX_BACKGROUNDS} 张）",
+            title = t("自定义背景图片"),
+            subtitle = tf("从相册选择图片作为聊天背景轮播（最多 {0} 张）", ChatBackgroundRepository.MAX_BACKGROUNDS),
             trailing = {
                 Switch(
                     checked = bgConfig.enabled,
@@ -1067,7 +1075,7 @@ private fun ChatBackgroundSection(container: AppContainer, scope: CoroutineScope
                     )
                     if (bgConfig.paths.isNotEmpty()) {
                         TextButton(onClick = { showClearConfirm = true }) {
-                            Text("清空", color = scheme.error, fontSize = 12.sp)
+                            Text(t("清空"), color = scheme.error, fontSize = 12.sp)
                         }
                     }
                 }
@@ -1114,7 +1122,7 @@ private fun ChatBackgroundSection(container: AppContainer, scope: CoroutineScope
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text("＋", color = scheme.primary, fontSize = 20.sp)
-                                Text("添加", color = scheme.primary, fontSize = 9.sp)
+                                Text(t("添加"), color = scheme.primary, fontSize = 9.sp)
                             }
                         }
                     }
@@ -1127,16 +1135,16 @@ private fun ChatBackgroundSection(container: AppContainer, scope: CoroutineScope
         AlertDialog(
             onDismissRequest = { showClearConfirm = false },
             containerColor = scheme.surfaceContainerHigh,
-            title = { Text("清空背景", color = scheme.onSurface) },
-            text = { Text("确定清空全部自定义背景图片？将删除已保存的图片文件。", color = scheme.onSurfaceVariant) },
+            title = { Text(t("清空背景"), color = scheme.onSurface) },
+            text = { Text(t("确定清空全部自定义背景图片？将删除已保存的图片文件。"), color = scheme.onSurfaceVariant) },
             confirmButton = {
                 TextButton(onClick = {
                     scope.launch { container.chatBackgroundRepository.clearAll() }
                     showClearConfirm = false
-                }) { Text("清空", color = scheme.error) }
+                }) { Text(t("清空"), color = scheme.error) }
             },
             dismissButton = {
-                TextButton(onClick = { showClearConfirm = false }) { Text("取消", color = scheme.onSurfaceVariant) }
+                TextButton(onClick = { showClearConfirm = false }) { Text(t("取消"), color = scheme.onSurfaceVariant) }
             },
         )
     }
@@ -1198,16 +1206,17 @@ private fun GreetingSection(container: AppContainer, scope: CoroutineScope) {
     val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         notifGranted = it
     }
+    val cloudApiToast = t("请先在设置中配置云端 AI API")
 
     CollapsibleSection(
-        title = "角色问候",
+        title = t("角色问候"),
         key = "greeting",
-        summary = if (enabled) "已启用 · 每日 $dailyCount 条" else "未启用",
+        summary = if (enabled) tf("已启用 · 每日 {0} 条", dailyCount) else t("未启用"),
     ) {
         GlassListRow(
-            title = "角色主动问候",
-            subtitle = if (cloudReady) "所选角色白天随机时间主动给你发消息。"
-            else "请先在上方配置云端 AI API。",
+            title = t("角色主动问候"),
+            subtitle = if (cloudReady) t("所选角色白天随机时间主动给你发消息。")
+            else t("请先在上方配置云端 AI API。"),
             trailing = {
                 Switch(
                     checked = enabled,
@@ -1215,7 +1224,7 @@ private fun GreetingSection(container: AppContainer, scope: CoroutineScope) {
                     enabled = true,
                     onCheckedChange = { on ->
                         if (on && !cloudReady) {
-                            Toast.makeText(context, "请先在设置中配置云端 AI API", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, cloudApiToast, Toast.LENGTH_SHORT).show()
                         } else {
                             scope.launch {
                                 settings.setGreetingEnabled(on)
@@ -1235,10 +1244,10 @@ private fun GreetingSection(container: AppContainer, scope: CoroutineScope) {
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Filled.Warning, contentDescription = "提示", tint = scheme.error, modifier = Modifier.size(18.dp))
+                Icon(Icons.Filled.Warning, contentDescription = t("提示"), tint = scheme.error, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    "通知权限未开启，收不到主动消息提醒",
+                    t("通知权限未开启，收不到主动消息提醒"),
                     color = scheme.error,
                     fontSize = 11.sp,
                     modifier = Modifier.weight(1f),
@@ -1248,7 +1257,7 @@ private fun GreetingSection(container: AppContainer, scope: CoroutineScope) {
                         putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
                     }
                     runCatching { context.startActivity(intent) }
-                }) { Text("去开启", color = scheme.primary, fontSize = 12.sp) }
+                }) { Text(t("去开启"), color = scheme.primary, fontSize = 12.sp) }
             }
         }
         if (cloudReady) {
@@ -1262,17 +1271,17 @@ private fun GreetingSection(container: AppContainer, scope: CoroutineScope) {
                     colors = ButtonDefaults.buttonColors(containerColor = scheme.primary.copy(alpha = 0.16f)),
                     contentPadding = PaddingValues(vertical = 8.dp),
                 ) {
-                    Text("测试主动问候（10 秒后）", color = scheme.primary, fontSize = 13.sp)
+                    Text(t("测试主动问候（10 秒后）"), color = scheme.primary, fontSize = 13.sp)
                 }
                 if (testScheduled) {
-                    Text("✓ 已触发，约 10 秒后收到问候通知", color = scheme.tertiary, fontSize = 11.sp)
+                    Text(t("✓ 已触发，约 10 秒后收到问候通知"), color = scheme.tertiary, fontSize = 11.sp)
                 }
                 if (enabled) {
                     val selectedNames = characters.filter { it.id in charIds }.map { it.name }
                     val preview = when {
-                        selectedNames.isEmpty() -> "未选择"
+                        selectedNames.isEmpty() -> t("未选择")
                         selectedNames.size <= 3 -> selectedNames.joinToString("、")
-                        else -> "${selectedNames.take(3).joinToString("、")} 等 ${selectedNames.size} 个"
+                        else -> tf("{0} 等 {1} 个", selectedNames.take(3).joinToString("、"), selectedNames.size)
                     }
                     Row(
                         modifier = Modifier
@@ -1283,12 +1292,12 @@ private fun GreetingSection(container: AppContainer, scope: CoroutineScope) {
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(Modifier.weight(1f)) {
-                            Text("问候角色（已选 ${charIds.size} 个，可多选）", color = scheme.onSurfaceVariant, fontSize = 11.sp)
+                            Text(tf("问候角色（已选 {0} 个，可多选）", charIds.size), color = scheme.onSurfaceVariant, fontSize = 11.sp)
                             Text(preview, color = scheme.primary, fontSize = 13.sp, maxLines = 1)
                         }
                         Text("▾", color = scheme.onSurfaceVariant, fontSize = 12.sp)
                     }
-                    Text("每日主动消息条数：${sliderValue.toInt()}", color = scheme.onSurface, fontSize = 12.sp)
+                    Text(tf("每日主动消息条数：{0}", sliderValue.toInt()), color = scheme.onSurface, fontSize = 12.sp)
                     Slider(
                         value = sliderValue,
                         onValueChange = { sliderValue = it },
@@ -1307,8 +1316,10 @@ private fun GreetingSection(container: AppContainer, scope: CoroutineScope) {
                         steps = AppConfig.Greeting.MAX_DAILY_COUNT - AppConfig.Greeting.MIN_DAILY_COUNT - 1,
                     )
                     Text(
-                        "部分国产 ROM 需手动允许后台运行 / 自启动，否则可能收不到主动消息：" +
-                            "当前系统 ${RomDetector.detect().type.displayName}",
+                        tf(
+                            "部分国产 ROM 需手动允许后台运行 / 自启动，否则可能收不到主动消息：当前系统 {0}",
+                            RomDetector.detect().type.displayName,
+                        ),
                         color = scheme.onSurfaceVariant, fontSize = 10.sp,
                     )
                     // 电池优化白名单：未允许时可能被省电冻结，点「去允许」跳系统电池设置
@@ -1316,17 +1327,17 @@ private fun GreetingSection(container: AppContainer, scope: CoroutineScope) {
                         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(Icons.Filled.BatteryAlert, contentDescription = "电池优化", tint = scheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Filled.BatteryAlert, contentDescription = t("电池优化"), tint = scheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            if (ignoringBattery) "后台运行：已允许" else "后台运行：未允许（可能被省电冻结）",
+                            if (ignoringBattery) t("后台运行：已允许") else t("后台运行：未允许（可能被省电冻结）"),
                             color = if (ignoringBattery) scheme.tertiary else scheme.error,
                             fontSize = 11.sp,
                             modifier = Modifier.weight(1f),
                         )
                         if (!ignoringBattery) {
                             TextButton(onClick = { BackgroundSurvivalHelper.requestIgnoreBatteryOptimizations(context) }) {
-                                Text("去允许", color = scheme.primary, fontSize = 12.sp)
+                                Text(t("去允许"), color = scheme.primary, fontSize = 12.sp)
                             }
                         }
                     }
@@ -1337,16 +1348,16 @@ private fun GreetingSection(container: AppContainer, scope: CoroutineScope) {
                             modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Icon(Icons.Filled.PhoneAndroid, contentDescription = "自启动设置", tint = scheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Filled.PhoneAndroid, contentDescription = t("自启动设置"), tint = scheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
                             Text(
-                                "自启动管理（厂商设置）",
+                                t("自启动管理（厂商设置）"),
                                 color = scheme.onSurface,
                                 fontSize = 11.sp,
                                 modifier = Modifier.weight(1f),
                             )
                             TextButton(onClick = { runCatching { context.startActivity(autostartIntent) } }) {
-                                Text("去设置", color = scheme.primary, fontSize = 12.sp)
+                                Text(t("去设置"), color = scheme.primary, fontSize = 12.sp)
                             }
                         }
                     }
@@ -1357,16 +1368,16 @@ private fun GreetingSection(container: AppContainer, scope: CoroutineScope) {
                             modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Icon(Icons.Filled.Window, contentDescription = "后台弹出设置", tint = scheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Filled.Window, contentDescription = t("后台弹出设置"), tint = scheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
                             Text(
-                                "后台弹出界面（影响点通知跳转）",
+                                t("后台弹出界面（影响点通知跳转）"),
                                 color = scheme.onSurface,
                                 fontSize = 11.sp,
                                 modifier = Modifier.weight(1f),
                             )
                             TextButton(onClick = { runCatching { context.startActivity(popupIntent) } }) {
-                                Text("去设置", color = scheme.primary, fontSize = 12.sp)
+                                Text(t("去设置"), color = scheme.primary, fontSize = 12.sp)
                             }
                         }
                     }
@@ -1376,16 +1387,16 @@ private fun GreetingSection(container: AppContainer, scope: CoroutineScope) {
                             modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Icon(Icons.Filled.Alarm, contentDescription = "精确闹钟设置", tint = scheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Filled.Alarm, contentDescription = t("精确闹钟设置"), tint = scheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
                             Text(
-                                "精确闹钟未授权（后台触发可靠性降低）",
+                                t("精确闹钟未授权（后台触发可靠性降低）"),
                                 color = scheme.onSurface,
                                 fontSize = 11.sp,
                                 modifier = Modifier.weight(1f),
                             )
                             TextButton(onClick = { BackgroundSurvivalHelper.requestScheduleExactAlarm(context) }) {
-                                Text("去授权", color = scheme.primary, fontSize = 12.sp)
+                                Text(t("去授权"), color = scheme.primary, fontSize = 12.sp)
                             }
                         }
                     }
@@ -1398,7 +1409,7 @@ private fun GreetingSection(container: AppContainer, scope: CoroutineScope) {
         AlertDialog(
             onDismissRequest = { showCharPicker = false },
             containerColor = scheme.surfaceContainerHigh,
-            title = { Text("选择问候角色（可多选）", color = scheme.onSurface) },
+            title = { Text(t("选择问候角色（可多选）"), color = scheme.onSurface) },
             text = {
                 Column {
                     Row(
@@ -1410,13 +1421,13 @@ private fun GreetingSection(container: AppContainer, scope: CoroutineScope) {
                                 settings.setGreetingCharacterIds(characters.map { it.id }.toSet())
                                 GreetingScheduler.reschedule(context, settings)
                             }
-                        }) { Text("全选", color = scheme.primary, fontSize = 12.sp) }
+                        }) { Text(t("全选"), color = scheme.primary, fontSize = 12.sp) }
                         TextButton(onClick = {
                             scope.launch {
                                 settings.setGreetingCharacterIds(emptySet())
                                 GreetingScheduler.reschedule(context, settings)
                             }
-                        }) { Text("清空", color = scheme.error, fontSize = 12.sp) }
+                        }) { Text(t("清空"), color = scheme.error, fontSize = 12.sp) }
                     }
                     // 固定高度 LazyColumn：AlertDialog 内 verticalScroll + heightIn 在无界约束下不滚动，
                     // 列表会撑满整屏导致下方干员选不到（bug 修复）。
@@ -1449,7 +1460,7 @@ private fun GreetingSection(container: AppContainer, scope: CoroutineScope) {
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showCharPicker = false }) { Text("完成", color = scheme.onSurfaceVariant) }
+                TextButton(onClick = { showCharPicker = false }) { Text(t("完成"), color = scheme.onSurfaceVariant) }
             },
         )
     }
@@ -1474,16 +1485,17 @@ private fun GroupChatSection(container: AppContainer, scope: CoroutineScope) {
     }
 
     val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    val cloudApiToast = t("请先在设置中配置云端 AI API")
 
     CollapsibleSection(
-        title = "群聊",
+        title = t("群聊"),
         key = "group_chat",
-        summary = if (config.enabled) "已启用 · ${config.memberIds.size} 名成员" else "未启用",
+        summary = if (config.enabled) tf("已启用 · {0} 名成员", config.memberIds.size) else t("未启用"),
     ) {
         GlassListRow(
-            title = "多人角色群聊",
-            subtitle = if (cloudReady) "勾选角色同群聊天；空闲时自动互相聊天并可主动向你提问。"
-            else "请先在上方配置云端 AI API。",
+            title = t("多人角色群聊"),
+            subtitle = if (cloudReady) t("勾选角色同群聊天；空闲时自动互相聊天并可主动向你提问。")
+            else t("请先在上方配置云端 AI API。"),
             trailing = {
                 Switch(
                     checked = config.enabled,
@@ -1491,7 +1503,7 @@ private fun GroupChatSection(container: AppContainer, scope: CoroutineScope) {
                     enabled = true,
                     onCheckedChange = { on ->
                         if (on && !cloudReady) {
-                            Toast.makeText(context, "请先在设置中配置云端 AI API", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, cloudApiToast, Toast.LENGTH_SHORT).show()
                         } else {
                             scope.launch {
                                 settings.setGroupChatConfig(config.copy(enabled = on))
@@ -1517,22 +1529,22 @@ private fun GroupChatSection(container: AppContainer, scope: CoroutineScope) {
                     colors = ButtonDefaults.buttonColors(containerColor = scheme.primary.copy(alpha = 0.16f)),
                     contentPadding = PaddingValues(vertical = 8.dp),
                 ) {
-                    Text("测试群聊（10 秒后）", color = scheme.primary, fontSize = 13.sp)
+                    Text(t("测试群聊（10 秒后）"), color = scheme.primary, fontSize = 13.sp)
                 }
                 if (testScheduled) {
-                    Text("✓ 已触发，约 10 秒后收到群聊通知", color = scheme.tertiary, fontSize = 11.sp)
+                    Text(t("✓ 已触发，约 10 秒后收到群聊通知"), color = scheme.tertiary, fontSize = 11.sp)
                 }
                 if (config.enabled) {
                     // 多群聊：成员在「群聊列表 → 新建群聊 / 群信息」里按群设置，设置页不再重复选人
                     Text(
-                        "群成员到首页「群聊」的群列表里按群设置（新建群聊时勾选）。",
+                        t("群成员到首页「群聊」的群列表里按群设置（新建群聊时勾选）。"),
                         color = scheme.onSurfaceVariant,
                         fontSize = 11.sp,
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text("空闲自动聊天", color = scheme.onSurface, fontSize = 13.sp)
-                            Text("成员空闲时自动互相聊，并主动向你提问", color = scheme.onSurfaceVariant, fontSize = 10.sp)
+                            Text(t("空闲自动聊天"), color = scheme.onSurface, fontSize = 13.sp)
+                            Text(t("成员空闲时自动互相聊，并主动向你提问"), color = scheme.onSurfaceVariant, fontSize = 10.sp)
                         }
                         Switch(
                             checked = config.autoChat,
@@ -1544,7 +1556,7 @@ private fun GroupChatSection(container: AppContainer, scope: CoroutineScope) {
                             },
                         )
                     }
-                    Text("每日自动聊天轮次：${roundsValue.toInt()}", color = scheme.onSurface, fontSize = 12.sp)
+                    Text(tf("每日自动聊天轮次：{0}", roundsValue.toInt()), color = scheme.onSurface, fontSize = 12.sp)
                     Slider(
                         value = roundsValue,
                         onValueChange = { roundsValue = it },
@@ -1563,8 +1575,10 @@ private fun GroupChatSection(container: AppContainer, scope: CoroutineScope) {
                         steps = AppConfig.GroupChat.MAX_DAILY_ROUNDS - AppConfig.GroupChat.MIN_DAILY_ROUNDS - 1,
                     )
                     Text(
-                        "部分国产 ROM 需手动允许后台运行 / 自启动，否则收不到自动聊天提醒" +
-                            "（同「角色问候」，当前系统 ${RomDetector.detect().type.displayName}）。",
+                        tf(
+                            "部分国产 ROM 需手动允许后台运行 / 自启动，否则收不到自动聊天提醒（同「角色问候」，当前系统 {0}）。",
+                            RomDetector.detect().type.displayName,
+                        ),
                         color = scheme.onSurfaceVariant, fontSize = 10.sp,
                     )
                 }
@@ -1599,6 +1613,8 @@ private fun UserProfileSection(container: AppContainer, scope: CoroutineScope) {
         if (saved) { delay(2000); saved = false }
     }
 
+    val avatarSaveFailedMessage = t("头像保存失败")
+
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             pendingAvatarUri = uri
@@ -1608,17 +1624,17 @@ private fun UserProfileSection(container: AppContainer, scope: CoroutineScope) {
     }
 
     CollapsibleSection(
-        title = "我的形象（博士 · 选填）",
+        title = t("我的形象（博士 · 选填）"),
         key = "user_profile",
         keepContent = true,
-        summary = if (persona.isNotBlank() || relationship.isNotBlank()) "已填写" else "未填写",
+        summary = if (persona.isNotBlank() || relationship.isNotBlank()) t("已填写") else t("未填写"),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(
-                "以下全部为选填：留空则使用默认身份、不注入额外设定；填写后会把设定带进群聊、单聊与角色主动消息。",
+                t("以下全部为选填：留空则使用默认身份、不注入额外设定；填写后会把设定带进群聊、单聊与角色主动消息。"),
                 color = scheme.onSurfaceVariant, fontSize = 11.sp,
             )
-            FieldLabel("头像")
+            FieldLabel(t("头像"))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 val preview: Any? = when {
                     pendingAvatarUri != null -> pendingAvatarUri
@@ -1644,43 +1660,43 @@ private fun UserProfileSection(container: AppContainer, scope: CoroutineScope) {
                         .clickable { imagePicker.launch(arrayOf("image/*")) },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(if (preview == null) "＋ 选择" else "更换", color = scheme.primary, fontSize = 11.sp)
+                    Text(if (preview == null) t("＋ 选择") else t("更换"), color = scheme.primary, fontSize = 11.sp)
                 }
                 if (preview != null) {
                     TextButton(onClick = {
                         pendingAvatarUri = null
                         avatarCleared = true
                         avatarError = null
-                    }) { Text("清除", color = scheme.error, fontSize = 12.sp) }
+                    }) { Text(t("清除"), color = scheme.error, fontSize = 12.sp) }
                 }
             }
             avatarError?.let { Text(it, color = scheme.error, fontSize = 10.sp) }
-            FieldLabel("显示昵称（朋友圈等社交场景）")
+            FieldLabel(t("显示昵称（朋友圈等社交场景）"))
             GlassInputField(
                 value = displayName,
                 onValueChange = { displayName = it },
-                placeholder = "留空则显示「我」",
+                placeholder = t("留空则显示「我」"),
                 singleLine = true,
             )
-            FieldLabel("人设（我是谁）")
+            FieldLabel(t("人设（我是谁）"))
             GlassInputField(
                 value = persona,
                 onValueChange = { persona = it },
-                placeholder = "如「罗德岛的博士，温和可靠，战斗与战术都值得信赖」",
+                placeholder = t("如「罗德岛的博士，温和可靠，战斗与战术都值得信赖」"),
                 singleLine = false,
             )
-            FieldLabel("与角色之间的关系")
+            FieldLabel(t("与角色之间的关系"))
             GlassInputField(
                 value = relationship,
                 onValueChange = { relationship = it },
-                placeholder = "如「我是共建罗德岛的战友，也是他们可以依赖的上司」",
+                placeholder = t("如「我是共建罗德岛的战友，也是他们可以依赖的上司」"),
                 singleLine = false,
             )
         }
     }
 
     SaveButton(
-        text = "保存我的形象",
+        text = t("保存我的形象"),
         saved = saved,
         onClick = {
             scope.launch {
@@ -1689,7 +1705,7 @@ private fun UserProfileSection(container: AppContainer, scope: CoroutineScope) {
                 if (chosen != null) {
                     val installed = withContext(Dispatchers.IO) { UserProfileImageStore.save(context, chosen) }
                     if (installed == null) {
-                        avatarError = "头像保存失败"
+                        avatarError = avatarSaveFailedMessage
                         return@launch
                     }
                     finalAvatar = installed
@@ -1737,13 +1753,13 @@ private fun StorageSection(container: AppContainer, scope: CoroutineScope) {
     LaunchedEffect(Unit) { refresh() }
 
     CollapsibleSection(
-        title = "存储管理",
+        title = t("存储管理"),
         key = "storage",
-        summary = "总占用 ${AppStorageUsage.formatBytes(items.sumOf { it.sizeBytes })}",
+        summary = tf("总占用 {0}", AppStorageUsage.formatBytes(items.sumOf { it.sizeBytes })),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
-                "统计聊天数据 / 图片缓存 / 视频 / 导入图片占用；模型文件请到「模型」页管理。",
+                t("统计聊天数据 / 图片缓存 / 视频 / 导入图片占用；模型文件请到「模型」页管理。"),
                 color = scheme.onSurfaceVariant,
                 fontSize = 10.sp,
             )
@@ -1754,15 +1770,15 @@ private fun StorageSection(container: AppContainer, scope: CoroutineScope) {
             ) {
                 Column {
                     Text(
-                        "总占用：${AppStorageUsage.formatBytes(items.sumOf { it.sizeBytes })}",
+                        tf("总占用：{0}", AppStorageUsage.formatBytes(items.sumOf { it.sizeBytes })),
                         color = scheme.onSurface,
                         fontSize = 14.sp,
                         fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
                     )
-                    Text("不含模型文件", color = scheme.onSurfaceVariant, fontSize = 10.sp)
+                    Text(t("不含模型文件"), color = scheme.onSurfaceVariant, fontSize = 10.sp)
                 }
                 TextButton(onClick = { refresh() }) {
-                    Text(if (refreshing) "统计中…" else "刷新", color = scheme.primary, fontSize = 12.sp)
+                    Text(if (refreshing) t("统计中…") else t("刷新"), color = scheme.primary, fontSize = 12.sp)
                 }
             }
             items.forEach { item ->
@@ -1788,7 +1804,7 @@ private fun StorageSection(container: AppContainer, scope: CoroutineScope) {
                         modifier = Modifier.width(64.dp),
                     ) {
                         Text(
-                            if (item.key == "cache" || item.key == "chatRecords") "清空" else "删除",
+                            if (item.key == "cache" || item.key == "chatRecords") t("清空") else t("删除"),
                             color = scheme.error,
                             fontSize = 12.sp,
                         )
@@ -1801,29 +1817,29 @@ private fun StorageSection(container: AppContainer, scope: CoroutineScope) {
     confirmKey?.let { key ->
         val meta = when (key) {
             "cache" -> Triple(
-                "清空缓存",
-                "确定清空图片与临时缓存？聊天内容与文件不受影响。",
-                "清空",
+                t("清空缓存"),
+                t("确定清空图片与临时缓存？聊天内容与文件不受影响。"),
+                t("清空"),
             )
             "videos" -> Triple(
-                "删除视频",
-                "确定删除全部 Seedance 视频文件与任务快照？任务记录保留，视频卡片将显示「尚未就绪」。",
-                "删除",
+                t("删除视频"),
+                t("确定删除全部 Seedance 视频文件与任务快照？任务记录保留，视频卡片将显示「尚未就绪」。"),
+                t("删除"),
             )
             "backgrounds" -> Triple(
-                "删除聊天背景",
-                "确定删除全部自定义聊天背景？将恢复内置背景轮播。",
-                "删除",
+                t("删除聊天背景"),
+                t("确定删除全部自定义聊天背景？将恢复内置背景轮播。"),
+                t("删除"),
             )
             "portraits" -> Triple(
-                "删除自定义立绘",
-                "确定删除全部自定义角色立绘？自定义角色将恢复无立绘状态，可重新上传。",
-                "删除",
+                t("删除自定义立绘"),
+                t("确定删除全部自定义角色立绘？自定义角色将恢复无立绘状态，可重新上传。"),
+                t("删除"),
             )
             "chatRecords" -> Triple(
-                "清空聊天记录",
-                "确定清空全部聊天记录（单聊与群聊）？此操作不可恢复；Seedance 任务记录保留。",
-                "清空",
+                t("清空聊天记录"),
+                t("确定清空全部聊天记录（单聊与群聊）？此操作不可恢复；Seedance 任务记录保留。"),
+                t("清空"),
             )
             else -> Triple("", "", "")
         }
@@ -1857,7 +1873,7 @@ private fun StorageSection(container: AppContainer, scope: CoroutineScope) {
                 }) { Text(meta.third, color = scheme.error) }
             },
             dismissButton = {
-                TextButton(onClick = { confirmKey = null }) { Text("取消", color = scheme.onSurfaceVariant) }
+                TextButton(onClick = { confirmKey = null }) { Text(t("取消"), color = scheme.onSurfaceVariant) }
             },
         )
     }
@@ -1877,7 +1893,7 @@ private fun ProviderDropdown(
         onExpandedChange = onExpandedChange,
     ) {
         BasicTextField(
-            value = selectedProvider?.displayName ?: "自定义",
+            value = selectedProvider?.displayName ?: t("自定义"),
             onValueChange = {},
             readOnly = true,
             modifier = Modifier
@@ -1909,7 +1925,7 @@ private fun ProviderDropdown(
             modifier = Modifier.background(scheme.surfaceContainerHigh),
         ) {
             DropdownMenuItem(
-                text = { Text("自定义 (手动输入)", color = if (selectedProvider == null) scheme.primary else scheme.onSurface, fontSize = 13.sp) },
+                text = { Text(t("自定义 (手动输入)"), color = if (selectedProvider == null) scheme.primary else scheme.onSurface, fontSize = 13.sp) },
                 onClick = { onProviderSelected(null) },
             )
             HorizontalDivider(color = scheme.outline.copy(alpha = 0.5f))
@@ -1930,8 +1946,9 @@ private fun resolutionLabel(resolution: SeedanceResolution): String = when (reso
     SeedanceResolution.P4K -> "4K"
 }
 
+@Composable
 private fun variantLabel(variant: SeedanceModelVariant): String = when (variant) {
-    SeedanceModelVariant.STANDARD -> "标准（2.0）"
+    SeedanceModelVariant.STANDARD -> t("标准（2.0）")
     SeedanceModelVariant.FAST -> "Fast（2.0）"
 }
 
@@ -1972,6 +1989,14 @@ private fun MomentsSection(container: AppContainer, scope: CoroutineScope) {
     // 全链路验证「云端 LLM 文案 + 生图 API 出图」。结果（含失败原因）当场显示在按钮下方。
     var probeRunning by remember { mutableStateOf(false) }
     var probeResult by remember { mutableStateOf<String?>(null) }
+    // 测试结果文案在 Composable 作用域取好，供协程与回调使用（非 Composable 上下文不能调用 t）。
+    val momentProbeNoCloud = t("连接失败：请先在上方配置云端 AI API")
+    val momentProbeNoChar = t("连接失败：请先选择发圈角色")
+    val momentFallbackName = t("角色")
+    val momentProbeFailTemplate = t("连接失败：{0}")
+    val momentProbeDegradedTemplate = t("连接成功：「{0}」已发一条朋友圈（生图失败已降级纯文字，请检查生图 API 配置）")
+    val momentProbeImageTemplate = t("连接成功：「{0}」已发一条带图朋友圈，去朋友圈页看看吧")
+    val momentProbeTextTemplate = t("连接成功：「{0}」已发一条纯文字朋友圈，去朋友圈页看看吧")
 
     // 自动发圈
     val autoEnabled by settings.momentAutoConfig.collectAsState(initial = com.rhodesisland.terminal.data.model.MomentAutoConfig())
@@ -1986,17 +2011,17 @@ private fun MomentsSection(container: AppContainer, scope: CoroutineScope) {
     val imageGenEnabled by settings.momentImageGenEnabled.collectAsState(initial = true)
 
     CollapsibleSection(
-        title = "朋友圈",
+        title = t("朋友圈"),
         key = "moment",
         summary = when {
-            !imageGenEnabled -> "生图已关闭 · 纯文字发圈"
-            baseUrl.isNotBlank() && apiKey.isNotBlank() && model.isNotBlank() -> "生图已配置"
-            else -> "未配置生图 API"
+            !imageGenEnabled -> t("生图已关闭 · 纯文字发圈")
+            baseUrl.isNotBlank() && apiKey.isNotBlank() && model.isNotBlank() -> t("生图已配置")
+            else -> t("未配置生图 API")
         },
     ) {
         GlassListRow(
-            title = "自动发圈",
-            subtitle = "所选角色每隔一段时间自动发一条朋友圈（8-23 点）。",
+            title = t("自动发圈"),
+            subtitle = t("所选角色每隔一段时间自动发一条朋友圈（8-23 点）。"),
             trailing = {
                 Switch(
                     checked = autoEnabled.enabled,
@@ -2013,7 +2038,7 @@ private fun MomentsSection(container: AppContainer, scope: CoroutineScope) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (autoEnabled.enabled && cloudReady) {
                 Text(
-                    "发圈间隔：${autoEnabled.intervalHours} 小时（实际有 ±12% 随机抖动）",
+                    tf("发圈间隔：{0} 小时（实际有 ±12% 随机抖动）", autoEnabled.intervalHours),
                     color = scheme.onSurfaceVariant, fontSize = 12.sp,
                 )
                 var sliderValue by remember(autoEnabled.intervalHours) {
@@ -2042,15 +2067,15 @@ private fun MomentsSection(container: AppContainer, scope: CoroutineScope) {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        "发圈角色（已选 ${autoEnabled.characterIds.size} 个）",
+                        tf("发圈角色（已选 {0} 个）", autoEnabled.characterIds.size),
                         color = scheme.onSurface, fontSize = 13.sp,
                     )
-                    TextButton(onClick = { showCharPicker = true }) { Text("选择", fontSize = 12.sp) }
+                    TextButton(onClick = { showCharPicker = true }) { Text(t("选择"), fontSize = 12.sp) }
                 }
             }
 
             Text(
-                "互动角色（回复/点赞你的朋友圈）",
+                t("互动角色（回复/点赞你的朋友圈）"),
                 color = scheme.onSurface, fontSize = 13.sp,
             )
             Row(
@@ -2059,10 +2084,10 @@ private fun MomentsSection(container: AppContainer, scope: CoroutineScope) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    "已选 ${replyIds.size} 个（发圈后随机 1~3 个评论、1~3 个点赞）",
+                    tf("已选 {0} 个（发圈后随机 1~3 个评论、1~3 个点赞）", replyIds.size),
                     color = scheme.onSurfaceVariant, fontSize = 12.sp,
                 )
-                TextButton(onClick = { showReplyPicker = true }) { Text("选择", fontSize = 12.sp) }
+                TextButton(onClick = { showReplyPicker = true }) { Text(t("选择"), fontSize = 12.sp) }
             }
 
             // 朋友圈生图开关：关闭后角色发圈一律纯文字（生图 API 配置保留，随时可再打开）
@@ -2073,12 +2098,12 @@ private fun MomentsSection(container: AppContainer, scope: CoroutineScope) {
             ) {
                 Column(Modifier.weight(1f)) {
                     Text(
-                        "朋友圈生图",
+                        t("朋友圈生图"),
                         color = scheme.onSurface, fontSize = 13.sp,
                     )
                     Text(
-                        if (imageGenEnabled) "角色发圈会尝试配图（按下方生图 API）"
-                        else "已关闭：角色发圈一律纯文字，不调用生图 API",
+                        if (imageGenEnabled) t("角色发圈会尝试配图（按下方生图 API）")
+                        else t("已关闭：角色发圈一律纯文字，不调用生图 API"),
                         color = scheme.onSurfaceVariant, fontSize = 11.sp,
                     )
                 }
@@ -2089,14 +2114,14 @@ private fun MomentsSection(container: AppContainer, scope: CoroutineScope) {
             }
 
             Text(
-                "生图 API（自动适配三类端点：OpenAI 聊天格式出图、gpt-image 类 Responses 端点、任务制媒体 API 如 lk888 的 /media/generate；Base URL 一般填到 /v1 或 /api/v1；生图与对话模型分开配置，留空则角色朋友圈为纯文字）。",
+                t("生图 API（自动适配三类端点：OpenAI 聊天格式出图、gpt-image 类 Responses 端点、任务制媒体 API 如 lk888 的 /media/generate；Base URL 一般填到 /v1 或 /api/v1；生图与对话模型分开配置，留空则角色朋友圈为纯文字）。"),
                 color = scheme.onSurfaceVariant, fontSize = 11.sp,
             )
-            FieldLabel("生图服务地址")
+            FieldLabel(t("生图服务地址"))
             GlassInputField(value = baseUrl, onValueChange = { baseUrl = it }, placeholder = "https://中转站.com/v1")
-            FieldLabel("生图模型")
+            FieldLabel(t("生图模型"))
             GlassInputField(value = model, onValueChange = { model = it }, placeholder = "gemini-2.5-flash-image")
-            PasswordField("生图 API Key", apiKey, showApiKey, { apiKey = it }, { showApiKey = !showApiKey })
+            PasswordField(t("生图 API Key"), apiKey, showApiKey, { apiKey = it }, { showApiKey = !showApiKey })
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Button(
                     onClick = {
@@ -2110,19 +2135,19 @@ private fun MomentsSection(container: AppContainer, scope: CoroutineScope) {
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = scheme.primary.copy(alpha = 0.16f)),
-                ) { Text(if (saved) "✓ 已保存" else "保存生图配置", color = scheme.primary, fontSize = 13.sp) }
+                ) { Text(if (saved) t("✓ 已保存") else t("保存生图配置"), color = scheme.primary, fontSize = 13.sp) }
                 // 测试连接：按一下 = 保存当前配置 + 立刻真实发一条朋友圈（验证云端连接）；
                 // 发圈角色按「发圈角色」列表严格轮换（与自动发圈同一条轮换链），多次测试依次换人
                 TextButton(
                     onClick = {
                         if (!cloudReady) {
-                            probeResult = "连接失败：请先在上方配置云端 AI API"
+                            probeResult = momentProbeNoCloud
                             return@TextButton
                         }
                         val selectedIds = autoEnabled.characterIds
                         val fallbackId = characters.firstOrNull()?.id
                         if (selectedIds.isEmpty() && fallbackId == null) {
-                            probeResult = "连接失败：请先选择发圈角色"
+                            probeResult = momentProbeNoChar
                             return@TextButton
                         }
                         probeRunning = true
@@ -2131,7 +2156,7 @@ private fun MomentsSection(container: AppContainer, scope: CoroutineScope) {
                             try {
                                 val charId = if (selectedIds.isEmpty()) fallbackId!!
                                 else com.rhodesisland.terminal.work.MomentScheduler.pickNextCharacter(settings, selectedIds)
-                                val charName = characters.firstOrNull { it.id == charId }?.name ?: "角色"
+                                val charName = characters.firstOrNull { it.id == charId }?.name ?: momentFallbackName
                                 settings.setMomentImageGenConfig(
                                     com.rhodesisland.terminal.data.model.MomentImageGenConfig(
                                         baseUrl = baseUrl, apiKey = apiKey, model = model,
@@ -2145,35 +2170,35 @@ private fun MomentsSection(container: AppContainer, scope: CoroutineScope) {
                                 runCatching { settings.setMomentLastCharId(charId) }
                                 probeResult = when {
                                     imageCount > 0 && post.degradedToTextOnly ->
-                                        "连接成功：「$charName」已发一条朋友圈（生图失败已降级纯文字，请检查生图 API 配置）"
+                                        momentProbeDegradedTemplate.replace("{0}", charName)
                                     imageCount > 0 ->
-                                        "连接成功：「$charName」已发一条带图朋友圈，去朋友圈页看看吧"
+                                        momentProbeImageTemplate.replace("{0}", charName)
                                     else ->
-                                        "连接成功：「$charName」已发一条纯文字朋友圈，去朋友圈页看看吧"
+                                        momentProbeTextTemplate.replace("{0}", charName)
                                 }
                             } catch (e: kotlinx.coroutines.CancellationException) {
                                 throw e
                             } catch (e: Exception) {
                                 android.util.Log.w("SettingsScreen", "朋友圈测试连接失败", e)
-                                probeResult = "连接失败：${e.toUserErrorMessage()}"
+                                probeResult = momentProbeFailTemplate.replace("{0}", e.toUserErrorMessage())
                             } finally {
                                 probeRunning = false
                             }
                         }
                     },
                     enabled = !probeRunning,
-                ) { Text(if (probeRunning) "测试中…" else "测试连接", fontSize = 12.sp) }
+                ) { Text(if (probeRunning) t("测试中…") else t("测试连接"), fontSize = 12.sp) }
             }
             if (probeResult == null) {
                 Text(
-                    "点「测试连接」会保存当前生图配置，并立刻让一位发圈角色真实发一条朋友圈（生图 API 已填则带图），当场验证连接是否可用；多次点击会按「发圈角色」列表轮换发帖人。",
+                    t("点「测试连接」会保存当前生图配置，并立刻让一位发圈角色真实发一条朋友圈（生图 API 已填则带图），当场验证连接是否可用；多次点击会按「发圈角色」列表轮换发帖人。"),
                     color = scheme.onSurfaceVariant, fontSize = 11.sp,
                 )
             }
             probeResult?.let { result ->
                 Text(
                     result,
-                    color = if (result.startsWith("连接成功")) scheme.tertiary else scheme.error,
+                    color = if (result.startsWith(t("连接成功"))) scheme.tertiary else scheme.error,
                     fontSize = 11.sp,
                     lineHeight = 15.sp,
                 )
@@ -2184,7 +2209,7 @@ private fun MomentsSection(container: AppContainer, scope: CoroutineScope) {
     if (showCharPicker) {
         AlertDialog(
             onDismissRequest = { showCharPicker = false },
-            title = { Text("选择发圈角色（可多选）", color = scheme.onSurface) },
+            title = { Text(t("选择发圈角色（可多选）"), color = scheme.onSurface) },
             text = {
                 LazyColumn(modifier = Modifier.height(320.dp)) {
                     items(characters.size) { index ->
@@ -2208,7 +2233,7 @@ private fun MomentsSection(container: AppContainer, scope: CoroutineScope) {
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { showCharPicker = false }) { Text("完成") } },
+            confirmButton = { TextButton(onClick = { showCharPicker = false }) { Text(t("完成")) } },
         )
     }
 
@@ -2217,14 +2242,14 @@ private fun MomentsSection(container: AppContainer, scope: CoroutineScope) {
         val filtered = characters.filter { it.name.contains(search.trim(), ignoreCase = true) }
         AlertDialog(
             onDismissRequest = { showReplyPicker = false },
-            title = { Text("选择互动角色（可多选）", color = scheme.onSurface) },
+            title = { Text(t("选择互动角色（可多选）"), color = scheme.onSurface) },
             text = {
                 Column {
-                    GlassInputField(value = search, onValueChange = { search = it }, placeholder = "搜索角色名")
+                    GlassInputField(value = search, onValueChange = { search = it }, placeholder = t("搜索角色名"))
                     Spacer(Modifier.height(8.dp))
                     if (filtered.isEmpty()) {
                         Text(
-                            "没有匹配的角色",
+                            t("没有匹配的角色"),
                             color = scheme.onSurfaceVariant, fontSize = 13.sp,
                             modifier = Modifier.padding(vertical = 16.dp),
                         )
@@ -2251,7 +2276,7 @@ private fun MomentsSection(container: AppContainer, scope: CoroutineScope) {
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { showReplyPicker = false }) { Text("完成") } },
+            confirmButton = { TextButton(onClick = { showReplyPicker = false }) { Text(t("完成")) } },
         )
     }
 }
@@ -2279,22 +2304,27 @@ private fun TokenUsageSection(container: AppContainer) {
     var query by remember { mutableStateOf("") }
 
     CollapsibleSection(
-        title = "Token 用量",
+        title = t("Token 用量"),
         key = "token_usage",
-        summary = "累计 ${usage.total.calls} 次调用 · ${formatTokens(usage.total.totalTokens)} tokens · 缓存命中 ${formatCacheRate(usage.total)}",
+        summary = tf(
+            "累计 {0} 次调用 · {1} tokens · 缓存命中 {2}",
+            usage.total.calls,
+            formatTokens(usage.total.totalTokens),
+            formatCacheRate(usage.total),
+        ),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             // 总量数字
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TokenStatTile("输入", formatTokens(usage.total.promptTokens), Modifier.weight(1f))
-                TokenStatTile("输出", formatTokens(usage.total.completionTokens), Modifier.weight(1f))
-                TokenStatTile("合计", formatTokens(usage.total.totalTokens), Modifier.weight(1f))
-                TokenStatTile("调用", "${usage.total.calls}", Modifier.weight(1f))
+                TokenStatTile(t("输入"), formatTokens(usage.total.promptTokens), Modifier.weight(1f))
+                TokenStatTile(t("输出"), formatTokens(usage.total.completionTokens), Modifier.weight(1f))
+                TokenStatTile(t("合计"), formatTokens(usage.total.totalTokens), Modifier.weight(1f))
+                TokenStatTile(t("调用"), "${usage.total.calls}", Modifier.weight(1f))
             }
 
             if (usage.chars.isEmpty()) {
                 Text(
-                    "还没有云端调用记录：和角色聊天、主动问候、群聊发言、朋友圈文案与评论都会按角色累计。",
+                    t("还没有云端调用记录：和角色聊天、主动问候、群聊发言、朋友圈文案与评论都会按角色累计。"),
                     color = scheme.onSurfaceVariant, fontSize = 12.sp,
                 )
                 return@Column
@@ -2302,7 +2332,7 @@ private fun TokenUsageSection(container: AppContainer) {
 
             val nameById = characters.associate { it.id to it.name }
             val ranked = usage.chars.entries
-                .map { (id, entry) -> TokenRow(name = nameById[id] ?: "已注销角色", entry = entry) }
+                .map { (id, entry) -> TokenRow(name = nameById[id] ?: t("已注销角色"), entry = entry) }
                 .sortedByDescending { it.entry.totalTokens }
 
             // 条形图（Top 12；输入/输出双色堆叠）
@@ -2319,7 +2349,7 @@ private fun TokenUsageSection(container: AppContainer) {
                                 modifier = Modifier.weight(1f, fill = false),
                             )
                             Text(
-                                "${formatTokens(row.entry.totalTokens)} tok · ${row.entry.calls}次",
+                                tf("{0} tok · {1}次", formatTokens(row.entry.totalTokens), row.entry.calls),
                                 color = scheme.onSurfaceVariant, fontSize = 11.sp,
                             )
                         }
@@ -2348,15 +2378,15 @@ private fun TokenUsageSection(container: AppContainer) {
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                TokenLegend(scheme.primary.copy(alpha = 0.75f), "输入")
-                TokenLegend(scheme.tertiary.copy(alpha = 0.75f), "输出")
+                TokenLegend(scheme.primary.copy(alpha = 0.75f), t("输入"))
+                TokenLegend(scheme.tertiary.copy(alpha = 0.75f), t("输出"))
             }
 
             // 搜索 + 明细（全量，按总量降序）
-            GlassInputField(value = query, onValueChange = { query = it }, placeholder = "搜索角色名")
+            GlassInputField(value = query, onValueChange = { query = it }, placeholder = t("搜索角色名"))
             val filtered = ranked.filter { it.name.contains(query.trim(), ignoreCase = true) }
             if (filtered.isEmpty()) {
-                Text("没有匹配的角色", color = scheme.onSurfaceVariant, fontSize = 12.sp)
+                Text(t("没有匹配的角色"), color = scheme.onSurfaceVariant, fontSize = 12.sp)
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     filtered.forEach { row ->
@@ -2372,7 +2402,13 @@ private fun TokenUsageSection(container: AppContainer) {
                                 modifier = Modifier.weight(1f, fill = false),
                             )
                             Text(
-                                "入 ${formatTokens(row.entry.promptTokens)} · 出 ${formatTokens(row.entry.completionTokens)} · 命中 ${formatCacheRate(row.entry)} · ${row.entry.calls}次",
+                                tf(
+                                    "入 {0} · 出 {1} · 命中 {2} · {3}次",
+                                    formatTokens(row.entry.promptTokens),
+                                    formatTokens(row.entry.completionTokens),
+                                    formatCacheRate(row.entry),
+                                    row.entry.calls,
+                                ),
                                 color = scheme.onSurfaceVariant, fontSize = 11.sp,
                             )
                         }
@@ -2463,26 +2499,28 @@ private fun SeedanceSettingsSection(container: AppContainer, scope: CoroutineSco
             backgroundError = null
         }
     }
+    val backgroundSaveFailedMessage = t("背景图保存失败")
 
     CollapsibleSection(
-        title = "Seedance 对话视频",
+        title = t("Seedance 对话视频"),
         key = "seedance",
         keepContent = true,
-        summary = if (apiKey.isNotBlank()) "已配置 · ${relayModelId.ifBlank { variantLabel(variant) }}" else "未配置 API Key",
+        summary = if (apiKey.isNotBlank()) tf("已配置 · {0}", relayModelId.ifBlank { variantLabel(variant) }) else t("未配置 API Key"),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(
-                "角色回复后自动生成对应短视频（Seedance 2.0），支持火山方舟官方与中转站（如 dm1124 媒体协议），API Key 与对话模型分开配置。",
+                t("角色回复后自动生成对应短视频（Seedance 2.0），支持火山方舟官方与中转站（如 dm1124 媒体协议），API Key 与对话模型分开配置。"),
                 color = scheme.onSurfaceVariant, fontSize = 11.sp,
             )
             PasswordField("API Key", apiKey, showApiKey, { apiKey = it }, { showApiKey = !showApiKey })
-            FieldLabel("服务地址")
+            FieldLabel(t("服务地址"))
             GlassInputField(value = baseUrl, onValueChange = { baseUrl = it }, placeholder = SeedanceConfig().baseUrl)
             Text(
-                "官方方舟填 base（含 /api/v3）。中转站可填完整「创建任务」地址（如 https://api.lk888.ai/v1/media/generate）或只填主机（如 https://api.lk888.ai），将自动识别媒体协议并调用 /v1/media/generate 与 /v1/media/status。",
+                t("官方方舟填 base（含 /api/v3）。中转站可填完整「创建任务」地址（如 https://api.lk888.ai/v1/media/generate）或只填主机（如 https://api.lk888.ai），将自动识别媒体协议并调用 /v1/media/generate 与 /v1/media/status。"),
                 color = scheme.onSurfaceVariant, fontSize = 10.sp,
             )
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                val probeTimeoutMessage = t("连接超时，请检查地址与网络")
                 TextButton(
                     onClick = {
                         scope.launch {
@@ -2492,14 +2530,14 @@ private fun SeedanceSettingsSection(container: AppContainer, scope: CoroutineSco
                                 container.seedanceClient.probeEndpoint(
                                     SeedanceConfig(baseUrl = baseUrl, apiKey = apiKey)
                                 )
-                            } ?: SeedanceProbeResult.Failed("连接超时，请检查地址与网络")
+                            } ?: SeedanceProbeResult.Failed(probeTimeoutMessage)
                             probeResult = result
                             probeRunning = false
                         }
                     },
                     enabled = !probeRunning,
                 ) {
-                    Text(if (probeRunning) "测试中…" else "测试连接", fontSize = 12.sp)
+                    Text(if (probeRunning) t("测试中…") else t("测试连接"), fontSize = 12.sp)
                 }
                 when (val r = probeResult) {
                     is SeedanceProbeResult.Ok ->
@@ -2509,17 +2547,17 @@ private fun SeedanceSettingsSection(container: AppContainer, scope: CoroutineSco
                     null -> {}
                 }
             }
-            FieldLabel("模型 ID（中转站媒体协议）")
+            FieldLabel(t("模型 ID（中转站媒体协议）"))
             GlassInputField(
                 value = relayModelId,
                 onValueChange = { relayModelId = it },
                 placeholder = SeedanceConfig().relayModelId,
             )
             Text(
-                "仅中转站媒体协议使用（官方方舟忽略此项）。默认 kwvideo-v2-ref 即该站 Seedance 2.0 参考生视频模型。",
+                t("仅中转站媒体协议使用（官方方舟忽略此项）。默认 kwvideo-v2-ref 即该站 Seedance 2.0 参考生视频模型。"),
                 color = scheme.onSurfaceVariant, fontSize = 10.sp,
             )
-            FieldLabel("模型")
+            FieldLabel(t("模型"))
             SeedanceDropdown(
                 items = SeedanceModelVariant.entries.map { it to variantLabel(it) },
                 selected = variant,
@@ -2535,16 +2573,16 @@ private fun SeedanceSettingsSection(container: AppContainer, scope: CoroutineSco
                 },
             )
             Text(
-                "中转站映射：标准→version「标准」，Fast→version「快速」（1080p/4K 仅标准版可用）。",
+                t("中转站映射：标准→version「标准」，Fast→version「快速」（1080p/4K 仅标准版可用）。"),
                 color = scheme.onSurfaceVariant, fontSize = 10.sp,
             )
-            FieldLabel("分辨率")
+            FieldLabel(t("分辨率"))
             SeedanceDropdown(
                 items = variant.supportedResolutions.map { it to resolutionLabel(it) },
                 selected = resolution,
                 onSelect = { resolution = it },
             )
-            Text("视频时长：$duration 秒", color = scheme.onSurface, fontSize = 12.sp)
+            Text(tf("视频时长：{0} 秒", duration), color = scheme.onSurface, fontSize = 12.sp)
             Slider(
                 value = duration.toFloat().coerceIn(variant.minDurationSeconds.toFloat(), variant.maxDurationSeconds.toFloat()),
                 onValueChange = {
@@ -2553,7 +2591,7 @@ private fun SeedanceSettingsSection(container: AppContainer, scope: CoroutineSco
                 valueRange = variant.minDurationSeconds.toFloat()..variant.maxDurationSeconds.toFloat(),
                 steps = variant.maxDurationSeconds - variant.minDurationSeconds - 1,
             )
-            FieldLabel("画幅比例")
+            FieldLabel(t("画幅比例"))
             SeedanceDropdown(
                 items = SeedanceRatio.entries.map { it to it.apiValue },
                 selected = ratio,
@@ -2561,16 +2599,16 @@ private fun SeedanceSettingsSection(container: AppContainer, scope: CoroutineSco
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("生成结果带水印", color = scheme.onSurface, fontSize = 13.sp)
-                    Text("默认关闭；仅方舟官方生效", color = scheme.onSurfaceVariant, fontSize = 10.sp)
+                    Text(t("生成结果带水印"), color = scheme.onSurface, fontSize = 13.sp)
+                    Text(t("默认关闭；仅方舟官方生效"), color = scheme.onSurfaceVariant, fontSize = 10.sp)
                 }
                 Switch(checked = watermark, onCheckedChange = { watermark = it })
             }
             Text(
-                "视频语音固定开启（Seedance 2.0 不支持关闭，中转站自动生成有声视频）。",
+                t("视频语音固定开启（Seedance 2.0 不支持关闭，中转站自动生成有声视频）。"),
                 color = scheme.onSurfaceVariant, fontSize = 10.sp,
             )
-            FieldLabel("背景图（可选）")
+            FieldLabel(t("背景图（可选）"))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 val preview: Any? = when {
                     pendingBackgroundUri != null -> pendingBackgroundUri
@@ -2596,29 +2634,29 @@ private fun SeedanceSettingsSection(container: AppContainer, scope: CoroutineSco
                         .clickable { imagePicker.launch(arrayOf("image/*")) },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(if (preview == null) "＋ 选择" else "更换", color = scheme.primary, fontSize = 11.sp)
+                    Text(if (preview == null) t("＋ 选择") else t("更换"), color = scheme.primary, fontSize = 11.sp)
                 }
                 if (preview != null) {
                     TextButton(onClick = {
                         pendingBackgroundUri = null
                         backgroundCleared = true
                         backgroundError = null
-                    }) { Text("清除", color = scheme.error, fontSize = 12.sp) }
+                    }) { Text(t("清除"), color = scheme.error, fontSize = 12.sp) }
                 }
             }
             backgroundError?.let { Text(it, color = scheme.error, fontSize = 10.sp) }
-            FieldLabel("场景描述（可选）")
+            FieldLabel(t("场景描述（可选）"))
             GlassInputField(
                 value = sceneDescription,
                 onValueChange = { sceneDescription = it },
-                placeholder = "如「雨夜的街道」",
+                placeholder = t("如「雨夜的街道」"),
                 singleLine = false,
             )
         }
     }
 
     SaveButton(
-        text = "保存 Seedance 设置",
+        text = t("保存 Seedance 设置"),
         saved = saved,
         onClick = {
             scope.launch {
@@ -2633,7 +2671,7 @@ private fun SeedanceSettingsSection(container: AppContainer, scope: CoroutineSco
                 if (chosenUri != null) {
                     val installedPath = sceneStore.install(chosenUri).getOrNull()
                     if (installedPath == null) {
-                        backgroundError = "背景图保存失败"
+                        backgroundError = backgroundSaveFailedMessage
                         return@launch
                     }
                     finalBackgroundPath = installedPath
