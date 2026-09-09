@@ -15,12 +15,13 @@
 | 4 | `ui/video/*` + `ui/models/*` | 120 | `04Video` | ✅ 已完成（120 处 + 65 词条） |
 | 5 | `ui/groupchat/*` | 61 | `05GroupChat` | ✅ 已完成（60 处 + 38 词条） |
 | 6 | `ui/lorebook/*` + `ui/glass/*` | 99 | `06Lorebook` | ✅ 已完成（99 处 + 75 词条） |
-| 7 | `ui/moment/*` + `ui/feed/*` + `ui/navigation/*` + `ui/characters/*` | ~65 | `07Moment` | 🔄 进行中 |
-| 8 | `ui/novel/*` + `ui/affinity/*` + `ui/music/*` + `ui/theme/*` | ~130 | `08Novel` | 🔄 进行中 |
+| 7 | `ui/moment/*` + `ui/feed/*` + `ui/navigation/*` + `ui/characters/*` | 100 | `07Moment` | ✅ 已完成（100 处 + 58 词条；Tab 通讯=Comms/トーク） |
+| 8 | `ui/novel/*` + `ui/affinity/*` + `ui/music/*` + `ui/theme/*` | 162 | `08Novel` | ✅ 已完成（161 处 + 126 词条） |
 | 9A | `util/*` + `notification/*` + `work/*` + `provider/*` + `tts/*` + `service/*` + `perfmon/*` | ~100 | `09System` | 🔄 进行中 |
-| 9B | `data/remote` + `data/model` + `data/repository` + `data/lorebook` | ~108 | `09SystemB` | ⏳ |
+| 9B | `data/remote` + `data/model` + `data/repository` + `data/lorebook` | 117 | `09SystemB` | ✅ 已完成（65 处 + 75 词条） |
 | 10 | `conversationexport/*` + `manager/*` | 37 | `10Export` | ✅ 已完成（37 处 + 30 词条） |
 | 11 | `llm/` 诊断层文案（提示词除外） | ~150 | `11Diagnostics` | ⏳ |
+| — | 跨批次补漏（朗读引擎下拉 / 模型说明 / 语音语言角标） | 3 | — | ✅ 已完成 |
 
 ## 约定
 
