@@ -29,6 +29,9 @@ import com.rhodesisland.terminal.AppContainer
 import com.rhodesisland.terminal.data.lorebook.LorebookJson
 import com.rhodesisland.terminal.data.model.Lorebook
 import com.rhodesisland.terminal.data.model.LorebookScopeType
+import com.rhodesisland.terminal.i18n.L10nRuntime
+import com.rhodesisland.terminal.i18n.t
+import com.rhodesisland.terminal.i18n.tf
 import com.rhodesisland.terminal.ui.glass.CollapsibleSection
 import com.rhodesisland.terminal.ui.glass.GlassButton
 import com.rhodesisland.terminal.ui.glass.GlassButtonStyle
@@ -73,12 +76,12 @@ fun LorebookSection(
                 }.getOrNull()
             }
             when {
-                result == null -> importMessage = "读取文件失败"
+                result == null -> importMessage = L10nRuntime.t("读取文件失败")
                 else -> when (val parsed = LorebookJson.parseSillyTavern(result)) {
-                    is LorebookJson.ParseResult.Fail -> importMessage = "导入失败：${parsed.message}"
+                    is LorebookJson.ParseResult.Fail -> importMessage = L10nRuntime.format("导入失败：{0}", parsed.message)
                     is LorebookJson.ParseResult.Ok -> {
                         // 追加新书（id 全新生成，不做同名覆盖防误删）
-                        val bookName = parsed.name ?: "导入的世界书"
+                        val bookName = parsed.name ?: L10nRuntime.t("导入的世界书")
                         val newBook = Lorebook(
                             id = "lb-" + System.currentTimeMillis(),
                             name = bookName,
@@ -87,7 +90,7 @@ fun LorebookSection(
                         )
                         container.settingsRepository.updateLorebooks { it + newBook }
                         importMessage = buildString {
-                            append("已导入「${newBook.name}」共 ${parsed.entries.size} 条")
+                            append(L10nRuntime.format("已导入「{0}」共 {1} 条", newBook.name, parsed.entries.size))
                             parsed.warning?.let { append("\n$it") }
                         }
                     }
@@ -97,7 +100,7 @@ fun LorebookSection(
     }
 
     CollapsibleSection(
-        title = "世界书",
+        title = t("世界书"),
         key = "lorebook",
         initiallyExpanded = false,
         headerExtra = {
@@ -110,15 +113,15 @@ fun LorebookSection(
         },
     ) {
         Text(
-            text = "按关键词触发的背景设定库：对话提到关键词时自动注入对应设定。" +
-                "支持导入 SillyTavern 世界书 JSON 文件，可按作用域绑定角色私聊与群聊。",
+            text = t("按关键词触发的背景设定库：对话提到关键词时自动注入对应设定。") +
+                t("支持导入 SillyTavern 世界书 JSON 文件，可按作用域绑定角色私聊与群聊。"),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 11.sp,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
         )
         if (!config.masterEnabled) {
             Text(
-                text = "世界书总开关已关闭，所有条目均不会注入。",
+                text = t("世界书总开关已关闭，所有条目均不会注入。"),
                 color = MaterialTheme.colorScheme.tertiary,
                 fontSize = 12.sp,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
@@ -126,7 +129,7 @@ fun LorebookSection(
         }
         if (books.isEmpty()) {
             Text(
-                text = "还没有世界书，点下方「新建」或「导入 .json」开始。",
+                text = t("还没有世界书，点下方「新建」或「导入 .json」开始。"),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
@@ -134,9 +137,10 @@ fun LorebookSection(
         }
         books.forEach { book ->
             GlassListRow(
-                title = book.name.ifBlank { "未命名世界书" },
-                subtitle = scopeSummary(book) + " · ${book.entries.size} 条 · ${book.entries.count { it.enabled }} 启用" +
-                    if (book.enabled) "" else " · 已停用",
+                title = if (book.name.isBlank()) t("未命名世界书") else book.name,
+                subtitle = scopeSummary(book) + " · " +
+                    tf("{0} 条 · {1} 启用", book.entries.size, book.entries.count { it.enabled }) +
+                    if (book.enabled) "" else " · " + t("已停用"),
                 onClick = { onNavigateToLorebook(book.id) },
                 showDivider = false,
                 trailing = {
@@ -156,20 +160,20 @@ fun LorebookSection(
 
         // 全局参数
         GlassListRow(
-            title = "扫描深度",
-            subtitle = "扫描最近 ${config.scanDepth} 条消息中的关键词",
+            title = t("扫描深度"),
+            subtitle = tf("扫描最近 {0} 条消息中的关键词", config.scanDepth),
             onClick = { showScanDepthEdit = true },
             showDivider = false,
         )
         GlassListRow(
-            title = "Token 预算上限",
-            subtitle = if (config.budgetCapTokens > 0) "单次注入不超过约 ${config.budgetCapTokens} tokens" else "不限",
+            title = t("Token 预算上限"),
+            subtitle = if (config.budgetCapTokens > 0) tf("单次注入不超过约 {0} tokens", config.budgetCapTokens) else t("不限"),
             onClick = { showBudgetEdit = true },
             showDivider = false,
         )
         GlassListRow(
-            title = "递归扫描",
-            subtitle = "已激活条目的内容可再触发其他条目",
+            title = t("递归扫描"),
+            subtitle = t("已激活条目的内容可再触发其他条目"),
             trailing = {
                 Switch(
                     checked = config.recursiveScanning,
@@ -184,7 +188,7 @@ fun LorebookSection(
         Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
             Box(modifier = Modifier.weight(1f)) {
                 GlassButton(onClick = { showCreate = true }, modifier = Modifier.fillMaxWidth(), style = GlassButtonStyle.Tinted) {
-                    Text("新建", fontSize = 14.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+                    Text(t("新建"), fontSize = 14.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
                 }
             }
             Box(modifier = Modifier.padding(start = 10.dp).weight(1f)) {
@@ -192,7 +196,7 @@ fun LorebookSection(
                     onClick = { importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
                     modifier = Modifier.fillMaxWidth(),
                     style = GlassButtonStyle.Tinted,
-                ) { Text("导入 .json", fontSize = 14.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium) }
+                ) { Text(t("导入 .json"), fontSize = 14.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium) }
             }
         }
     }
@@ -200,9 +204,9 @@ fun LorebookSection(
     // 新建命名弹窗
     if (showCreate) {
         NamePromptDialog(
-            title = "新建世界书",
-            placeholder = "如：修仙世界",
-            confirmText = "创建",
+            title = t("新建世界书"),
+            placeholder = t("如：修仙世界"),
+            confirmText = t("创建"),
             onConfirm = { name ->
                 scope.launch {
                     container.settingsRepository.updateLorebooks {
@@ -220,18 +224,27 @@ fun LorebookSection(
             onDismissRequest = { deleteTarget = null },
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             titleContentColor = MaterialTheme.colorScheme.onSurface,
-            title = { Text("删除世界书", color = MaterialTheme.colorScheme.onSurface) },
-            text = { Text("确定删除「${target.name.ifBlank { "未命名世界书" }}」及其全部 ${target.entries.size} 个条目？该操作不可恢复。", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+            title = { Text(t("删除世界书"), color = MaterialTheme.colorScheme.onSurface) },
+            text = {
+                Text(
+                    tf(
+                        "确定删除「{0}」及其全部 {1} 个条目？该操作不可恢复。",
+                        if (target.name.isBlank()) t("未命名世界书") else target.name,
+                        target.entries.size,
+                    ),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            },
             confirmButton = {
                 TextButton(onClick = {
                     scope.launch {
                         container.settingsRepository.updateLorebooks { list -> list.filterNot { it.id == target.id } }
                     }
                     deleteTarget = null
-                }) { Text("删除", color = MaterialTheme.colorScheme.error) }
+                }) { Text(t("删除"), color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
-                TextButton(onClick = { deleteTarget = null }) { Text("取消", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                TextButton(onClick = { deleteTarget = null }) { Text(t("取消"), color = MaterialTheme.colorScheme.onSurfaceVariant) }
             },
         )
     }
@@ -241,18 +254,18 @@ fun LorebookSection(
             onDismissRequest = { importMessage = null },
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             titleContentColor = MaterialTheme.colorScheme.onSurface,
-            title = { Text("世界书导入", color = MaterialTheme.colorScheme.onSurface) },
+            title = { Text(t("世界书导入"), color = MaterialTheme.colorScheme.onSurface) },
             text = { Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant) },
             confirmButton = {
-                TextButton(onClick = { importMessage = null }) { Text("知道了") }
+                TextButton(onClick = { importMessage = null }) { Text(t("知道了")) }
             },
         )
     }
     // 扫描深度编辑
     if (showScanDepthEdit) {
         NumberEditDialog(
-            title = "扫描深度",
-            label = "扫描最近多少条消息中的关键词（1-20）",
+            title = t("扫描深度"),
+            label = t("扫描最近多少条消息中的关键词（1-20）"),
             current = config.scanDepth,
             range = 1..20,
             onSave = { value ->
@@ -265,8 +278,8 @@ fun LorebookSection(
     // token 预算编辑（0 = 不限）
     if (showBudgetEdit) {
         NumberEditDialog(
-            title = "Token 预算上限",
-            label = "单次注入的 token 上限（0 表示不限）",
+            title = t("Token 预算上限"),
+            label = t("单次注入的 token 上限（0 表示不限）"),
             current = config.budgetCapTokens,
             range = 0..8192,
             onSave = { value ->
@@ -312,18 +325,18 @@ private fun NamePromptDialog(
             ) { Text(confirmText, color = if (name.isNotBlank()) scheme.primary else scheme.onSurfaceVariant) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消", color = scheme.onSurfaceVariant) }
+            TextButton(onClick = onDismiss) { Text(t("取消"), color = scheme.onSurfaceVariant) }
         },
     )
 }
 
 /** 书作用域摘要：全局 / N 个角色 / N 个群聊。 */
 internal fun scopeSummary(book: Lorebook): String = when (book.scopeType) {
-    LorebookScopeType.ALL -> "全局"
+    LorebookScopeType.ALL -> L10nRuntime.t("全局")
     LorebookScopeType.CHARACTER ->
-        if (book.scopeIds.isEmpty()) "未绑定角色" else "${book.scopeIds.size} 个角色"
+        if (book.scopeIds.isEmpty()) L10nRuntime.t("未绑定角色") else L10nRuntime.format("{0} 个角色", book.scopeIds.size)
     LorebookScopeType.GROUP ->
-        if (book.scopeIds.isEmpty()) "未绑定群聊" else "${book.scopeIds.size} 个群聊"
+        if (book.scopeIds.isEmpty()) L10nRuntime.t("未绑定群聊") else L10nRuntime.format("{0} 个群聊", book.scopeIds.size)
 }
 
 /** 数值输入弹窗（扫描深度 / token 预算）。 */
@@ -365,11 +378,11 @@ private fun NumberEditDialog(
         },
         confirmButton = {
             TextButton(enabled = canSave, onClick = { onSave(parsed!!) }) {
-                Text("保存", color = if (canSave) scheme.primary else scheme.onSurfaceVariant)
+                Text(t("保存"), color = if (canSave) scheme.primary else scheme.onSurfaceVariant)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消", color = scheme.onSurfaceVariant) }
+            TextButton(onClick = onDismiss) { Text(t("取消"), color = scheme.onSurfaceVariant) }
         },
     )
 }

@@ -51,6 +51,9 @@ import com.rhodesisland.terminal.AppContainer
 import com.rhodesisland.terminal.data.model.Character
 import com.rhodesisland.terminal.data.model.Worldview
 import com.rhodesisland.terminal.data.model.WorldviewTargetType
+import com.rhodesisland.terminal.i18n.L10nRuntime
+import com.rhodesisland.terminal.i18n.t
+import com.rhodesisland.terminal.i18n.tf
 import com.rhodesisland.terminal.ui.glass.CollapsibleSection
 import com.rhodesisland.terminal.ui.glass.GlassSegmented
 import com.rhodesisland.terminal.ui.theme.fieldPlaceholderColor
@@ -66,10 +69,10 @@ private suspend fun resolveWorldviewTargetName(
 ): String = when (targetType) {
     WorldviewTargetType.CHARACTER ->
         container.characterRepository.getNow(targetId)?.name
-            ?: "角色 $targetId（已不存在）"
+            ?: L10nRuntime.format("角色 {0}（已不存在）", targetId)
     WorldviewTargetType.GROUP ->
-        container.groupChatRepository.getGroup(targetId.toLongOrNull() ?: -1L)?.title?.ifBlank { "群聊" }
-            ?: "群聊（已删除）"
+        container.groupChatRepository.getGroup(targetId.toLongOrNull() ?: -1L)?.title?.ifBlank { L10nRuntime.t("群聊") }
+            ?: L10nRuntime.t("群聊（已删除）")
     else -> targetId
 }
 
@@ -102,14 +105,14 @@ fun WorldviewSection(container: AppContainer, scope: CoroutineScope) {
     var deleteTarget by remember { mutableStateOf<Worldview?>(null) }
 
     CollapsibleSection(
-        title = "自定义世界观",
+        title = t("自定义世界观"),
         key = "worldview",
-        summary = if (worldviews.isEmpty()) "未添加" else "${worldviews.size} 条已生效",
+        summary = if (worldviews.isEmpty()) t("未添加") else tf("{0} 条已生效", worldviews.size),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(
-                "世界观是一段注入对话提示词的自定义设定（如「故事发生在末日废土」）。" +
-                    "每条世界观绑定一个应用对象——某个角色的私聊或某个群聊；同一对象重复保存将替换旧设定。",
+                t("世界观是一段注入对话提示词的自定义设定（如「故事发生在末日废土」）。") +
+                    t("每条世界观绑定一个应用对象——某个角色的私聊或某个群聊；同一对象重复保存将替换旧设定。"),
                 color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp,
                 lineHeight = 15.sp,
             )
@@ -126,7 +129,7 @@ fun WorldviewSection(container: AppContainer, scope: CoroutineScope) {
             TextButton(onClick = { showCreate = true }) {
                 Icon(Icons.Filled.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
-                Text("新建世界观", color = MaterialTheme.colorScheme.primary)
+                Text(t("新建世界观"), color = MaterialTheme.colorScheme.primary)
             }
         }
     }
@@ -150,10 +153,10 @@ fun WorldviewSection(container: AppContainer, scope: CoroutineScope) {
             onDismissRequest = { deleteTarget = null },
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             titleContentColor = MaterialTheme.colorScheme.onSurface,
-            title = { Text("删除世界观", color = MaterialTheme.colorScheme.onSurface) },
+            title = { Text(t("删除世界观"), color = MaterialTheme.colorScheme.onSurface) },
             text = {
                 Text(
-                    "确定删除「${w.name}」？该对象将恢复为无自定义世界观。",
+                    tf("确定删除「{0}」？该对象将恢复为无自定义世界观。", w.name),
                     color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp,
                 )
             },
@@ -161,11 +164,11 @@ fun WorldviewSection(container: AppContainer, scope: CoroutineScope) {
                 TextButton(onClick = {
                     deleteTarget = null
                     scope.launch { container.settingsRepository.removeWorldview(w.id) }
-                }) { Text("删除", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold) }
+                }) { Text(t("删除"), color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold) }
             },
             dismissButton = {
                 TextButton(onClick = { deleteTarget = null }) {
-                    Text("取消", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(t("取消"), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             },
         )
@@ -202,7 +205,7 @@ private fun WorldviewRow(
         )
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text(worldview.name.ifBlank { "未命名世界观" }, color = scheme.onSurface, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+            Text(if (worldview.name.isBlank()) t("未命名世界观") else worldview.name, color = scheme.onSurface, fontSize = 13.sp, fontWeight = FontWeight.Medium)
             Text(
                 "→ $targetName · ${worldview.content.take(24)}${if (worldview.content.length > 24) "…" else ""}",
                 color = scheme.onSurfaceVariant,
@@ -218,7 +221,7 @@ private fun WorldviewRow(
                 .clickable(onClick = onDelete),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.Delete, contentDescription = "删除", tint = scheme.error, modifier = Modifier.size(17.dp))
+            Icon(Icons.Filled.Delete, contentDescription = t("删除"), tint = scheme.error, modifier = Modifier.size(17.dp))
         }
     }
 }
@@ -267,31 +270,31 @@ private fun WorldviewEditDialog(
         onDismissRequest = onDismiss,
         containerColor = scheme.surfaceContainerHigh,
         titleContentColor = scheme.onSurface,
-        title = { Text(if (existing == null) "新建世界观" else "编辑世界观", color = scheme.onSurface) },
+        title = { Text(if (existing == null) t("新建世界观") else t("编辑世界观"), color = scheme.onSurface) },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                FieldLabel("名称")
+                FieldLabel(t("名称"))
                 GlassInputField(
                     value = name,
                     onValueChange = { name = it },
-                    placeholder = "如：末日废土设定",
+                    placeholder = t("如：末日废土设定"),
                 )
-                FieldLabel("世界观内容（注入提示词）")
+                FieldLabel(t("世界观内容（注入提示词）"))
                 GlassInputField(
                     value = content,
                     onValueChange = { content = it },
-                    placeholder = "描述这个世界观的规则、背景、氛围…",
+                    placeholder = t("描述这个世界观的规则、背景、氛围…"),
                     singleLine = false,
                     modifier = Modifier.fillMaxWidth().height(110.dp),
                 )
-                FieldLabel("应用到")
+                FieldLabel(t("应用到"))
                 GlassSegmented(
                     options = listOf(
-                        WorldviewTargetType.CHARACTER to "私聊角色",
-                        WorldviewTargetType.GROUP to "群聊",
+                        WorldviewTargetType.CHARACTER to t("私聊角色"),
+                        WorldviewTargetType.GROUP to t("群聊"),
                     ),
                     selected = targetType,
                     onSelect = {
@@ -313,7 +316,7 @@ private fun WorldviewEditDialog(
                     )
                 }
                 if (name.isBlank() || content.isBlank() || targetId.isBlank()) {
-                    Text("名称、内容与应用对象均为必填项", color = scheme.tertiary, fontSize = 11.sp)
+                    Text(t("名称、内容与应用对象均为必填项"), color = scheme.tertiary, fontSize = 11.sp)
                 }
             }
         },
@@ -333,10 +336,10 @@ private fun WorldviewEditDialog(
                         }
                     }
                 },
-            ) { Text(if (existing == null) "创建" else "保存", color = scheme.primary) }
+            ) { Text(if (existing == null) t("创建") else t("保存"), color = scheme.primary) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消", color = scheme.onSurfaceVariant) }
+            TextButton(onClick = onDismiss) { Text(t("取消"), color = scheme.onSurfaceVariant) }
         },
     )
 
@@ -344,18 +347,18 @@ private fun WorldviewEditDialog(
         AlertDialog(
             onDismissRequest = { pendingReplace = null },
             containerColor = scheme.surfaceContainerHigh,
-            title = { Text("替换已有世界观", color = scheme.primary) },
+            title = { Text(t("替换已有世界观"), color = scheme.primary) },
             text = {
                 Text(
-                    "该对象已有世界观「${conflict.name}」，保存后将替换它。",
+                    tf("该对象已有世界观「{0}」，保存后将替换它。", conflict.name),
                     color = scheme.onSurface, fontSize = 14.sp,
                 )
             },
             confirmButton = {
-                TextButton(onClick = { doSave() }) { Text("替换", color = scheme.primary) }
+                TextButton(onClick = { doSave() }) { Text(t("替换"), color = scheme.primary) }
             },
             dismissButton = {
-                TextButton(onClick = { pendingReplace = null }) { Text("取消", color = scheme.onSurfaceVariant) }
+                TextButton(onClick = { pendingReplace = null }) { Text(t("取消"), color = scheme.onSurfaceVariant) }
             },
         )
     }

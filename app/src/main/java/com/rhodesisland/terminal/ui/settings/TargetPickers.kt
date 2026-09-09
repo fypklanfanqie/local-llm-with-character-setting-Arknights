@@ -34,6 +34,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rhodesisland.terminal.data.model.Character
 import com.rhodesisland.terminal.data.model.Conversation
+import com.rhodesisland.terminal.i18n.t
+import com.rhodesisland.terminal.i18n.tf
 import com.rhodesisland.terminal.ui.theme.fieldPlaceholderColor
 import com.rhodesisland.terminal.ui.theme.fieldTextColor
 
@@ -73,7 +75,7 @@ internal fun CharacterPickerList(
                 cursorBrush = androidx.compose.ui.graphics.SolidColor(scheme.primary),
                 decorationBox = { inner ->
                     if (search.text.isEmpty()) {
-                        Text("搜索角色名 / 代号…", color = fieldPlaceholderColor(), fontSize = 12.sp)
+                        Text(t("搜索角色名 / 代号…"), color = fieldPlaceholderColor(), fontSize = 12.sp)
                     }
                     inner()
                 },
@@ -95,7 +97,7 @@ internal fun CharacterPickerList(
                 PickerRow(
                     label = char.name,
                     selected = selected,
-                    badge = if (char.isCustom) "自定义" else null,
+                    badge = if (char.isCustom) t("自定义") else null,
                     onClick = { onSelect(char.id) },
                 )
             }
@@ -132,7 +134,7 @@ internal fun CharacterMultiPickerList(
                 cursorBrush = androidx.compose.ui.graphics.SolidColor(scheme.primary),
                 decorationBox = { inner ->
                     if (search.text.isEmpty()) {
-                        Text("搜索角色名 / 代号…", color = fieldPlaceholderColor(), fontSize = 12.sp)
+                        Text(t("搜索角色名 / 代号…"), color = fieldPlaceholderColor(), fontSize = 12.sp)
                     }
                     inner()
                 },
@@ -153,7 +155,7 @@ internal fun CharacterMultiPickerList(
                 PickerRow(
                     label = char.name,
                     selected = char.id in selectedIds,
-                    badge = if (char.isCustom) "自定义" else null,
+                    badge = if (char.isCustom) t("自定义") else null,
                     onClick = { onToggle(char.id) },
                 )
             }
@@ -190,7 +192,7 @@ internal fun GroupPickerList(
                 cursorBrush = androidx.compose.ui.graphics.SolidColor(scheme.primary),
                 decorationBox = { inner ->
                     if (search.text.isEmpty()) {
-                        Text("搜索群聊名称…", color = fieldPlaceholderColor(), fontSize = 12.sp)
+                        Text(t("搜索群聊名称…"), color = fieldPlaceholderColor(), fontSize = 12.sp)
                     }
                     inner()
                 },
@@ -246,7 +248,7 @@ internal fun GroupMultiPickerList(
                 cursorBrush = androidx.compose.ui.graphics.SolidColor(scheme.primary),
                 decorationBox = { inner ->
                     if (search.text.isEmpty()) {
-                        Text("搜索群聊名称…", color = fieldPlaceholderColor(), fontSize = 12.sp)
+                        Text(t("搜索群聊名称…"), color = fieldPlaceholderColor(), fontSize = 12.sp)
                     }
                     inner()
                 },
@@ -314,14 +316,14 @@ private fun GroupRow(group: Conversation, selected: Boolean, onClick: () -> Unit
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            group.title.ifBlank { "群聊" },
+            if (group.title.isBlank()) t("群聊") else group.title,
             color = if (selected) scheme.primary else scheme.onSurface,
             fontSize = 13.sp,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
             modifier = Modifier.weight(1f),
             maxLines = 1,
         )
-        Text("${group.memberIds.size} 人", color = scheme.onSurfaceVariant, fontSize = 9.sp)
+        Text(tf("{0} 人", group.memberIds.size), color = scheme.onSurfaceVariant, fontSize = 9.sp)
     }
 }
 
@@ -329,7 +331,7 @@ private fun GroupRow(group: Conversation, selected: Boolean, onClick: () -> Unit
 @Composable
 private fun EmptyGroupsHint(hasAny: Boolean) {
     Text(
-        if (hasAny) "未找到匹配的群聊" else "尚无群聊，请先在通讯页创建",
+        if (hasAny) t("未找到匹配的群聊") else t("尚无群聊，请先在通讯页创建"),
         color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp,
         modifier = Modifier.padding(vertical = 8.dp),
     )
