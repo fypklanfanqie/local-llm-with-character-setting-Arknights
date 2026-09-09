@@ -1,6 +1,7 @@
 package com.rhodesisland.terminal.service
 
 import android.app.Notification
+import com.rhodesisland.terminal.i18n.L10nRuntime
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
@@ -34,7 +35,7 @@ class InferenceForegroundService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val label = intent?.getStringExtra(EXTRA_BACKEND_LABEL) ?: "本地 AI"
+        val label = intent?.getStringExtra(EXTRA_BACKEND_LABEL) ?: L10nRuntime.t("本地 AI")
         startForegroundCompat(NOTIFICATION_ID, buildNotification(label))
         acquireWakeLock()
         return START_NOT_STICKY
@@ -91,8 +92,8 @@ class InferenceForegroundService : Service() {
     private fun buildNotification(label: String): Notification =
         NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("本地 AI 推理中…")
-            .setContentText("正在使用 $label 生成回复")
+            .setContentTitle(L10nRuntime.t("本地 AI 推理中…"))
+            .setContentText(L10nRuntime.format("正在使用 {0} 生成回复", label))
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
@@ -110,9 +111,9 @@ class InferenceForegroundService : Service() {
         fun createChannel(context: Context) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val channel = NotificationChannel(
-                    CHANNEL_ID, "本地推理", NotificationManager.IMPORTANCE_LOW,
+                    CHANNEL_ID, L10nRuntime.t("本地推理"), NotificationManager.IMPORTANCE_LOW,
                 ).apply {
-                    description = "本地 AI 推理进行时的保活通知"
+                    description = L10nRuntime.t("本地 AI 推理进行时的保活通知")
                     setShowBadge(false)
                 }
                 context.getSystemService(NotificationManager::class.java)

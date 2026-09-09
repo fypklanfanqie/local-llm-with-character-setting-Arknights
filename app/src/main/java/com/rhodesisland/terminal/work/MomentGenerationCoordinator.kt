@@ -1,6 +1,7 @@
 package com.rhodesisland.terminal.work
 
 import android.content.Context
+import com.rhodesisland.terminal.i18n.L10nRuntime
 import com.rhodesisland.terminal.config.AppConfig
 import com.rhodesisland.terminal.data.model.MomentImageGenConfig
 import com.rhodesisland.terminal.data.remote.ChatMessageDto
@@ -58,9 +59,9 @@ class MomentGenerationCoordinator(
         imageCount: Int,
     ): GeneratedPost {
         val character = characterRepository.getNow(characterId)
-            ?: throw IllegalStateException("角色不存在")
+            ?: throw IllegalStateException(L10nRuntime.t("角色不存在"))
         val apiConfig = settings.getApiConfigNow()
-        if (apiConfig.apiKey.isBlank()) throw IllegalStateException("请先在设置中配置云端 AI API")
+        if (apiConfig.apiKey.isBlank()) throw IllegalStateException(L10nRuntime.t("请先在设置中配置云端 AI API"))
 
         // 有的时候随机 @ 一个人（其他角色或用户）；其余帖子不 @。内容一律纯日常、不提博士。
         val mentionTarget = rollMentionTarget(character.name)
@@ -82,7 +83,7 @@ class MomentGenerationCoordinator(
         val parsed = parseCaptionResponse(thinkRegex.replace(raw, "").trim())
         val caption = parsed.caption.ifBlank {
             MomentImageExtractor.extractCaption(raw).ifBlank {
-                throw IllegalStateException("生成的朋友圈文案为空")
+                throw IllegalStateException(L10nRuntime.t("生成的朋友圈文案为空"))
             }
         }
 
@@ -129,9 +130,9 @@ class MomentGenerationCoordinator(
         isCharacterPost: Boolean,
     ): String {
         val character = characterRepository.getNow(characterId)
-            ?: throw IllegalStateException("角色不存在")
+            ?: throw IllegalStateException(L10nRuntime.t("角色不存在"))
         val apiConfig = settings.getApiConfigNow()
-        if (apiConfig.apiKey.isBlank()) throw IllegalStateException("请先在设置中配置云端 AI API")
+        if (apiConfig.apiKey.isBlank()) throw IllegalStateException(L10nRuntime.t("请先在设置中配置云端 AI API"))
         val prompt = if (isCharacterPost) {
             MomentPromptBuilder.buildReplyPrompt(postCaption, commentContent)
         } else {
@@ -169,9 +170,9 @@ class MomentGenerationCoordinator(
         hasImages: Boolean,
     ): String {
         val character = characterRepository.getNow(characterId)
-            ?: throw IllegalStateException("角色不存在")
+            ?: throw IllegalStateException(L10nRuntime.t("角色不存在"))
         val apiConfig = settings.getApiConfigNow()
-        if (apiConfig.apiKey.isBlank()) throw IllegalStateException("请先在设置中配置云端 AI API")
+        if (apiConfig.apiKey.isBlank()) throw IllegalStateException(L10nRuntime.t("请先在设置中配置云端 AI API"))
         val profile = settings.getUserProfileNow()
         val system = buildString {
             append(character.systemPrompt)
@@ -240,15 +241,15 @@ class MomentGenerationCoordinator(
         mentionTarget: String?,
     ): String = buildString {
         append(systemPrompt)
-        append("\n\n[任务] 你要发一条朋友圈（微信 Moments）。输出严格 JSON：{\"caption\": \"...\", \"imagePrompt\": \"...\"}。")
+        append("\n\n[任务] 你要发一条朋友圈（微信 Moments）。输出严格 JSON：{\"caption\": \"...\", \"imagePrompt\": \"...\"}。") // l10n:ignore 非界面文案（提示词/比较值/崩溃日志/拼接片段）
         if (imageCount > 0) {
-            append("imagePrompt 是英文生图提示词，描述你要配图的画面（明日方舟游戏美术风格：动画插画、赛璐璐上色，不要写实照片）。")
+            append("imagePrompt 是英文生图提示词，描述你要配图的画面（明日方舟游戏美术风格：动画插画、赛璐璐上色，不要写实照片）。") // l10n:ignore 非界面文案（提示词/比较值/崩溃日志/拼接片段）
         } else {
-            append("本次不带图，imagePrompt 填空字符串。")
+            append("本次不带图，imagePrompt 填空字符串。") // l10n:ignore 非界面文案（提示词/比较值/崩溃日志/拼接片段）
         }
-        append("caption 贴合人设，第一人称，1~3 句，不含话题标签。")
+        append("caption 贴合人设，第一人称，1~3 句，不含话题标签。") // l10n:ignore 非界面文案（提示词/比较值/崩溃日志/拼接片段）
         append(MomentPromptBuilder.buildPostSystemDirective(mentionTarget))
-        append("\n[备注] 角色名：$characterName")
+        append("\n[备注] 角色名：$characterName") // l10n:ignore 非界面文案（提示词/比较值/崩溃日志/拼接片段）
         append(com.rhodesisland.terminal.llm.OutputLanguage.ZH_DIRECTIVE)
     }
 
@@ -259,7 +260,7 @@ class MomentGenerationCoordinator(
     private suspend fun rollMentionTarget(posterName: String): String? {
         if (Random.nextInt(100) >= AppConfig.Moment.MENTION_PROBABILITY_PERCENT) return null
         val candidates = characterRepository.getAllNamesNow(excludeName = posterName) +
-            settings.getUserProfileNow().displayName.trim().ifBlank { "博士" }
+            settings.getUserProfileNow().displayName.trim().ifBlank { L10nRuntime.t("博士") }
         return candidates.distinct().randomOrNull()
     }
 }

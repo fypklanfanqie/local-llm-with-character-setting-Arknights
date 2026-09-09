@@ -66,26 +66,26 @@ object CrashCapture {
         val file = File(dir, "crash_${timestamp()}.log")
         val sw = StringWriter()
         sw.append(buildLogHeader())
-        sw.appendLine("崩溃线程: ${thread.name} (id=${thread.id})")
-        sw.appendLine("进程: ${processName()}")
-        sw.appendLine("---- 堆栈 ----")
+        sw.appendLine("崩溃线程: ${thread.name} (id=${thread.id})") // l10n:ignore 非界面文案（提示词/比较值/崩溃日志/拼接片段）
+        sw.appendLine("进程: ${processName()}") // l10n:ignore 非界面文案（提示词/比较值/崩溃日志/拼接片段）
+        sw.appendLine("---- 堆栈 ----") // l10n:ignore 非界面文案（提示词/比较值/崩溃日志/拼接片段）
         sw.append(Log.getStackTraceString(throwable))
         file.writeText(sw.toString())
         Log.e(TAG, "崩溃日志已写入 ${file.absolutePath}")
     }
 
     private fun buildLogHeader(): String = buildString {
-        appendLine("===== 崩溃日志 =====")
-        appendLine("时间: ${timestamp()}")
-        appendLine("厂商: ${Build.MANUFACTURER}")
-        appendLine("品牌: ${Build.BRAND}")
-        appendLine("型号: ${Build.MODEL}")
-        appendLine("设备: ${Build.DEVICE}")
+        appendLine("===== 崩溃日志 =====") // l10n:ignore 非界面文案（提示词/比较值/崩溃日志/拼接片段）
+        appendLine("时间: ${timestamp()}") // l10n:ignore 非界面文案（提示词/比较值/崩溃日志/拼接片段）
+        appendLine("厂商: ${Build.MANUFACTURER}") // l10n:ignore 非界面文案（提示词/比较值/崩溃日志/拼接片段）
+        appendLine("品牌: ${Build.BRAND}") // l10n:ignore 非界面文案（提示词/比较值/崩溃日志/拼接片段）
+        appendLine("型号: ${Build.MODEL}") // l10n:ignore 非界面文案（提示词/比较值/崩溃日志/拼接片段）
+        appendLine("设备: ${Build.DEVICE}") // l10n:ignore 非界面文案（提示词/比较值/崩溃日志/拼接片段）
         appendLine("ABI: ${Build.SUPPORTED_ABIS.joinToString(",")}")
         appendLine("SDK: ${Build.VERSION.SDK_INT} (${Build.VERSION.RELEASE})")
-        appendLine("系统指纹: ${Build.FINGERPRINT}")
-        appendLine("版本增量: ${Build.VERSION.INCREMENTAL}")
-        appendLine("进程: ${processName()}")
+        appendLine("系统指纹: ${Build.FINGERPRINT}") // l10n:ignore 非界面文案（提示词/比较值/崩溃日志/拼接片段）
+        appendLine("版本增量: ${Build.VERSION.INCREMENTAL}") // l10n:ignore 非界面文案（提示词/比较值/崩溃日志/拼接片段）
+        appendLine("进程: ${processName()}") // l10n:ignore 非界面文案（提示词/比较值/崩溃日志/拼接片段）
     }
 
     private fun processName(): String =

@@ -1,6 +1,7 @@
 package com.rhodesisland.terminal.util
 
 import android.os.Build
+import com.rhodesisland.terminal.i18n.L10nRuntime
 import java.util.Locale
 
 /**
@@ -21,16 +22,16 @@ object RomDetector {
 
     /** 识别出的 ROM 类型（含中文显示名）。 */
     enum class RomType(val displayName: String) {
-        MIUI("MIUI（小米）"),
-        HYPEROS("HyperOS（小米）"),
-        EMUI("EMUI（华为）"),
-        HARMONYOS("HarmonyOS（华为）"),
-        MAGIC_OS("MagicOS（荣耀）"),
-        COLOR_OS("ColorOS（OPPO/一加/realme）"),
+        MIUI(L10nRuntime.t("MIUI（小米）")),
+        HYPEROS(L10nRuntime.t("HyperOS（小米）")),
+        EMUI(L10nRuntime.t("EMUI（华为）")),
+        HARMONYOS(L10nRuntime.t("HarmonyOS（华为）")),
+        MAGIC_OS(L10nRuntime.t("MagicOS（荣耀）")),
+        COLOR_OS(L10nRuntime.t("ColorOS（OPPO/一加/realme）")),
         ORIGIN_OS("OriginOS/FuntouchOS（vivo/iQOO）"),
-        FLYME("Flyme（魅族）"),
-        ONE_UI("One UI（三星）"),
-        UNKNOWN("标准 Android"),
+        FLYME(L10nRuntime.t("Flyme（魅族）")),
+        ONE_UI(L10nRuntime.t("One UI（三星）")),
+        UNKNOWN(L10nRuntime.t("标准 Android")),
     }
 
     /** 检测结果：类型 + 属性里带出的版本串（如 "V130" / "4.0"，取不到则空）。 */

@@ -1,5 +1,7 @@
 package com.rhodesisland.terminal.util
 
+import com.rhodesisland.terminal.i18n.L10nRuntime
+
 /**
  * 相对时间格式化（微信朋友圈风格）。纯函数，JVM 可测。
  *
@@ -18,10 +20,10 @@ object RelativeTime {
 
     fun format(createdAt: Long, now: Long): String {
         val delta = now - createdAt
-        if (delta < 0) return "刚刚" // 时钟回拨宽容
-        if (delta < MINUTE_MS) return "刚刚"
-        if (delta < HOUR_MS) return "${delta / MINUTE_MS}分钟前"
-        if (delta < DAY_MS) return "${delta / HOUR_MS}小时前"
+        if (delta < 0) return L10nRuntime.t("刚刚") // 时钟回拨宽容
+        if (delta < MINUTE_MS) return L10nRuntime.t("刚刚")
+        if (delta < HOUR_MS) return L10nRuntime.format("{0}分钟前", delta / MINUTE_MS)
+        if (delta < DAY_MS) return L10nRuntime.format("{0}小时前", delta / HOUR_MS)
 
         val yesterdayStart = calendarOf(now - DAY_MS).apply {
             set(java.util.Calendar.HOUR_OF_DAY, 0)
@@ -31,9 +33,10 @@ object RelativeTime {
         }.timeInMillis
         if (createdAt >= yesterdayStart) {
             val c = calendarOf(createdAt)
-            return String.format(
-                java.util.Locale.getDefault(), "昨天 %02d:%02d",
-                c.get(java.util.Calendar.HOUR_OF_DAY), c.get(java.util.Calendar.MINUTE),
+            return L10nRuntime.format(
+                "昨天 {0}:{1}",
+                String.format(java.util.Locale.ROOT, "%02d", c.get(java.util.Calendar.HOUR_OF_DAY)),
+                String.format(java.util.Locale.ROOT, "%02d", c.get(java.util.Calendar.MINUTE)),
             )
         }
 

@@ -1,6 +1,7 @@
 package com.rhodesisland.terminal.perfmon
 
 import android.content.Context
+import com.rhodesisland.terminal.i18n.L10nRuntime
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
@@ -98,7 +99,7 @@ class PerformanceOverlayView(context: Context) : FrameLayout(context) {
         }
 
         val titleText = TextView(context).apply {
-            text = "⚡ 性能监控"
+            text = L10nRuntime.t("⚡ 性能监控")
             setTextColor(Color.parseColor("#7fc8ff"))
             textSize = 11f
             typeface = Typeface.DEFAULT_BOLD
@@ -130,7 +131,7 @@ class PerformanceOverlayView(context: Context) : FrameLayout(context) {
         expandedContainer.addView(tvBackend)
 
         // Token rate (highlighted)
-        val tokenRow = createHighlightRow("🚀 Token 速率")
+        val tokenRow = createHighlightRow(L10nRuntime.t("🚀 Token 速率"))
         tvTokenRate = tokenRow.second
         expandedContainer.addView(tokenRow.first)
 
@@ -143,7 +144,7 @@ class PerformanceOverlayView(context: Context) : FrameLayout(context) {
         expandedContainer.addView(cpuRow.third)
 
         // CPU frequency
-        val freqRow = createTextRow("📈 大核频率")
+        val freqRow = createTextRow(L10nRuntime.t("📈 大核频率"))
         tvCpuFreq = freqRow.second
         expandedContainer.addView(freqRow.first)
 
@@ -160,13 +161,13 @@ class PerformanceOverlayView(context: Context) : FrameLayout(context) {
         expandedContainer.addView(npuRow.third)
 
         // Temperature
-        val tempRow = createProgressBarRow("🌡️ 温度")
+        val tempRow = createProgressBarRow(L10nRuntime.t("🌡️ 温度"))
         tvTemp = tempRow.first
         tempProgress = tempRow.second
         expandedContainer.addView(tempRow.third)
 
         // Memory
-        val memRow = createProgressBarRow("💾 内存")
+        val memRow = createProgressBarRow(L10nRuntime.t("💾 内存"))
         tvMemory = memRow.first
         memProgress = memRow.second
         expandedContainer.addView(memRow.third)
@@ -174,7 +175,7 @@ class PerformanceOverlayView(context: Context) : FrameLayout(context) {
         // Log area
         expandedContainer.addView(createDivider())
         tvLog = TextView(context).apply {
-            text = "等待推理..."
+            text = L10nRuntime.t("等待推理...")
             setTextColor(Color.parseColor("#aaaabb"))
             textSize = 8f
             maxLines = 2
@@ -200,7 +201,7 @@ class PerformanceOverlayView(context: Context) : FrameLayout(context) {
         })
 
         // Backend
-        tvBackend.text = "引擎: ${m.activeBackend.displayName}"
+        tvBackend.text = L10nRuntime.format("引擎: {0}", L10nRuntime.t(m.activeBackend.displayName))
 
         // CPU
         tvCpuUsage.text = String.format("%.0f%%", m.cpuUsage)

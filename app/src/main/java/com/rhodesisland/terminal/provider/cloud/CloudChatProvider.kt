@@ -106,7 +106,7 @@ class CloudChatProvider(
             }
             add(buildJsonObject {
                 put("type", "text")
-                put("text", msg.content.ifBlank { "请描述这张图片的内容。" })
+                put("text", msg.content.ifBlank { "请描述这张图片的内容。" }) // l10n:ignore 非界面文案（提示词/比较值/崩溃日志/拼接片段）
             })
         }
     }

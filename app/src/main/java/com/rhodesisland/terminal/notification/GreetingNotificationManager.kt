@@ -1,6 +1,7 @@
 package com.rhodesisland.terminal.notification
 
 import android.app.Notification
+import com.rhodesisland.terminal.i18n.L10nRuntime
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -40,15 +41,15 @@ object GreetingNotificationManager {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val nm = context.getSystemService(NotificationManager::class.java)
             val greeting = NotificationChannel(
-                CHANNEL_ID, "角色问候", NotificationManager.IMPORTANCE_HIGH,
+                CHANNEL_ID, L10nRuntime.t("角色问候"), NotificationManager.IMPORTANCE_HIGH,
             ).apply {
-                description = "角色主动发来的消息提醒"
+                description = L10nRuntime.t("角色主动发来的消息提醒")
                 enableVibration(true)
             }
             val progress = NotificationChannel(
-                PROGRESS_CHANNEL_ID, "问候生成", NotificationManager.IMPORTANCE_LOW,
+                PROGRESS_CHANNEL_ID, L10nRuntime.t("问候生成"), NotificationManager.IMPORTANCE_LOW,
             ).apply {
-                description = "生成角色主动消息时的保活通知"
+                description = L10nRuntime.t("生成角色主动消息时的保活通知")
                 setShowBadge(false)
             }
             nm.createNotificationChannel(greeting)
@@ -60,7 +61,7 @@ object GreetingNotificationManager {
     fun buildProgressNotification(context: Context): Notification =
         NotificationCompat.Builder(context, PROGRESS_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("正在生成角色消息…")
+            .setContentTitle(L10nRuntime.t("正在生成角色消息…"))
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)

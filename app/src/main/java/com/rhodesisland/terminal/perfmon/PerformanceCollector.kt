@@ -1,6 +1,7 @@
 package com.rhodesisland.terminal.perfmon
 
 import android.app.ActivityManager
+import com.rhodesisland.terminal.i18n.L10nRuntime
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -52,7 +53,7 @@ class PerformanceCollector(
 
     /** Token 速率（由推理回调更新），单位 tok/s */
     @Volatile private var tokenRate: Float = 0f
-    @Volatile private var lastLog: String = "等待推理..."
+    @Volatile private var lastLog: String = L10nRuntime.t("等待推理...")
 
     fun updateTokenRate(rate: Float) {
         tokenRate = rate

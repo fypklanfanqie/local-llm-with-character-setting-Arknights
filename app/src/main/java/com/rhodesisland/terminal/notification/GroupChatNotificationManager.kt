@@ -1,6 +1,7 @@
 package com.rhodesisland.terminal.notification
 
 import android.app.Notification
+import com.rhodesisland.terminal.i18n.L10nRuntime
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -35,15 +36,15 @@ object GroupChatNotificationManager {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val nm = context.getSystemService(NotificationManager::class.java)
             val group = NotificationChannel(
-                CHANNEL_ID, "群聊", NotificationManager.IMPORTANCE_HIGH,
+                CHANNEL_ID, L10nRuntime.t("群聊"), NotificationManager.IMPORTANCE_HIGH,
             ).apply {
-                description = "群聊成员主动发言与提问提醒"
+                description = L10nRuntime.t("群聊成员主动发言与提问提醒")
                 enableVibration(true)
             }
             val progress = NotificationChannel(
-                PROGRESS_CHANNEL_ID, "群聊生成", NotificationManager.IMPORTANCE_LOW,
+                PROGRESS_CHANNEL_ID, L10nRuntime.t("群聊生成"), NotificationManager.IMPORTANCE_LOW,
             ).apply {
-                description = "生成群聊发言时的保活通知"
+                description = L10nRuntime.t("生成群聊发言时的保活通知")
                 setShowBadge(false)
             }
             nm.createNotificationChannel(group)
@@ -55,7 +56,7 @@ object GroupChatNotificationManager {
     fun buildProgressNotification(context: Context): Notification =
         NotificationCompat.Builder(context, PROGRESS_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("群聊成员正在聊天…")
+            .setContentTitle(L10nRuntime.t("群聊成员正在聊天…"))
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)

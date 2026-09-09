@@ -1,6 +1,7 @@
 package com.rhodesisland.terminal.tts
 
 import com.rhodesisland.terminal.config.AppConfig
+import com.rhodesisland.terminal.i18n.L10nRuntime
 import com.rhodesisland.terminal.data.model.TtsAuthMode
 import com.rhodesisland.terminal.data.model.TtsConfig
 import com.rhodesisland.terminal.data.model.authMode
@@ -82,8 +83,8 @@ class VolcTtsClient(
         ttsConfig: TtsConfig,
         speakerId: String,
     ): ByteArray = withContext(Dispatchers.IO) {
-        require(text.isNotBlank()) { "没有可朗读的文本" }
-        require(speakerId.isNotBlank()) { "请先填写该角色当前语言的 speaker_id" }
+        require(text.isNotBlank()) { L10nRuntime.t("没有可朗读的文本") }
+        require(speakerId.isNotBlank()) { L10nRuntime.t("请先填写该角色当前语言的 speaker_id") }
 
         val requestBody = json.encodeToString(
             V3Request.serializer(),
@@ -116,12 +117,12 @@ class VolcTtsClient(
         currentCoroutineContext()[Job]?.invokeOnCompletion { runCatching { call.cancel() } }
 
         call.execute().use { response ->
-            val body = response.body ?: throw Exception("语音服务返回为空")
+            val body = response.body ?: throw Exception(L10nRuntime.t("语音服务返回为空"))
             val logId = response.header("X-Tt-Logid")
             if (!response.isSuccessful) {
                 val raw = body.bytes()
                 Log.w(TAG, "TTS HTTP failure code=${response.code} logId=$logId bodyLength=${raw.size}")
-                throw Exception("语音服务请求失败，请检查配置后重试")
+                throw Exception(L10nRuntime.t("语音服务请求失败，请检查配置后重试"))
             }
             parseChunkedResponse(body, logId)
         }
@@ -140,13 +141,13 @@ class VolcTtsClient(
             val trimmed = line.trim()
             if (trimmed.isEmpty()) continue
             if (trimmed.startsWith("data:") || trimmed.startsWith("event:")) {
-                throw Exception("语音服务返回格式不受支持")
+                throw Exception(L10nRuntime.t("语音服务返回格式不受支持"))
             }
 
             val obj = try {
                 json.parseToJsonElement(trimmed).jsonObject
             } catch (_: Exception) {
-                throw Exception("语音服务返回格式异常")
+                throw Exception(L10nRuntime.t("语音服务返回格式异常"))
             }
             val code = obj["code"]?.jsonPrimitive?.intOrNull
             when (code) {
@@ -159,7 +160,7 @@ class VolcTtsClient(
                 try {
                     output.write(Base64.getMimeDecoder().decode(data.replace(Regex("\\s"), "")))
                 } catch (_: IllegalArgumentException) {
-                    throw Exception("语音数据异常")
+                    throw Exception(L10nRuntime.t("语音数据异常"))
                 }
             }
         }
@@ -167,9 +168,9 @@ class VolcTtsClient(
         errorInfo?.let { error ->
             val code = error["code"]?.jsonPrimitive?.intOrNull
             Log.w(TAG, "TTS service error code=$code logId=$logId")
-            throw Exception("语音服务暂时无法合成，请稍后重试")
+            throw Exception(L10nRuntime.t("语音服务暂时无法合成，请稍后重试"))
         }
-        if (output.size() == 0) throw Exception("语音服务未返回音频，请稍后重试")
+        if (output.size() == 0) throw Exception(L10nRuntime.t("语音服务未返回音频，请稍后重试"))
         return output.toByteArray()
     }
 }

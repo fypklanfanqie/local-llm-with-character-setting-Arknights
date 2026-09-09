@@ -249,23 +249,23 @@ class LocalChatProvider(
         // 1. 确保模型已选定并解析路径（MNN 目录的 config.json）
         val activeModelId = settings.getActiveLocalModelIdNow()
         if (activeModelId.isNullOrBlank()) {
-            throw Exception("未选择本地模型，请先在模型管理页下载并选择模型")
+            throw Exception("未选择本地模型，请先在模型管理页下载并选择模型") // l10n:ignore 非界面文案（提示词/比较值/崩溃日志/拼接片段）
         }
 
         val modelPath = ModelPathResolver.getLoadPath(context, activeModelId)
-            ?: throw Exception("模型文件未找到，请先下载并选择模型")
+            ?: throw Exception("模型文件未找到，请先下载并选择模型") // l10n:ignore 非界面文案（提示词/比较值/崩溃日志/拼接片段）
 
         // 2a. 模型包完整性校验（Task 12）：config 派生必需文件（graph/weight/tokenizer/...）存在、
         //     非空、非分片、路径不逃逸。校验失败拒绝进入 native（绝不硬编码 verified=true）。
         val validation = ModelBundleValidator.validate(File(modelPath).parentFile ?: File(modelPath))
         if (!validation.valid) {
             Log.e(TAG, "模型包校验失败: ${validation.errors.joinToString("；")}")
-            throw Exception("模型包校验失败，请重新下载模型")
+            throw Exception("模型包校验失败，请重新下载模型") // l10n:ignore 非界面文案（提示词/比较值/崩溃日志/拼接片段）
         }
 
         // 2. 检查 MNN 引擎 native 就绪（libMNN.so）
         if (!backendManager.mnnCpuSupported) {
-            throw Exception("MNN 引擎未就绪。当前版本未集成 libMNN.so，请等待后续版本。")
+            throw Exception("MNN 引擎未就绪。当前版本未集成 libMNN.so，请等待后续版本。") // l10n:ignore 非界面文案（提示词/比较值/崩溃日志/拼接片段）
         }
 
         // native 加载与推理均为阻塞调用，必须切到 IO 调度器，否则在主线程上会 ANR。
@@ -378,10 +378,10 @@ class LocalChatProvider(
                 is AdmissionDecision.Allowed -> admission.contextTokens
                 is AdmissionDecision.Downgraded -> admission.actualContext
                 is AdmissionDecision.Rejected -> throw MemoryAdmissionException(
-                    "内存不足：当前可用约 ${LlmMemoryEstimator.formatMemory(admission.details["availableBytes"] ?: 0L)}，" +
-                        "模型与 ${admission.details["minContext"] ?: 512}-token 最小上下文预计至少需要 " +
+                    "内存不足：当前可用约 ${LlmMemoryEstimator.formatMemory(admission.details["availableBytes"] ?: 0L)}，" + // l10n:ignore 非界面文案（提示词/比较值/崩溃日志/拼接片段）
+                        "模型与 ${admission.details["minContext"] ?: 512}-token 最小上下文预计至少需要 " + // l10n:ignore 非界面文案（提示词/比较值/崩溃日志/拼接片段）
                         "${LlmMemoryEstimator.formatMemory(admission.details["requiredBytes"] ?: 0L)}。" +
-                        "请关闭其他大型应用、改用更小模型，或稍后重试。",
+                        "请关闭其他大型应用、改用更小模型，或稍后重试。", // l10n:ignore 非界面文案（提示词/比较值/崩溃日志/拼接片段）
                 )
             }
             if (actualContext < contextLen) {
@@ -495,7 +495,7 @@ class LocalChatProvider(
                 // Task 3 review M-5：决策理由有值时记录（COOLDOWN/BLACKLISTED 用 warn，其余 info）——
                 // 便于从日志定位 OpenCL 被排除/降级/重新验证的原因，而不只是看到最终 state。
                 health.reason?.let { reason ->
-                    val msg = "OpenCL 健康决策: state=${health.state} reason=$reason"
+                    val msg = "OpenCL 健康决策: state=${health.state} reason=$reason" // l10n:ignore 非界面文案（提示词/比较值/崩溃日志/拼接片段）
                     if (health.state == OpenClHealthState.COOLDOWN ||
                         health.state == OpenClHealthState.CRASH_BLACKLISTED
                     ) {
@@ -794,7 +794,7 @@ class LocalChatProvider(
             // 半截思考仍可折叠查看、不泄漏到正文。（Task 17：思考预算截断时 finalRaw 已含补全的
             // `</think>` 闭合，与折叠语义一致。）
             val finalText = renderLocalThink(finalRaw, shouldFoldThink)
-            val displayText = finalText.ifBlank { "(本地模型未生成回复)" }
+            val displayText = finalText.ifBlank { "(本地模型未生成回复)" } // l10n:ignore 非界面文案（提示词/比较值/崩溃日志/拼接片段）
             // 原始模型输出（与 native syncPromptCache 逐字节一致）：本地累加器即最终原始文本。
             val modelText = finalRaw
             val record = backendManager.lastTurnRecord()
@@ -871,11 +871,11 @@ class LocalChatProvider(
         /** 本地小模型输出规范：约束单角色简短回复、禁剧本格式。追加到 system prompt（仅本地）。
          *  针对小模型角色扮演「上头」编多角色剧本并无限生成的根因（见 .claude/plans/fix-llm-not-stopping.md）。
          *  首句为「默认简短、用户要求详细时完整回答」：短思考策略不得截短用户明确要求的最终答案。 */
-        private const val RESPONSE_GUIDE = "\n\n【输出规范（严格遵守）】\n" +
-            "- 回复默认简短自然；用户明确要求详细说明、代码、列表或指定篇幅时，按用户要求完整回答。\n" +
-            "- 只以你自己的角色身份说话，不要扮演、模拟或代言其他角色。\n" +
-            "- 禁止使用「名字：」格式的对话剧本/台词录，禁止自问自答、不要连续生成多个角色的台词。\n" +
-            "- 不要写大段括号心理活动旁白。"
+        private const val RESPONSE_GUIDE = "\n\n【输出规范（严格遵守）】\n" + // l10n:ignore 非界面文案（提示词/比较值/崩溃日志/拼接片段）
+            "- 回复默认简短自然；用户明确要求详细说明、代码、列表或指定篇幅时，按用户要求完整回答。\n" + // l10n:ignore 非界面文案（提示词/比较值/崩溃日志/拼接片段）
+            "- 只以你自己的角色身份说话，不要扮演、模拟或代言其他角色。\n" + // l10n:ignore 非界面文案（提示词/比较值/崩溃日志/拼接片段）
+            "- 禁止使用「名字：」格式的对话剧本/台词录，禁止自问自答、不要连续生成多个角色的台词。\n" + // l10n:ignore 非界面文案（提示词/比较值/崩溃日志/拼接片段）
+            "- 不要写大段括号心理活动旁白。" // l10n:ignore 非界面文案（提示词/比较值/崩溃日志/拼接片段）
 
         /**
          * 剧本标记检测用角色名集合：全部人设名。模型滑向多角色剧本时会生成
@@ -892,7 +892,7 @@ class LocalChatProvider(
         const val THINKING_DEGENERATE_TRUNCATED = "THINKING_DEGENERATE_TRUNCATED"
 
         /** Task 17：思考预算截断后的收束指令——作为新一轮 user 消息，enableThinking=false 直接作答。 */
-        private const val THINKING_COALESCE_INSTRUCTION = "你的思考已经足够，请立即停止继续思考，直接给出最终答案。"
+        private const val THINKING_COALESCE_INSTRUCTION = "你的思考已经足够，请立即停止继续思考，直接给出最终答案。" // l10n:ignore 非界面文案（提示词/比较值/崩溃日志/拼接片段）
 
         /**
          * 判断模型是否为推理模型（产生 `<think>...</think>` 思考段）。

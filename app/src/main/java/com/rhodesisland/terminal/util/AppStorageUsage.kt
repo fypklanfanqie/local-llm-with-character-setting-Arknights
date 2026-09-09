@@ -1,6 +1,7 @@
 package com.rhodesisland.terminal.util
 
 import android.content.Context
+import com.rhodesisland.terminal.i18n.L10nRuntime
 import java.io.File
 import java.io.IOException
 import java.util.Locale
@@ -64,36 +65,36 @@ object AppStorageUsage {
         return listOf(
             StorageItem(
                 key = "cache",
-                name = "图片与临时缓存",
-                description = "Coil 图片缓存、网络缓存等临时文件，可随时清除",
+                name = L10nRuntime.t("图片与临时缓存"),
+                description = L10nRuntime.t("Coil 图片缓存、网络缓存等临时文件，可随时清除"),
                 sizeBytes = dirSize(context.cacheDir),
                 dir = context.cacheDir,
             ),
             StorageItem(
                 key = "videos",
-                name = "Seedance 对话视频",
-                description = "已生成并下载到本地的视频文件与任务快照",
+                name = L10nRuntime.t("Seedance 对话视频"),
+                description = L10nRuntime.t("已生成并下载到本地的视频文件与任务快照"),
                 sizeBytes = dirSize(File(filesDir, "seedance/tasks")),
                 dir = File(filesDir, "seedance/tasks"),
             ),
             StorageItem(
                 key = "backgrounds",
-                name = "聊天背景",
-                description = "从相册导入的聊天背景图片",
+                name = L10nRuntime.t("聊天背景"),
+                description = L10nRuntime.t("从相册导入的聊天背景图片"),
                 sizeBytes = dirSize(File(filesDir, "chat_backgrounds")),
                 dir = File(filesDir, "chat_backgrounds"),
             ),
             StorageItem(
                 key = "portraits",
-                name = "自定义角色立绘",
-                description = "自定义角色从相册导入的立绘图片",
+                name = L10nRuntime.t("自定义角色立绘"),
+                description = L10nRuntime.t("自定义角色从相册导入的立绘图片"),
                 sizeBytes = dirSize(File(filesDir, "character_images")),
                 dir = File(filesDir, "character_images"),
             ),
             StorageItem(
                 key = "chatRecords",
-                name = "聊天记录（数据库）",
-                description = "全部单聊/群聊消息与 Seedance 任务记录",
+                name = L10nRuntime.t("聊天记录（数据库）"),
+                description = L10nRuntime.t("全部单聊/群聊消息与 Seedance 任务记录"),
                 sizeBytes = dirSize(dbDir),
                 dir = dbDir,
             ),

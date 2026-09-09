@@ -1,6 +1,7 @@
 package com.rhodesisland.terminal.tts
 
 import android.content.Context
+import com.rhodesisland.terminal.i18n.L10nRuntime
 import android.speech.tts.TextToSpeech
 import android.util.Log
 import com.rhodesisland.terminal.data.model.SystemVoiceTemplate
@@ -74,8 +75,10 @@ class SystemTtsEngine(private val context: Context) {
     ) = withContext(Dispatchers.Main) {
         val engine = ensureEngine()
             ?: throw IllegalStateException(
-                "系统语音引擎启动失败：请到系统设置 → 更多设置 → 无障碍 → 文字转语音（TTS）输出中，" +
-                    "确认已安装并选中一个语音引擎（如小爱同学/讯飞），必要时先下载语音数据"
+                L10nRuntime.t(
+                    "系统语音引擎启动失败：请到系统设置 → 更多设置 → 无障碍 → 文字转语音（TTS）输出中，" + // l10n:ignore 与下一行拼接后由 L10nRuntime.t() 整体包装
+                        "确认已安装并选中一个语音引擎（如小爱同学/讯飞），必要时先下载语音数据" // l10n:ignore 非界面文案（提示词/比较值/崩溃日志/拼接片段）
+                )
             )
         // 语音选择：优先模板匹配；目标语言无语音时日语报错、中文回落默认。
         val rawVoices = engine.voices.orEmpty()
@@ -86,7 +89,7 @@ class SystemTtsEngine(private val context: Context) {
             val real = rawVoices.firstOrNull { it.name == matched.name }
             real?.let { setVoiceResult = runCatching { engine.setVoice(it) }.getOrDefault(-1) }
         } else if (language == TtsLanguage.JA) {
-            throw IllegalStateException("手机系统语音不支持日语，请切换中文，或在设置中改用云端引擎")
+            throw IllegalStateException(L10nRuntime.t("手机系统语音不支持日语，请切换中文，或在设置中改用云端引擎"))
         }
         if (matched == null) {
             val result = engine.setLanguage(
@@ -94,7 +97,7 @@ class SystemTtsEngine(private val context: Context) {
             )
             if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
                 if (language == TtsLanguage.JA) {
-                    throw IllegalStateException("手机系统语音不支持日语，请切换中文，或在设置中改用云端引擎")
+                    throw IllegalStateException(L10nRuntime.t("手机系统语音不支持日语，请切换中文，或在设置中改用云端引擎"))
                 }
             }
         }
