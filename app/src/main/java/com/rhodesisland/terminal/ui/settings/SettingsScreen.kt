@@ -107,6 +107,8 @@ fun SettingsScreen(
     container: AppContainer,
     onNavigateToBackendSettings: () -> Unit,
     onNavigateToLorebook: (String) -> Unit = {},
+    /** 进入音乐页（原底部 dock 第 3 个 Tab，现为设置二级页）。 */
+    onNavigateToMusic: () -> Unit = {},
 ) {
     val scheme = MaterialTheme.colorScheme
     val apiConfig by container.settingsRepository.apiConfig.collectAsState(initial = ApiConfig())
@@ -242,6 +244,17 @@ fun SettingsScreen(
                 title = t("崩溃日志"),
                 subtitle = t("查看并分享应用崩溃 / 启动异常日志"),
                 onClick = { showCrashLogs = true },
+                trailing = { Chevron() },
+                showDivider = false,
+            )
+        }
+
+        // ===== 音乐（原底部 dock 入口迁入此处：播放列表 / 本地导入 / 在线搜索）=====
+        GlassListSection {
+            GlassListRow(
+                title = t("音乐"),
+                subtitle = t("播放列表 · 本地导入 · 在线搜索"),
+                onClick = onNavigateToMusic,
                 trailing = { Chevron() },
                 showDivider = false,
             )

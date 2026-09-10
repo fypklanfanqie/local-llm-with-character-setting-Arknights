@@ -119,6 +119,7 @@ internal val En08NovelEntries: List<Pair<String, String>> = listOf(
     "建立" to "Create",
 
     // ===== 音乐 =====
+    "播放列表 · 本地导入 · 在线搜索" to "Playlist · Local import · Online search",
     "导入本地音乐" to "Import local music",
     "专辑封面" to "Album cover",
     "未在播放" to "Not playing",

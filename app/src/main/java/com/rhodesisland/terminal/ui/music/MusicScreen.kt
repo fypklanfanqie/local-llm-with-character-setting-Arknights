@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DeleteOutline
@@ -76,8 +77,14 @@ private fun formatTime(ms: Long): String {
     return "%02d:%02d".format(m, s)
 }
 
+/**
+ * 音乐页。
+ *
+ * 原为底部 dock 的第 3 个入口，现已迁入「设置 → 音乐」的二级页：从设置进入时传 [onBack]
+ * 显示返回键；[onBack] 为 null（历史调用/无返回需求）时不渲染返回键，布局与旧版一致。
+ */
 @Composable
-fun MusicScreen(container: AppContainer) {
+fun MusicScreen(container: AppContainer, onBack: (() -> Unit)? = null) {
     val scheme = MaterialTheme.colorScheme
     // 用户播放列表（持久化：本地导入 + 网易云搜索添加）
     val userPlaylist by container.musicLibrary.playlist.collectAsState(initial = emptyList())
@@ -201,7 +208,20 @@ fun MusicScreen(container: AppContainer) {
             .background(Color.Transparent)
             .windowInsetsPadding(WindowInsets.statusBars)
     ) {
-        GlassLargeTitle(t("音乐")) {
+        GlassLargeTitle(
+            title = t("音乐"),
+            leading = {
+                if (onBack != null) {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = t("返回"),
+                            tint = scheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            },
+        ) {
             IconButton(onClick = { importPicker.launch(arrayOf("audio/*")) }) {
                 Icon(Icons.Filled.Add, contentDescription = t("导入本地音乐"), tint = scheme.onSurfaceVariant)
             }

@@ -18,12 +18,12 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.outlined.Chat
-import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Storage
-import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material3.Scaffold
@@ -85,15 +85,19 @@ import androidx.compose.ui.graphics.Color
  *
  * 移除了"积分"Tab（付费功能已删除）
  * 新增"模型"Tab（本地 AI 模型管理）
+ * 「音乐」Tab 已迁入「设置 → 音乐」二级页，原位置改为「朋友圈」（Moments）。
  * 图标细线化：未选中 Outlined 描边 / 选中 Filled 实心（iOS SF Symbols 风）。
  */
 sealed class BottomTab(val route: String, val label: String, val icon: ImageVector, val selectedIcon: ImageVector) {
     object Chat : BottomTab("chat", "通讯", Icons.AutoMirrored.Outlined.Chat, Icons.AutoMirrored.Filled.Chat)
     object Characters : BottomTab("characters", "角色", Icons.Outlined.Person, Icons.Filled.Person)
-    object Music : BottomTab("music", "音乐", Icons.Outlined.MusicNote, Icons.Filled.MusicNote)
+    object Moments : BottomTab("moments", "朋友圈", Icons.Outlined.PhotoLibrary, Icons.Filled.PhotoLibrary)
     object Models : BottomTab("models", "模型", Icons.Outlined.Storage, Icons.Filled.Storage)
     object Settings : BottomTab("settings", "设置", Icons.Outlined.Settings, Icons.Filled.Settings)
 }
+
+/** 音乐二级页路由（非 dock Tab：由「设置 → 音乐」进入，返回键回设置页）。 */
+private const val MUSIC_ROUTE = "music"
 
 private const val CHECKIN_SHOP_ROUTE = "checkin_shop"
 private const val AFFINITY_ROUTE = "affinity/{characterId}"
@@ -127,7 +131,7 @@ fun AppNavGraph(container: AppContainer, initialChatOpen: Boolean = false) {
             showDailyCheckin = true
         }
     }
-    val tabs = listOf(BottomTab.Chat, BottomTab.Characters, BottomTab.Music, BottomTab.Models, BottomTab.Settings)
+    val tabs = listOf(BottomTab.Chat, BottomTab.Characters, BottomTab.Moments, BottomTab.Models, BottomTab.Settings)
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
@@ -442,8 +446,26 @@ fun AppNavGraph(container: AppContainer, initialChatOpen: Boolean = false) {
                     )
                 }
             }
-            composable(BottomTab.Music.route) {
-                Box(tabBottomPadding) { Box(Modifier.fillMaxWidth().widthIn(max = 640.dp)) { MusicScreen(container = container) } }
+            composable(BottomTab.Moments.route) {
+                // 朋友圈：与通讯 Tab 一样全出血沉浸设计（自带顶栏与底栏留白），
+                // 故不套 tabBottomPadding；bottomBarHeight 交由页面内部给列表垫底。
+                // onBack = null：作为 dock 根页没有上一级，隐藏顶栏返回键（从卡片流进入时仍显示）。
+                MomentsScreen(
+                    container = container,
+                    bottomBarHeight = bottomBarHeight,
+                    onBack = null,
+                )
+            }
+            composable(MUSIC_ROUTE) {
+                // 音乐二级页（原 dock 第 3 个 Tab）：从「设置 → 音乐」进入，返回键回设置页。
+                Box(tabBottomPadding) {
+                    Box(Modifier.fillMaxWidth().widthIn(max = 640.dp)) {
+                        MusicScreen(
+                            container = container,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                }
             }
             composable(BottomTab.Models.route) {
                 Box(tabBottomPadding) { Box(Modifier.fillMaxWidth().widthIn(max = 640.dp)) { ModelManagerScreen(container = container) } }
@@ -458,6 +480,9 @@ fun AppNavGraph(container: AppContainer, initialChatOpen: Boolean = false) {
                             },
                             onNavigateToLorebook = { bookId ->
                                 navController.navigate(lorebookDetailRoute(bookId)) { launchSingleTop = true }
+                            },
+                            onNavigateToMusic = {
+                                navController.navigate(MUSIC_ROUTE) { launchSingleTop = true }
                             },
                         )
                     }

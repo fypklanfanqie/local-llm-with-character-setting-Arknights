@@ -137,18 +137,20 @@ fun <T> GlassSegmented(
 }
 
 /**
- * iOS 大标题：左对齐大字 + 可选尾部动作槽。
+ * iOS 大标题：左对齐大字 + 可选前导槽（子页返回按钮）+ 可选尾部动作槽。
  */
 @Composable
 fun GlassLargeTitle(
     title: String,
     modifier: Modifier = Modifier,
+    leading: @Composable RowScope.() -> Unit = {},
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     Row(
         modifier = modifier.padding(horizontal = 20.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        leading()
         Text(
             text = title,
             style = MaterialTheme.typography.displaySmall,

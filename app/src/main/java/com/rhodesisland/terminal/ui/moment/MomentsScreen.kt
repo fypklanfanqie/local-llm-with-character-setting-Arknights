@@ -84,7 +84,8 @@ import com.rhodesisland.terminal.util.RelativeTime
 fun MomentsScreen(
     container: AppContainer,
     bottomBarHeight: androidx.compose.ui.unit.Dp = 0.dp,
-    onBack: () -> Unit,
+    /** 返回动作：从卡片流进入时传 popBackStack；作为 dock 根页时传 null（无上一级，隐藏返回键）。 */
+    onBack: (() -> Unit)? = null,
 ) {
     val app = LocalContext.current.applicationContext as android.app.Application
     val viewModel: MomentsViewModel = viewModel(
@@ -143,8 +144,10 @@ fun MomentsScreen(
                 .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.Filled.Close, contentDescription = t("返回"), tint = Color.White)
+            if (onBack != null) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.Filled.Close, contentDescription = t("返回"), tint = Color.White)
+                }
             }
             Spacer(Modifier.weight(1f))
             IconButton(onClick = { showAiPostDialog = true }) {
