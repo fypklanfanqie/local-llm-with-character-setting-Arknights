@@ -11,7 +11,7 @@ internal val Ja00CommonEntries: List<Pair<String, String>> = listOf(
     // 言語設定（批次 0）
     "语言" to "言語",
     "跟随系统" to "システムに従う",
-    "界面语言（AI 回复语言不受影响）" to "表示言語（AI の返答言語には影響しません）",
+    "界面语言（AI 回复语言会同步切换）" to "表示言語（AI の返答言語も切り替わります）",
     "当前：{0}" to "現在：{0}",
 
 )

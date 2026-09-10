@@ -328,6 +328,7 @@ fun CharactersScreen(
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun CharacterCard(
     character: Character,
@@ -395,9 +396,11 @@ private fun CharacterCard(
                 )
             }
             Spacer(Modifier.height(4.dp))
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-                verticalAlignment = Alignment.CenterVertically,
+            // 双胶囊用 FlowRow：中文一行放得下；英文等较长文案放不下时好感胶囊自动换到下一行居中，
+            // 避免被挤压成一字一行竖排（i18n 布局兼容）
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterHorizontally),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 Row(
                     modifier = Modifier

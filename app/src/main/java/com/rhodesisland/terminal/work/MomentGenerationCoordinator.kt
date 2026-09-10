@@ -141,7 +141,7 @@ class MomentGenerationCoordinator(
         val system = buildString {
             append(character.systemPrompt)
             append(settings.getUserProfileNow().toDirectiveText())
-            append(com.rhodesisland.terminal.llm.OutputLanguage.ZH_DIRECTIVE)
+            append(com.rhodesisland.terminal.llm.OutputLanguage.current())
         }
         val raw = withTimeout(AppConfig.Moment.GENERATE_TIMEOUT_MS) {
             directLlmClient.chatOnce(
@@ -177,7 +177,7 @@ class MomentGenerationCoordinator(
         val system = buildString {
             append(character.systemPrompt)
             append(profile.toDirectiveText())
-            append(com.rhodesisland.terminal.llm.OutputLanguage.ZH_DIRECTIVE)
+            append(com.rhodesisland.terminal.llm.OutputLanguage.current())
         }
         val prompt = MomentPromptBuilder.buildUserPostCommentPrompt(
             userDisplayName = profile.displayOrMe,
@@ -250,7 +250,7 @@ class MomentGenerationCoordinator(
         append("caption 贴合人设，第一人称，1~3 句，不含话题标签。") // l10n:ignore 非界面文案（提示词/比较值/崩溃日志/拼接片段）
         append(MomentPromptBuilder.buildPostSystemDirective(mentionTarget))
         append("\n[备注] 角色名：$characterName") // l10n:ignore 非界面文案（提示词/比较值/崩溃日志/拼接片段）
-        append(com.rhodesisland.terminal.llm.OutputLanguage.ZH_DIRECTIVE)
+        append(com.rhodesisland.terminal.llm.OutputLanguage.current())
     }
 
     /**

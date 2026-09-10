@@ -775,7 +775,7 @@ private fun LanguageSection(container: AppContainer, scope: CoroutineScope) {
         summary = tf("当前：{0}", currentLabel),
     ) {
         Text(
-            t("界面语言（AI 回复语言不受影响）"),
+            t("界面语言（AI 回复语言会同步切换）"),
             color = scheme.onSurfaceVariant,
             fontSize = 11.sp,
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),

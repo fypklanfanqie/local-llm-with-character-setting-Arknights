@@ -155,7 +155,7 @@ object GroupChatPromptBuilder {
         append("只输出", speaker.name, "要说的话本身：不要角色名前缀、不要引号、不要任何解释，1-3 句话。")
         // 第三方 API 偶发英文输出：恒定语言约束（放变化尾避免污染稳定前缀缓存语义——
         // 虽然本指令逐字节恒定，但置于尾部更贴近采样点、约束力更强）
-        append(com.rhodesisland.terminal.llm.OutputLanguage.ZH_DIRECTIVE)
+        append(com.rhodesisland.terminal.llm.OutputLanguage.current())
     }
 
     /**

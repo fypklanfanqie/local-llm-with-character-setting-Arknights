@@ -48,7 +48,7 @@ internal val En07MomentEntries: List<Pair<String, String>> = listOf(
     "确定删除自定义角色「{0}」？将同时删除其立绘，不可恢复。" to "Delete custom character \"{0}\"? Its illustration will be deleted too. This cannot be undone.",
     "已导入 {0} 个自定义角色" to "Imported {0} custom characters",
     "导入失败：JSON 格式错误" to "Import failed: invalid JSON",
-    "好感 {0} / 200" to "Affinity {0} / 200",
+    "好感 {0} / 200" to "Affinity {0}/200",
     "编辑" to "Edit",
     "编辑角色" to "Edit character",
     "新建自定义角色" to "New custom character",

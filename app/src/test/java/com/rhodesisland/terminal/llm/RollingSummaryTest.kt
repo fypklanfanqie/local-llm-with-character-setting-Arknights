@@ -1,6 +1,9 @@
 package com.rhodesisland.terminal.llm
 
 import com.rhodesisland.terminal.config.AppConfig
+import com.rhodesisland.terminal.i18n.AppLanguage
+import com.rhodesisland.terminal.i18n.L10nRuntime
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -15,6 +18,11 @@ import org.junit.Test
  * 前缀逐字节一致、缓存全程命中；折叠那一刻断一次前缀，摊薄后命中率仍≈97%。
  */
 class RollingSummaryTest {
+
+    @After
+    fun restoreLanguage() {
+        L10nRuntime.update(AppLanguage.ZH, "zh")
+    }
 
     // ===== 折叠时机 =====
 
@@ -80,6 +88,24 @@ class RollingSummaryTest {
         val firstPrompt = RollingSummary.buildFoldPrompt("", batchLines = listOf("第一句"))
         assertFalse(firstPrompt.contains("【已有前情提要】\n\n"))
         assertTrue(firstPrompt.contains("无"))
+    }
+
+    @Test
+    fun foldPrompt_narrationLanguageFollowsSelectedLanguage() {
+        // 默认中文界面：简体中文叙述
+        assertTrue(
+            RollingSummary.buildFoldPrompt("", listOf("博士：在吗")).contains("简体中文"),
+        )
+        // 英文界面：摘要叙述语言切英文——摘要会注回上下文，固定中文会把对话拉回中文
+        L10nRuntime.update(AppLanguage.EN, "en")
+        val en = RollingSummary.buildFoldPrompt("", listOf("博士：在吗"))
+        assertTrue("英文界面下摘要须用英文叙述", en.contains("English"))
+        assertFalse("英文界面下不得再要求简体中文叙述", en.contains("简体中文"))
+        // 日文界面：日文叙述
+        L10nRuntime.update(AppLanguage.JA, "ja")
+        val ja = RollingSummary.buildFoldPrompt("", listOf("博士：在吗"))
+        assertTrue("日文界面下摘要须用日文叙述", ja.contains("日本語"))
+        assertFalse("日文界面下不得再要求简体中文叙述", ja.contains("简体中文"))
     }
 
     // ===== 模型输出清洗 =====

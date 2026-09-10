@@ -48,7 +48,7 @@ object NovelPromptBuilder {
             append(protagonistName.trim())
             append("：」开头输出。")
         }
-        append(OutputLanguage.ZH_DIRECTIVE)
+        append(OutputLanguage.current())
     }
 
     /** 组装 user（章节上下文 + 正文窗口 + 续写指令）。 */

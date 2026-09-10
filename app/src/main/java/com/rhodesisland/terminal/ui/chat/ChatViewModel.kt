@@ -783,7 +783,7 @@ class ChatViewModel(
                 val lorebookStaticHead = lorebookActivation?.staticHead.orEmpty()
                 val lorebookTailText = lorebookActivation?.tailInjection.orEmpty()
                 val apiMessages = buildList {
-                    add(ChatMessage(role = "system", content = lorebookStaticHead + char.systemPrompt + worldviewDirective + eventDirective + userDirective + OutputLanguage.ZH_DIRECTIVE))
+                    add(ChatMessage(role = "system", content = lorebookStaticHead + char.systemPrompt + worldviewDirective + eventDirective + userDirective + OutputLanguage.current()))
                     if (isCloudProvider && summaryText.isNotBlank()) {
                         // 【前情提要】独立第二段 system（滚动摘要，单聊云端）：插在人设之后、历史之前
                         // = 常驻稳定前缀的一部分；仅折叠那一刻变一次，其余轮次逐字节稳定 → 缓存锚。
@@ -1264,7 +1264,9 @@ class ChatViewModel(
             val lorebookTailText = lorebookActivation?.tailInjection.orEmpty()
             val isCloudProvider = container.settingsRepository.getActiveProviderNow() == ChatProviderType.CLOUD
             val messages = buildList {
-                add(ChatMessage(role = "system", content = lorebookStaticHead + char.systemPrompt + worldviewDirective + userDirective))
+                // 与主聊天路径（sendMessage）同构：人设 + 世界观 + 博士档案 + 输出语言约束，
+                // 保证礼物感谢回复也跟随界面选择的语言（EN/JA 界面 → 对应语言回答）。
+                add(ChatMessage(role = "system", content = lorebookStaticHead + char.systemPrompt + worldviewDirective + userDirective + OutputLanguage.current()))
                 addAll(
                     PromptWindowAnchor.anchoredWindow(history, AppConfig.MAX_CONTEXT_MESSAGES)
                         .map {
