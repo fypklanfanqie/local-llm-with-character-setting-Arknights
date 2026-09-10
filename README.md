@@ -1,96 +1,91 @@
 # Rhodes Island Terminal · 罗德岛通讯终端
-<img width="1080" height="2400" alt="Screenshot_2026-08-16-14-13-34-190_com rhodesisl" src="https://github.com/user-attachments/assets/9355878f-8497-48a3-9961-3dace4575a0e" />
 
-> 明日方舟同人 AI 角色扮演聊天应用：端侧 **MNN 本地大模型推理**（自适应三后端 + 基准认证 + 深度思考）+ 云端双引擎 + 内置方舟 BGM/语音/立绘 · A fan-made Arknights on-device LLM roleplay chat app (MNN local inference + cloud engine + built-in Arknights BGM/voice/art)
+**简体中文** ｜ [English](README_EN.md) ｜ [日本語](README_JA.md)
+
+> 明日方舟同人 AI 角色扮演聊天应用：端侧 **MNN 本地大模型推理**（CPU / GPU / NPU 自适应 + 深度思考）+ 云端双引擎 + 内置方舟 BGM / 语音 / 立绘。所有本地对话数据完全保存在设备内，可全程离线使用。
 
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0.0-7F52FF?logo=kotlin)](https://kotlinlang.org)
 [![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-Material3-4285F4?logo=jetpackcompose)](https://developer.android.com/compose)
 [![MNN](https://img.shields.io/badge/Local%20LLM-MNN-00C4A7?logo=alibabacloud)](https://github.com/alibaba/MNN)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-<img width="1080" height="2400" alt="Screenshot_2026-08-16-18-28-24-182_com rhodesisl" src="https://github.com/user-attachments/assets/6432b75e-ac2e-46d4-8117-77d6907db27c" />
-
 
 ---
 
-## 🆕 本次更新 · What's New
+## 🖼️ 功能总览 · Tour
 
-本版本把本地 LLM 与聊天体验整体升级为「自适应推理 + 工程化闭环」架构，并合入一批新功能：
-
-- **🧠 端侧 MNN 自适应推理引擎** — CPU / OpenCL GPU / QNN NPU 三后端自适应调度、失败自动回退链、**GPU 自愈健康**（隔离进程探测 + 冷却/黑名单状态机）、一键 GPU 预热。完全离线推理，数据不出设备。
-- **🚀 本地深度思考分级** — AUTO / SHORT / MEDIUM / LONG 思考分级 + 字节预算截断，推理过程以可折叠「思考过程」块展示；思考开关有效性由聊天模板能力探测判定。
-- **🛡️ 内存准入 + 基准认证** — 大模型不 OOM：内存不足自动按轮减半上下文（最低 512）而**不崩溃不报错**；lookahead / 多 token 解码等实验加速**必须在真机基准测试中证明收益**后才启用。
-- **🎬 角色视频生成 · Seedance** — 聊天回复自动触发角色短片生成（「邂逅」时间线：播放 / 导出 / 历史），自定义参考图与场景。
-- **🔊 双 TTS 引擎** — 系统离线 TTS（默认，免配置）＋ 火山引擎豆包云端声音复刻（每角色独立音色，中日双语）。
-- **💬 聊天可靠性重构** — 思考流 30fps 节流渲染、用户控制底部跟随、「停止」保留部分输出、首答不再闪烁消失、支持删除单条消息。
-- **📦 模型下载可靠性** — 多镜像自动回退（ModelScope → hf-mirror → HuggingFace）+ 目录大小 / SHA-256 / 权重文件完整性校验，损坏模型不会被打上「已完成」。
-- **⏰ 后台保活增强** — 角色主动问候改为 15 分钟周期调度 + 精确闹钟兜底 + 前台服务/WakeLock 保护推理生成，国产 ROM 也能稳定触发。
-
----<img width="1080" height="2400" alt="Screenshot_2026-08-16-14-13-41-828_com rhodesisl" src="https://github.com/user-attachments/assets/dee33b04-3ae3-4354-90e4-a9dd011da01f" />
-
-
-## 🧠 本地 LLM 推理 · On-device Local LLM（重点）
-<img width="1080" height="2400" alt="Screenshot_2026-08-16-14-13-55-795_com rhodesisl" src="https://github.com/user-attachments/assets/42f530ae-514d-4112-be70-9c9212f22d88" />
-
-
-基于 [MNN](https://github.com/alibaba/MNN) 的**自适应端侧推理栈**：从设备能力探测、内存准入、后端调度、健康自愈，到基准认证、性能遥测的一整套工程化闭环。全部推理在设备本地完成，**对话数据不离开手机**。
-
-### 自适应后端调度 · Adaptive backend scheduling
-
-- **三后端自动选择**：`CPU` / `OpenCL GPU` / `QNN NPU`。系统根据设备能力（SoC 芯片等级、CPU 大核数、总内存、NPU 支持）推荐首选后端，并按「用户偏好 × 模型大小 × GPU 就绪度」生成每条消息的回退尝试链；GPU 空输出 / 加载失败自动回退 CPU，CPU 永远是最终兜底。
-- **大模型 GPU 准入**：AUTO 模式下总参数量 **> 7B** 的模型才尝试 GPU（OpenCL），≤ 7B 默认走 CPU，避免小模型在 GPU 上的无谓开销。
-
-### GPU 自愈健康 · Self-healing GPU health
-
-- **隔离进程 OpenCL 探测**：在独立 `:mnn_probe` 进程中真正执行 OpenCL（15s 超时），主进程永远不被 GPU 崩溃拖垮；文件通道跨进程回传结果。
-- **健康状态机**：每个「设备 × 模型 × 后端 × 变体」维护 probe-ok / model-ok / 冷却 / 崩溃黑名单记录；设备 / 系统 / 模型变化后指纹自动过期。
-- **一键 GPU 预热**：手动预载 >7B 模型并跑一次 ≤8 token 的极短生成，预编译 OpenCL kernel 缓存，显著降低首条消息 TTFT。
-
-### 内存准入 · Memory admission
-
-- 每条本地消息生成前检查系统内存 + 进程 PSS；内存不足时**自动按轮减半上下文（最低 512）**而不崩溃、不报错，且不改动用户设置。
-- KV 缓存按模型架构精确估算（GQA 感知），上下文滑杆旁实时显示对应内存占用。
-- 进程真实峰值 PSS 被采样回灌，后续准入不断自我校准。
-
-### 基准测试与认证 · Benchmark & certification
-
-- **六场景基准**：冷加载 / 短 TTFT / 长 prefill / 固定 decode / 二轮 KV 复用 / 空响应检查，覆盖 **CPU × GPU × 思考开关** 四象限，P95 统计、热拒绝与可靠度运行。
-- **设备端认证门**：lookahead、多 token 解码等实验特性**必须**在真机上证明 ≥10% decode 提升、无 TTFT/PSS 明显回退，才写入 DataStore 认证并被启用。
-
-### 本地深度思考 · Local deep thinking
-
-- 思考分级 **AUTO / SHORT / MEDIUM / LONG**（仅本地模型生效），AUTO 按问题复杂度自动分级。
-- 思考区有软目标时长与硬字节预算；超预算自动截断并「合并直接作答」，不拖死整轮生成。
-- 思考开关有效性由**聊天模板能力探测**判定（模板无 `enable_thinking` 分支时不会误报可用）。
-
-### 性能与遥测 · Performance & telemetry
-
-- 两种性能模式：**综合平衡**（稳定解码，默认）与**最高速度**（最大解码吞吐，过热 / 内存吃紧自动降级）。
-- 非 root CPU 提速（PerformanceHint API 31+ + 线程优先级 + Sustained Performance Mode）、热感应降线程（中热减半 / 严重 2 线程 / 危急 1 线程）、大核拓扑感知选线程数。
-- **液态玻璃性能浮窗**实时监控 token/s、CPU / GPU / NPU、温度、内存；每轮推理生成结构化遥测（加载耗时、TTFT、prefill/decode、KV 复用、回退链、降级原因、思考分类）。
-
-### 本地模型管理 · Local model management
-
-- 内置 **13 款 MNN 模型清单**（无网络模型市场），支持下载 / 暂停续传 / 删除 / 切换，多文件分块合并 + 完整性校验。
-- 下载多镜像自动回退：**ModelScope（国内）→ hf-mirror → HuggingFace**。
-- 删除 / 切换活动模型即时释放 MNN native 句柄（生成中安全延迟释放）。
+| | | |
+|:---:|:---:|:---:|
+| <img src="docs/screenshots/01-feed.jpg" width="360" alt="通讯·角色卡片流"/><br>**① 通讯 · 角色卡片流**<br><sub>全屏立绘滑动切换，一键开始对话</sub> | <img src="docs/screenshots/02-local-models.jpg" width="360" alt="本地大模型"/><br>**② 本地大模型**<br><sub>MNN 三后端自适应，离线推理</sub> | <img src="docs/screenshots/03-moments.jpg" width="360" alt="朋友圈"/><br>**③ 朋友圈**<br><sub>角色自动发动态，可点赞评论</sub> |
+| <img src="docs/screenshots/04-cloud-api.jpg" width="360" alt="云端AI配置"/><br>**④ 云端 AI · API 配置**<br><sub>预设模型商，填 Key 即用</sub> | <img src="docs/screenshots/05-novel.jpg" width="360" alt="互动小说"/><br>**⑤ 互动小说模式**<br><sub>旁白 + 对白脚本，AI 续写整章</sub> | <img src="docs/screenshots/06-worldview-lorebook.jpg" width="360" alt="世界观与世界书"/><br>**⑥ 世界观与世界书**<br><sub>设定注入对话，关键词触发</sub> |
+| <img src="docs/screenshots/07-guide.jpg" width="360" alt="使用指南"/><br>**⑦ 使用指南**<br><sub>应用内检索式功能手册</sub> | <img src="docs/screenshots/08-daily-supply.jpg" width="360" alt="每日补给与商店"/><br>**⑧ 每日补给与礼物商店**<br><sub>签到领龙门币，送礼涨好感</sub> | <img src="docs/screenshots/09-multilang.jpg" width="360" alt="多语言"/><br>**⑨ 多语言界面**<br><sub>中 / 英 / 日，AI 回复同步切换</sub> |
 
 ---
 
-## ✨ 特性 · Features
+## 📖 功能详解
 
-- **🤖 云端 + 本地双引擎** — 云端 OpenAI 兼容 API（DeepSeek / OpenAI / 通义千问 / 智谱，SSE 流式）与本地 MNN 离线推理一键切换，对话按角色独立保存。
-- **🎎 384 位罗德岛干员（全量 3★~6★）** — 20 位含语音 / 本地立绘 + 364 位自动生成（人格 system prompt + 游戏技能 / 天赋 + 精二 / 皮肤立绘），支持新建 / 导入 / 导出自定义角色。
-- **🎵 音乐播放器** — **内置 7 首方舟 BGM（本地 mp3，离线可播）+ 178 首网易云方舟 OST 目录**，另支持网易云在线搜索与本地音乐导入；进度 / 音量 / 歌词 / 收藏 / 随机 / 三档循环。
-- **🔊 双 TTS 语音合成** — 系统离线 TTS（默认）+ 火山引擎豆包云端声音复刻（每角色独立音色，中日双语）；朗读自动剥离 `<think>` 思考块。
-- **🖼️ 多模态对话** — 图片（最多 3 张）、PDF（前 6 页）、纯文本文件直连多模态模型。
-- **📝 Markdown 渲染** — 完整 Markdown 支持，代码高亮 + 数学公式块。
-- **📊 性能浮窗** — 本地推理时实时监控 Token 速率 / CPU / GPU / NPU / 温度 / 内存，液态玻璃风格浮窗（非 root）。
-- **💬 角色主动问候** — 15 分钟周期调度 + 精确闹钟兜底，角色会在你离开后主动发来消息（跨重启存活，限云端），类微信横幅通知。
-- **🎨 PRTS 深色终端 UI** — 深藏青底 + 罗德岛金强调的液态玻璃界面，衬线标题、科幻终端风。
+### ① 通讯 · 角色卡片流
+
+- 抖音式全屏立绘卡片流：上下滑动浏览 **384 位罗德岛干员**（20 位内置语音与本地立绘 + 364 位自动生成，含游戏技能 / 天赋人设）
+- 角色卡直达「**开始对话 / 好感 / 小说**」；顶栏玻璃按钮直达「朋友圈 / 邂逅 / 群聊 / 新建」
+- 立绘主题色实时驱动按钮与底栏配色，界面随角色变化
+
+### ② 本地大模型 · 端侧 MNN 推理
+
+- **MNN CPU / OpenCL GPU / QNN NPU** 三后端自适应调度（自动推荐 / 强制指定），GPU 失败自动回退 CPU，完全离线、数据不出设备
+- 内置模型市场：**Qwen3.5 等 13 款 MNN 模型**，多镜像下载（ModelScope → hf-mirror → HuggingFace）、断点续传 + SHA-256 完整性校验
+- **本地深度思考**分级（AUTO / SHORT / MEDIUM / LONG），思考过程可折叠展示；内存不足自动按轮减半上下文，不崩溃不报错
+- 实验加速（lookahead / 多 token 解码）必须通过真机基准认证才启用
+- **液态玻璃性能浮窗**：token/s、CPU / GPU / NPU、温度、内存实时监控
+
+### ③ 朋友圈 · Moments
+
+- 仿微信朋友圈信息流：角色按人设**自动发动态**（AI 文案 + AI 配图），可点赞、评论，角色会回复你的评论
+- 自己也能发帖带图；支持自动发圈调度（8–23 点），随时刷到干员们的日常
+
+### ④ 云端 AI · LLM API 配置
+
+- OpenAI 兼容 `/chat/completions` **SSE 流式直连**；内置 DeepSeek / OpenAI / 通义千问 / 智谱等预设模型商，选择后填 API Key 即用，一键测试连接
+- 云端 / 本地双引擎随时切换，会话按角色独立保存
+- 多模态模型支持图片（最多 3 张）/ PDF（前 6 页）/ 文本文件直传
+
+### ⑤ 互动小说模式
+
+- 「旁白 + 角色对白」脚本体：AI 一次续写整章剧情，按说话人分色气泡展示
+- 章节本地自动保存，随时回来继续写；多故事 / 多章节管理
+
+### ⑥ 世界观与世界书
+
+- **世界观**：自定义设定（如「故事发生在末日废土」）注入对话提示词，可绑定单个角色私聊或某个群聊
+- **世界书**：关键词触发式背景设定库，支持导入 **SillyTavern 世界书 JSON**；扫描深度 / Token 预算上限 / 递归扫描可调
+
+### ⑦ 使用指南
+
+- 应用内检索式功能手册：热门搜索 + 功能分类（快速上手 / 云端 AI / 本地大模型 / 聊天 / TTS / 世界观与世界书 / 角色·问候·群聊…）
+- 跟随界面语言显示中 / 英 / 日，搜关键词即出答案
+
+### ⑧ 每日补给与礼物商店
+
+- 每日签到领取 **10,000 龙门币**；礼物商店支持自定义礼物（价格 / 好感加成 / 库存），采购后赠送角色
+- **好感度系统**：等级上限 200、礼物墙回顾、特殊邂逅事件档案
+
+### ⑨ 多语言 · 界面与 AI 回复同步
+
+- **跟随系统 / 简体中文 / English / 日本語** 一键切换
+- 切换后不止界面翻译：**角色的回答也会用对应语言**（人设 / 世界观 / 世界书等中文设定无需翻译，AI 照常理解）
+
+---
+
+## ✨ 更多特性
+
+- **🔊 双 TTS 语音合成** — 系统离线 TTS（默认免配置）+ 火山引擎豆包云端声音复刻（每角色独立音色，中日双语）；朗读自动剥离思考块
+- **🎬 邂逅 · 角色视频** — Seedance 生成角色短片（自动触发 / 播放 / 导出 / 历史），自定义参考图与场景
+- **💬 群聊** — 多角色群聊：@ 指定必答、成员后台互聊、新消息通知
+- **⏰ 角色主动问候** — 15 分钟周期调度 + 精确闹钟兜底，角色会在你离开后主动发来消息（类微信横幅通知，跨重启存活）
+- **📝 Markdown 渲染** — 代码高亮 + 数学公式；深度思考过程可折叠展示
+- **🎵 音乐播放器** — 内置方舟 BGM + 网易云方舟 OST 目录 / 在线搜歌 / 本地音乐导入，后台持续播放（位于「设置 → 音乐」）
+- **🎨 PRTS 深色终端 UI** — 深藏青底 + 罗德岛金强调的液态玻璃界面，衬线标题、科幻终端风
 
 ## 384 位干员 · Operators
-
-<img width="1080" height="2400" alt="Screenshot_2026-08-16-14-13-44-537_com rhodesisl" src="https://github.com/user-attachments/assets/d212e93a-6417-485f-afc5-f72b3067b4f6" />
 
 > 下表为基础 20 位（内置语音与本地立绘）；其余 364 位干员由人格档案自动生成，含游戏技能 / 天赋与精二 / 皮肤立绘（网络加载）。全量干员在角色页 / 通讯 feed 中均可见。
 
@@ -206,10 +201,11 @@ Android/data/com.rhodesisland.terminal/files/models/
 ## 免责声明
 
 > 本项目为明日方舟同人作品，所有角色、立绘、音乐版权归 **Hypergryph / 鹰角网络** 所有。本项目仅用于学习交流，不作商业用途
-## 致谢
-> 本软件的不断完善离不开一开始我发抖音 ，b站粉丝群里面各位粉丝朋友的优化建议和新功能提议 ，感谢各位！
-> 他们分别是 咕咕火 id V.I.P_520 白夜执 1185531741 不知道 buzhidao350543 辋川星梦 1023422036 
 
+## 致谢
+
+> 本软件的不断完善离不开一开始我发抖音，B 站粉丝群里面各位粉丝朋友的优化建议和新功能提议，感谢各位！
+> 他们分别是 咕咕火 id V.I.P_520 白夜执 1185531741 不知道 buzhidao350543 辋川星梦 1023422036
 
 ## License
 
