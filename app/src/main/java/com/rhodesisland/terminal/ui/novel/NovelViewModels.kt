@@ -273,11 +273,20 @@ class NovelEditorViewModel(
     }
 
     fun updateLine(line: NovelLineEntity, newContent: String) {
+        // 手工改动让「用户刚写的那一行」方向失效：改的如果正是那一行，旧指引已过期
+        pendingDirected = null
         viewModelScope.launch { repo.updateLine(line.copy(content = newContent.trim())) }
     }
 
     fun deleteLine(lineId: Long) {
+        pendingDirected = null
         viewModelScope.launch { repo.deleteLine(lineId) }
+    }
+
+    /** 上下移动一行（-1 上移 / +1 下移）。手工重排同样让过期的发言方向失效。 */
+    fun moveLine(line: NovelLineEntity, direction: Int) {
+        pendingDirected = null
+        viewModelScope.launch { repo.moveLine(line.chapterId, line.id, direction) }
     }
 
     /** 保存本话设定（开场白为空正文时自动落第一行旁白，在 repo 内处理）。 */

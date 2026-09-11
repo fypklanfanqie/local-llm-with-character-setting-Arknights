@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.AlertDialog
@@ -25,6 +27,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,6 +55,7 @@ import com.rhodesisland.terminal.i18n.L10nRuntime
 import com.rhodesisland.terminal.i18n.t
 import com.rhodesisland.terminal.i18n.tf
 import com.rhodesisland.terminal.ui.glass.frostedGlass
+import com.rhodesisland.terminal.ui.settings.characterMatchesQuery
 import com.rhodesisland.terminal.util.GroupCoverStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -80,6 +84,22 @@ fun GroupInfoDialog(
     var coverError by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
     var deleteConfirm by remember { mutableStateOf(false) }
+
+    // ===== 成员管理（随时加入/移出，每步立即落库）=====
+    // 本地先改再落库：增删立即生效，对话框背后群聊页经 onSaved -> refreshGroup 实时刷新。
+    var memberIds by remember { mutableStateOf(group.memberIds) }
+    var memberError by remember { mutableStateOf<String?>(null) }
+    var showMemberPicker by remember { mutableStateOf(false) }
+    var memberSearch by remember { mutableStateOf("") }
+    val allCharacters by container.characterRepository.characters.collectAsState(initial = emptyList())
+
+    fun persistMembers(ids: List<String>) {
+        memberIds = ids
+        scope.launch {
+            container.conversationRepository.setGroupMembers(group.id, ids)
+            onSaved() // 让背后的群聊页立刻刷新成员条与下一轮回复人池
+        }
+    }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
@@ -153,6 +173,61 @@ fun GroupInfoDialog(
                     .padding(12.dp),
             )
 
+            // ===== 群成员：随时加入 / 移出（立即生效，不依赖「保存」）=====
+            Text(
+                t("群成员") + "（${memberIds.size}/${com.rhodesisland.terminal.config.AppConfig.GroupChat.MAX_MEMBERS}）",
+                color = scheme.onSurfaceVariant, fontSize = 11.sp,
+            )
+            val memberCharacters = allCharacters.filter { it.id in memberIds }
+            memberCharacters.forEach { member ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    AsyncImage(
+                        model = if (member.isCustom && member.image.isNotBlank()) member.image else null,
+                        contentDescription = null,
+                        modifier = Modifier.size(30.dp).clip(RoundedCornerShape(8.dp)),
+                        contentScale = ContentScale.Crop,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        member.name,
+                        color = scheme.onSurface, fontSize = 13.sp,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
+                    // 下限 2 人：与建群口径一致，避免把群删空
+                    TextButton(
+                        onClick = {
+                            if (memberIds.size <= 2) {
+                                memberError = L10nRuntime.t("至少保留 2 名成员")
+                            } else {
+                                memberError = null
+                                persistMembers(memberIds - member.id)
+                            }
+                        },
+                    ) { Text(t("移除"), color = scheme.error, fontSize = 12.sp) }
+                }
+            }
+            memberError?.let { Text(it, color = scheme.error, fontSize = 10.sp) }
+            Text(
+                // 「＋」是装饰前缀，词条本体是「添加成员」（避免为装饰符号再养一条词典 key）
+                text = "＋ " + t("添加成员"),
+                color = scheme.primary, fontSize = 12.sp, fontWeight = FontWeight.Medium,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable(
+                        enabled = memberIds.size < com.rhodesisland.terminal.config.AppConfig.GroupChat.MAX_MEMBERS,
+                    ) {
+                        memberError = null
+                        memberSearch = ""
+                        showMemberPicker = true
+                    }
+                    .padding(horizontal = 4.dp, vertical = 6.dp),
+            )
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -223,6 +298,87 @@ fun GroupInfoDialog(
             },
             dismissButton = {
                 TextButton(onClick = { deleteConfirm = false }) { Text(t("取消"), color = scheme.onSurfaceVariant) }
+            },
+        )
+    }
+
+    // 添加成员弹窗：搜索 → 点选即加（立即落库），可连续加多人；上限与建群一致
+    if (showMemberPicker) {
+        val maxMembers = com.rhodesisland.terminal.config.AppConfig.GroupChat.MAX_MEMBERS
+        val candidates = allCharacters
+            .filter { it.id !in memberIds }
+            .filter { characterMatchesQuery(it, memberSearch) }
+        AlertDialog(
+            onDismissRequest = { showMemberPicker = false },
+            containerColor = scheme.surfaceContainerHigh,
+            title = { Text(t("添加成员"), color = scheme.onSurface) },
+            text = {
+                Column {
+                    BasicTextField(
+                        value = memberSearch,
+                        onValueChange = { memberSearch = it },
+                        singleLine = true,
+                        textStyle = TextStyle(color = textColor, fontSize = 14.sp),
+                        cursorBrush = SolidColor(scheme.primary),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(scheme.surface.copy(alpha = 0.6f))
+                            .padding(12.dp),
+                        decorationBox = { inner ->
+                            if (memberSearch.isEmpty()) {
+                                Text(t("搜索角色名 / 代号…"), color = scheme.onSurfaceVariant, fontSize = 13.sp)
+                            }
+                            inner()
+                        },
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    if (memberSearch.isNotBlank()) {
+                        Text(
+                            tf("找到 {0} 个角色", candidates.size),
+                            color = scheme.onSurfaceVariant, fontSize = 11.sp,
+                        )
+                    }
+                    if (memberIds.size >= maxMembers) {
+                        Text(
+                            tf("已达成员上限（{0} 人）", maxMembers),
+                            color = scheme.error, fontSize = 11.sp,
+                        )
+                    }
+                    LazyColumn(modifier = Modifier.height(300.dp)) {
+                        items(candidates, key = { it.id }) { candidate ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable(enabled = memberIds.size < maxMembers) {
+                                        memberError = null
+                                        persistMembers(memberIds + candidate.id)
+                                    }
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                AsyncImage(
+                                    model = if (candidate.isCustom && candidate.image.isNotBlank()) candidate.image else null,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(30.dp).clip(RoundedCornerShape(8.dp)),
+                                    contentScale = ContentScale.Crop,
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    candidate.name,
+                                    color = scheme.onSurface, fontSize = 13.sp,
+                                    modifier = Modifier.weight(1f),
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                )
+                                Text(t("添加"), color = scheme.primary, fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showMemberPicker = false }) { Text(t("完成"), color = scheme.onSurfaceVariant) }
             },
         )
     }

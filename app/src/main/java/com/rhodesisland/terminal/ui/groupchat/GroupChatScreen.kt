@@ -126,6 +126,18 @@ fun GroupChatScreen(
 
         // 群聊发言直接调用已配置的云端 LLM，与聊天页的本地/云端切换解耦（未配置时发送会提示）
 
+        // @ 提醒：很多人不知道 @ 可以点名回答——常驻一行轻量提示（输入法弹起时随输入栏一起上浮）
+        if (state.members.isNotEmpty()) {
+            Text(
+                t("输入 @ 可指定某位成员回答"),
+                color = scheme.onSurfaceVariant.copy(alpha = 0.75f),
+                fontSize = 11.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 2.dp),
+            )
+        }
+
         GroupChatInputBar(
             text = state.inputText,
             isStreaming = state.isStreaming,

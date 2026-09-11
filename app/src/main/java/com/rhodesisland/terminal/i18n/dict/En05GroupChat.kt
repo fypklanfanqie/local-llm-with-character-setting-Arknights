@@ -51,6 +51,12 @@ internal val En05GroupChatEntries: List<Pair<String, String>> = listOf(
 
     // ===== 群信息弹窗 =====
     "群聊信息" to "Group info",
+    // 成员随时增删 + @ 提醒
+    "群成员" to "Members",
+    "添加成员" to "Add members",
+    "至少保留 2 名成员" to "Keep at least 2 members",
+    "已达成员上限（{0} 人）" to "Member limit reached ({0})",
+    "输入 @ 可指定某位成员回答" to "Type @ to have a specific member answer",
     "群封面" to "Group cover",
     "群名称" to "Group name",
     "删除群聊" to "Delete group chat",

@@ -276,6 +276,24 @@ class NovelRepository(
 
     suspend fun deleteLine(lineId: Long) = dao.deleteLine(lineId)
 
+    /**
+     * 上下移动一行（[direction] -1 = 上移 / +1 = 下移）：与相邻行交换 lineOrder。
+     *
+     * 为什么用「相邻交换」而不是全量重排：只动两行的两个整数，其余行完全不动，
+     * Room Flow 刷新时用户正在看的行不会闪；已在边界（第一行上移/最后一行下移）时静默 no-op。
+     */
+    suspend fun moveLine(chapterId: Long, lineId: Long, direction: Int) {
+        val lines = dao.getLines(chapterId)
+        val idx = lines.indexOfFirst { it.id == lineId }
+        if (idx < 0) return
+        val target = idx + direction
+        if (target !in lines.indices) return
+        val a = lines[idx]
+        val b = lines[target]
+        dao.updateLine(a.copy(lineOrder = b.lineOrder))
+        dao.updateLine(b.copy(lineOrder = a.lineOrder))
+    }
+
     /** 批量追加 AI 续写产物（保持相对顺序）。 */
     suspend fun appendLines(chapterId: Long, lines: List<NovelLineEntity>) {
         lines.forEach { appendLine(it.copy(chapterId = chapterId)) }

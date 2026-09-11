@@ -157,4 +157,7 @@ internal val En08NovelEntries: List<Pair<String, String>> = listOf(
     // ===== 小说：用户发言后的剧情推进 =====
     "发送后自动续写" to "Auto-continue after sending",
     "仅添加不续写" to "Add line only",
+    "上移" to "Move up",
+    "下移" to "Move down",
+    "移动后可点 AI 从新位置续写" to "Tap AI afterwards to continue from the new position",
 )

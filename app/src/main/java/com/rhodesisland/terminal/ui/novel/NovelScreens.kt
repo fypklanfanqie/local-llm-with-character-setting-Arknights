@@ -553,19 +553,38 @@ fun NovelEditorScreen(
         }
     }
 
-    // 行编辑弹窗
+    // 行编辑弹窗：改内容 / 删除 / 上下移动（移动后点「AI」续写即从新顺序接着推进）
     editTarget?.let { line ->
         var editContent by remember(line.id) { mutableStateOf(line.content) }
         AlertDialog(
             onDismissRequest = { editTarget = null },
             title = { Text(tf("编辑（{0}）", line.speakerName)) },
             text = {
-                BasicTextField(
-                    value = editContent,
-                    onValueChange = { editContent = it },
-                    textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp),
-                    modifier = Modifier.fillMaxWidth().height(140.dp),
-                )
+                Column {
+                    BasicTextField(
+                        value = editContent,
+                        onValueChange = { editContent = it },
+                        textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp),
+                        modifier = Modifier.fillMaxWidth().height(140.dp),
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        TextButton(onClick = {
+                            viewModel.moveLine(line, -1)
+                            editTarget = null
+                        }) { Text(t("上移"), fontSize = 12.sp) }
+                        TextButton(onClick = {
+                            viewModel.moveLine(line, +1)
+                            editTarget = null
+                        }) { Text(t("下移"), fontSize = 12.sp) }
+                        Text(
+                            t("移动后可点 AI 从新位置续写"),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 10.sp,
+                            modifier = Modifier.weight(1f).align(Alignment.CenterVertically),
+                        )
+                    }
+                }
             },
             confirmButton = {
                 TextButton(onClick = {
