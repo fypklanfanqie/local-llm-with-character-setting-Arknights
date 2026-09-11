@@ -49,6 +49,21 @@ internal val En08NovelEntries: List<Pair<String, String>> = listOf(
     "AI 没有产出有效剧情，请重试" to "The AI produced no valid plot. Please retry",
     "生成失败，请稍后再试" to "Generation failed. Please try again later",
 
+    // ===== 角色阵容（主角 / 配角）=====
+    "角色阵容" to "Cast",
+    "主角" to "Lead",
+    "配角" to "Supporting",
+    "当前阵容" to "Current cast",
+    "添加角色" to "Add characters",
+    "搜索角色" to "Search characters",
+    "保存阵容" to "Save cast",
+    "阵容为空，请从下方添加角色" to "No cast yet. Add characters below",
+    "设定主角与配角，写作中随时可以增删角色；改动会在下一次 AI 续写时生效" to "Set the lead and supporting cast. You can add or remove characters any time while writing; changes apply to the next AI continuation",
+    "阵容：主角 {0} · 其余为配角" to "Cast: Lead {0} · the rest are supporting",
+    "{0} 名角色" to "{0} characters",
+    "{0}：主角 · 配角 {1} 人" to "{0}: Lead · {1} supporting",
+    "保存失败" to "Save failed",
+
     // ===== 好感度档案 =====
     "礼" to "G",
     "关系记录" to "Relationship log",

@@ -18,12 +18,19 @@ object NovelPromptBuilder {
             "每行以「名字：」或「旁白：」开头（冒号用全角），一行一个动作/一句对白，" +
             "禁止 markdown、场景标题、括号注解、旁白以外的元叙述。"
 
-    /** 组装 system（稳定区：故事设置不变则逐字节稳定）。 */
+    /**
+     * 组装 system（稳定区：故事设置不变则逐字节稳定）。
+     *
+     * @param castProtagonists 主角显示名（应用角色名或自定义 NPC 名），可多个
+     * @param castSupporting 配角显示名
+     */
     fun buildSystem(
         background: String,
         characterSheets: List<String>,
         protagonistName: String,
         protagonistPersona: String,
+        castProtagonists: List<String> = emptyList(),
+        castSupporting: List<String> = emptyList(),
     ): String = buildString {
         append(STYLE_CONTRACT)
         if (background.isNotBlank()) {
@@ -48,7 +55,38 @@ object NovelPromptBuilder {
             append(protagonistName.trim())
             append("：」开头输出。")
         }
+        appendCastSection(castProtagonists, castSupporting)
         append(OutputLanguage.current())
+    }
+
+    /**
+     * 角色阵容段落：把「谁是主角谁是配角」写进 system 稳定区。
+     *
+     * 为什么放在 system：阵容只随故事设置变化，与每轮章节上下文/正文窗口无关——
+     * 放稳定区才能命中服务端前缀缓存，且改了阵容才会刷新缓存（这正是我们要的）。
+     * 两个名单都为空时不输出任何内容（老故事/未设置阵容的提示词逐字节不变）。
+     */
+    private fun StringBuilder.appendCastSection(
+        castProtagonists: List<String>,
+        castSupporting: List<String>,
+    ) {
+        val leads = castProtagonists.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        val rests = castSupporting.map { it.trim() }.filter { it.isNotEmpty() && it !in leads }.distinct()
+        if (leads.isEmpty() && rests.isEmpty()) return
+
+        append("\n\n[角色阵容]")
+        if (leads.isNotEmpty()) {
+            append("\n- 【主角】")
+            append(leads.joinToString("、"))
+            append("：叙事以他为中心，环境、动作与心理描写尽量从他的视角展开，主线由他推动，")
+            append("每次续写都要有他的行动或感受。")
+        }
+        if (rests.isNotEmpty()) {
+            append("\n- 【配角】")
+            append(rests.joinToString("、"))
+            append("：服务于主线，可以推动情节、提供信息或制造冲突，但戏份克制，")
+            append("不要喧宾夺主，不要替主角做决定。")
+        }
     }
 
     /** 组装 user（章节上下文 + 正文窗口 + 续写指令）。 */

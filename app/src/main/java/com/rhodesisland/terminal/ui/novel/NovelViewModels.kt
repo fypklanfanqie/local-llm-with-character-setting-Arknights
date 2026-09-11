@@ -44,11 +44,12 @@ class NovelHomeViewModel(
         npcs: List<NovelRepository.CustomNpc>,
         protagonistName: String,
         protagonistPersona: String,
+        castRoles: Map<String, String> = emptyMap(),
         onCreated: (Long) -> Unit,
     ) {
         viewModelScope.launch {
             try {
-                val id = repo.createStory(title, background, memberIds, npcs, protagonistName, protagonistPersona)
+                val id = repo.createStory(title, background, memberIds, npcs, protagonistName, protagonistPersona, castRoles)
                 onCreated(id)
             } catch (e: Exception) {
                 errorMessage.value = e.message ?: L10nRuntime.t("创建失败")
@@ -81,6 +82,11 @@ class NovelStoryViewModel(
         val errorMessage: String? = null,
     )
 
+    /** 阵容保存失败等仓库错误（与 UiState.errorMessage 分开，避免组合流再扩一档）。 */
+    private val castError = MutableStateFlow<String?>(null)
+
+    val castErrorMessage: StateFlow<String?> = castError
+
     val uiState: StateFlow<UiState> = combine(
         repo.observeStory(storyId),
         repo.observeChapters(storyId),
@@ -103,6 +109,27 @@ class NovelStoryViewModel(
 
     fun deleteChapter(chapterId: Long) {
         viewModelScope.launch { repo.deleteChapter(chapterId) }
+    }
+
+    /**
+     * 保存角色阵容（写作过程中随时增删角色 / 改主角配角）。
+     *
+     * 保存后 story Flow 立刻推送新值：故事页与对白编辑器都观察同一张表，
+     * 下一次 [NovelEditorViewModel.continuePlot] 从库里读到的是最新阵容，无需手动刷新。
+     */
+    fun updateCast(
+        memberIds: List<String>,
+        npcs: List<NovelRepository.CustomNpc>,
+        castRoles: Map<String, String>,
+    ) {
+        viewModelScope.launch {
+            runCatching { repo.updateStoryCast(storyId, memberIds, npcs, castRoles) }
+                .onFailure { castError.value = it.message ?: L10nRuntime.t("保存失败") }
+        }
+    }
+
+    fun clearError() {
+        castError.value = null
     }
 }
 
@@ -154,13 +181,48 @@ class NovelEditorViewModel(
         }
     }
 
-    /** 发言人信息：主控名 / 角色名集合（AI 续写提示词与脚本解析用）。 */
-    private suspend fun speakersOf(story: NovelStoryEntity): Pair<String, Set<String>> {
-        val memberIds = repo.decodeMemberIds(story)
+    /**
+     * 读取当前阵容（一次查询取全，含角色名与人设）。
+     *
+     * 为什么每次都重新查库：写作过程中随时可以增删角色/改主角配角，续写必须用最新阵容。
+     * 这里读的是 Room 查询而非 UI 快照，所以保存后立刻续写即可生效（story 表已被更新）。
+     */
+    private suspend fun castOf(story: NovelStoryEntity): StoryCastSnapshot {
+        val cast = repo.decodeCast(story)
         val all = container.characterRepository.characters.first()
-        val names = memberIds.mapNotNull { id -> all.firstOrNull { it.id == id }?.name } +
-            repo.decodeCustomNpcs(story).map { it.name }
-        return story.protagonistName to names.toSet()
+        val members = cast.memberIds.mapNotNull { id ->
+            all.firstOrNull { it.id == id }?.let {
+                CastMember(id = id, name = it.name, persona = it.systemPrompt, role = cast.roles[id] ?: NovelRepository.ROLE_SUPPORTING)
+            }
+        }
+        // NPC 的定位回填进实体：让调用方只认一个 role 来源（resolveCastRoles 已把内嵌旧值合并进来）
+        val npcs = cast.npcs.map { it.copy(role = cast.roles[it.name.trim()] ?: NovelRepository.ROLE_SUPPORTING) }
+        return StoryCastSnapshot(members = members, npcs = npcs)
+    }
+
+    private data class CastMember(val id: String, val name: String, val persona: String, val role: String)
+
+    private data class StoryCastSnapshot(
+        val members: List<CastMember>,
+        val npcs: List<NovelRepository.CustomNpc>,
+    ) {
+        fun protagonists(): List<String> =
+            members.filter { it.role == NovelRepository.ROLE_PROTAGONIST }.map { it.name } +
+                npcs.filter { it.role == NovelRepository.ROLE_PROTAGONIST }.map { it.name }
+
+        fun supporting(): List<String> =
+            members.filter { it.role != NovelRepository.ROLE_PROTAGONIST }.map { it.name } +
+                npcs.filter { it.role != NovelRepository.ROLE_PROTAGONIST }.map { it.name }
+
+        /** 角色卡：主角在前的顺序有助于模型把注意力先落在主角身上。 */
+        fun sheets(): List<String> {
+            val ordered = members.sortedBy { if (it.role == NovelRepository.ROLE_PROTAGONIST) 0 else 1 }
+            return ordered.map { "${it.name}：${it.persona}" } + npcs.map { "${it.name}：${it.persona}" }
+        }
+
+        fun nameToId(): Map<String, String> = members.associate { it.name to it.id }
+
+        fun speakerNames(): Set<String> = (members.map { it.name } + npcs.map { it.name }).toSet()
     }
 
     /** 手动追加一行（选中发言人 + 文本）。 */
@@ -218,17 +280,12 @@ class NovelEditorViewModel(
                     ?: throw IllegalStateException(L10nRuntime.t("章节不存在"))
                 val story = repo.getStory(chapter.storyId)
                     ?: throw IllegalStateException(L10nRuntime.t("故事不存在"))
-                val (protagonistName, speakerNames) = speakersOf(story)
-
-                val memberIds = repo.decodeMemberIds(story)
-                val allCharacters = container.characterRepository.characters.first()
-                val characterSheets = memberIds.mapNotNull { id ->
-                    allCharacters.firstOrNull { it.id == id }
-                }.map { "${it.name}：${it.systemPrompt}" } +
-                    repo.decodeCustomNpcs(story).map { "${it.name}：${it.persona}" }
-                val nameToId = memberIds.mapNotNull { id ->
-                    allCharacters.firstOrNull { it.id == id }?.let { it.name to id }
-                }.toMap()
+                // 阵容在续写开始时读取一次：本次生成期间用户在弹窗里的改动下一轮才生效
+                val cast = castOf(story)
+                val protagonistName = story.protagonistName
+                val speakerNames = cast.speakerNames()
+                val characterSheets = cast.sheets()
+                val nameToId = cast.nameToId()
 
                 val existingLines = repo.getLines(chapterId)
                 val script = existingLines.map {
@@ -243,6 +300,8 @@ class NovelEditorViewModel(
                                 characterSheets = characterSheets,
                                 protagonistName = protagonistName,
                                 protagonistPersona = story.protagonistPersona,
+                                castProtagonists = cast.protagonists(),
+                                castSupporting = cast.supporting(),
                             ),
                         ),
                     )
@@ -294,6 +353,26 @@ class NovelEditorViewModel(
         generateJob?.cancel()
         generateJob = null
         generating.value = "" to false
+    }
+
+    /**
+     * 写作过程中改阵容（本页入口）：保存后下一次 [continuePlot] 即用新阵容。
+     *
+     * 走章节反查 storyId——编辑器只拿得到章节 id，而阵容挂在故事上；
+     * 这句查询和续写时读 story 走的是同一条路径，不存在"界面看到的"与"提示词用的"两份状态。
+     */
+    fun updateCast(
+        memberIds: List<String>,
+        npcs: List<NovelRepository.CustomNpc>,
+        castRoles: Map<String, String>,
+    ) {
+        viewModelScope.launch {
+            runCatching {
+                val chapter = repo.getChapter(chapterId)
+                    ?: throw IllegalStateException(L10nRuntime.t("章节不存在"))
+                repo.updateStoryCast(chapter.storyId, memberIds, npcs, castRoles)
+            }.onFailure { errorMessage.value = it.message ?: L10nRuntime.t("保存失败") }
+        }
     }
 
     fun clearError() {

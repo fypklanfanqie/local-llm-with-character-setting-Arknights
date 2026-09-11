@@ -16,7 +16,8 @@ import kotlinx.coroutines.flow.Flow
  * 小说模式（仿猫箱）：故事 → 章节（话）→ 脚本行。
  *
  * - [NovelStoryEntity]：一部故事。memberIdsJson 选中应用角色；customNpcsJson 自定义 NPC
- *   （名+人设 JSON 数组）；主控（protagonist）对应脚本里的 {{user}}。
+ *   （名+人设 JSON 数组）；castRolesJson 阵容定位（角色 id / NPC 名 → protagonist|supporting）；
+ *   主控（protagonist）对应脚本里的 {{user}}（与「主角」是两个概念，前者是用户本人）。
  * - [NovelChapterEntity]：一章（话）。orderIndex 决定排序（swap 事务重排）；
  *   summary/opening/requirements 为「本话设定」四件套之三（title 之外）。
  * - [NovelLineEntity]：一行脚本。speakerType narration|user|character；
@@ -29,8 +30,15 @@ data class NovelStoryEntity(
     val background: String = "",
     /** 参与的应用角色 id JSON 数组。 */
     val memberIdsJson: String = "[]",
-    /** 自定义 NPC JSON 数组：[{"name":"...","persona":"..."}]。 */
+    /** 自定义 NPC JSON 数组：[{"name":"...","persona":"..."}]（role 字段可选，见 NovelRepository.CustomNpc）。 */
     val customNpcsJson: String = "[]",
+    /**
+     * 角色阵容定位 JSON 对象：角色 id / NPC 名 → "protagonist"（主角）|"supporting"（配角）。
+     *
+     * 默认 '{}' 表示「尚未设置」：读取端按成员顺序推导（第一位成员视为主角），
+     * 不写回库——老故事因此无需迁移即可获得合理默认阵容。
+     */
+    val castRolesJson: String = "{}",
     /** 主控显示名（空 = 无主控，脚本无 user 行）。 */
     val protagonistName: String = "",
     val protagonistPersona: String = "",
