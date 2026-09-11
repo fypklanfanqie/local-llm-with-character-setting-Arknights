@@ -153,4 +153,8 @@ internal val En08NovelEntries: List<Pair<String, String>> = listOf(
     "暂无收藏的歌曲" to "No favorite songs yet",
     "暂无歌词" to "No lyrics",
     "已添加" to "Added",
+
+    // ===== 小说：用户发言后的剧情推进 =====
+    "发送后自动续写" to "Auto-continue after sending",
+    "仅添加不续写" to "Add line only",
 )

@@ -158,6 +158,14 @@ class NovelEditorViewModel(
     private val isCloud = MutableStateFlow(true)
     private var generateJob: Job? = null
 
+    /**
+     * 用户最近一次亲自写下、尚未被续写消化掉的一行。
+     *
+     * 作用是「方向不丢」：自动续写若因未配置 API / 网络失败而没跑成，用户手动点 AI 按钮时
+     * 仍然带着这一行去推进，而不是退化成一次没有方向的普通续写。
+     */
+    private var pendingDirected: NovelPromptBuilder.DirectedLine? = null
+
     val uiState: StateFlow<UiState> = combine(
         repo.observeChapterWithLines(chapterId),
         generating,
@@ -225,10 +233,23 @@ class NovelEditorViewModel(
         fun speakerNames(): Set<String> = (members.map { it.name } + npcs.map { it.name }).toSet()
     }
 
-    /** 手动追加一行（选中发言人 + 文本）。 */
-    fun addLine(speakerType: String, speakerName: String, characterId: String?, text: String) {
+    /**
+     * 手动追加一行（选中发言人 + 文本）。
+     *
+     * [continueAfter] 默认 true：用户选角色发言的意图是「按这个角色的路子把剧情推下去」，
+     * 所以写完这一行就立刻让 AI 顺着它续写（可在编辑器里关掉，改成纯手工添加）。
+     * 这一行同时记入 [pendingDirected]，续写失败后用户手动点 AI 时方向不丢。
+     */
+    fun addLine(
+        speakerType: String,
+        speakerName: String,
+        characterId: String?,
+        text: String,
+        continueAfter: Boolean = true,
+    ) {
         val content = text.trim()
         if (content.isEmpty()) return
+        pendingDirected = NovelPromptBuilder.DirectedLine(speakerType, speakerName, content)
         viewModelScope.launch {
             runCatching {
                 repo.appendLine(
@@ -242,7 +263,12 @@ class NovelEditorViewModel(
                     ),
                 )
                 repo.getChapter(chapterId)?.let { repo.saveChapterSetting(it) } // touch updatedAt 顺带
-            }.onFailure { errorMessage.value = it.message }
+            }.onFailure {
+                errorMessage.value = it.message
+                pendingDirected = null
+                return@launch
+            }
+            if (continueAfter) continuePlot()
         }
     }
 
@@ -266,9 +292,14 @@ class NovelEditorViewModel(
     /**
      * AI 续写：直接调用已配置的云端 LLM（与聊天 Provider 切换解耦）→ 流式生成（预览实时更新）
      * → 解析为脚本行逐条落库。
+     *
+     * [directed] 为「用户刚亲自写下的一行」：带上它就要求模型顺着这一行推进（并按发言人
+     * 的人设/阵容定位来写）。不传时自动取 [pendingDirected]——手动点 AI 按钮也能保住方向；
+     * 续写成功后才清空，失败保留以便重试。
      */
-    fun continuePlot() {
+    fun continuePlot(directed: NovelPromptBuilder.DirectedLine? = null) {
         if (generating.value.second) return
+        val hint = directed ?: pendingDirected
         generateJob = viewModelScope.launch {
             if (!container.settingsRepository.isCloudApiReady()) {
                 errorMessage.value = L10nRuntime.t("请先在设置中配置云端 AI API")
@@ -286,6 +317,14 @@ class NovelEditorViewModel(
                 val speakerNames = cast.speakerNames()
                 val characterSheets = cast.sheets()
                 val nameToId = cast.nameToId()
+                // 发言人定位取自当前阵容：配角发言时提示不要抢主线（与 system 的主次约定一致）
+                val directedResolved = hint?.copy(
+                    speakerRole = when {
+                        hint.speakerName in cast.protagonists() -> "protagonist"
+                        hint.speakerName in cast.supporting() -> "supporting"
+                        else -> null
+                    },
+                )
 
                 val existingLines = repo.getLines(chapterId)
                 val script = existingLines.map {
@@ -314,6 +353,7 @@ class NovelEditorViewModel(
                                 opening = chapter.opening,
                                 requirements = chapter.requirements,
                                 script = script,
+                                directed = directedResolved,
                             ),
                         ),
                     )
@@ -338,6 +378,8 @@ class NovelEditorViewModel(
                     )
                 }
                 repo.appendLines(chapterId, entities)
+                // 只有真正把续写内容落库后才清掉方向标记：失败/停止时保留，重试仍顺着用户那一行
+                pendingDirected = null
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {

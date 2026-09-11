@@ -358,6 +358,8 @@ fun NovelEditorScreen(
     )
     val state by viewModel.uiState.collectAsState()
     var inputText by remember { mutableStateOf("") }
+    /** 发送后是否立刻让 AI 顺着这一行推进（默认开；见发言人条上的开关）。 */
+    var autoContinue by remember { mutableStateOf(true) }
     // 发言人选择：0 = 旁白；1 = 主控；2.. = 角色
     var selectedSpeaker by remember { mutableStateOf(0) }
     var showChapterSetting by remember { mutableStateOf(false) }
@@ -465,6 +467,22 @@ fun NovelEditorScreen(
                             .padding(horizontal = 12.dp, vertical = 6.dp),
                     )
                 }
+                // 发送后是否让 AI 顺着这一行推进（默认开）。关掉 = 纯手工编辑，只追加不续写——
+                // 连写多句对白时不必每句都触发一次生成。
+                item {
+                    Text(
+                        if (autoContinue) t("发送后自动续写") else t("仅添加不续写"),
+                        color = if (autoContinue) NOVEL_ACCENT else NOVEL_TEXT_DIM,
+                        fontSize = 11.sp,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(
+                                if (autoContinue) NOVEL_ACCENT.copy(alpha = 0.18f) else NOVEL_SURFACE_2,
+                            )
+                            .clickable { autoContinue = !autoContinue }
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                    )
+                }
             }
 
             // 输入栏 + AI 续写
@@ -491,7 +509,13 @@ fun NovelEditorScreen(
                 Spacer(Modifier.width(8.dp))
                 androidx.compose.material3.FilledTonalIconButton(
                     onClick = {
-                        viewModel.addLine(selTypePair.first, selLabel, selTypePair.second, inputText)
+                        viewModel.addLine(
+                            speakerType = selTypePair.first,
+                            speakerName = selLabel,
+                            characterId = selTypePair.second,
+                            text = inputText,
+                            continueAfter = autoContinue,
+                        )
                         inputText = ""
                     },
                     enabled = inputText.isNotBlank() && !state.isGenerating,
