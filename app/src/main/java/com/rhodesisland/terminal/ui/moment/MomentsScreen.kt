@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -49,6 +50,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -67,6 +69,7 @@ import com.rhodesisland.terminal.data.repository.MomentRepository
 import com.rhodesisland.terminal.i18n.t
 import com.rhodesisland.terminal.i18n.tf
 import com.rhodesisland.terminal.ui.moment.MomentsViewModel.PostUi
+import com.rhodesisland.terminal.ui.settings.characterMatchesQuery
 import com.rhodesisland.terminal.util.RelativeTime
 
 /**
@@ -523,6 +526,13 @@ private fun AiPostDialog(
     val characters by container.characterRepository.characters.collectAsState(initial = emptyList())
     var selectedId by remember { mutableStateOf<String?>(null) }
     var imageCount by remember { mutableStateOf(1) }
+    var charSearch by remember { mutableStateOf("") }
+
+    // 384 位干员靠滚动找人不可行：按名称 / 代号 / 定位过滤，选中的角色独立于过滤结果
+    val filteredCharacters = remember(characters, charSearch) {
+        val q = charSearch.trim()
+        if (q.isEmpty()) characters else characters.filter { characterMatchesQuery(it, q) }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -531,8 +541,73 @@ private fun AiPostDialog(
             Column {
                 Text(t("选择角色（云端 AI 生成文案与配图）"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(8.dp))
-                LazyColumn(modifier = Modifier.height(220.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    items(characters) { char ->
+                // 搜索框：与世界观/世界书选择器同一套视觉（玻璃底 + 放大镜 + 清空）
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.6f))
+                        .padding(horizontal = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        Icons.Filled.Search,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(14.dp),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    BasicTextField(
+                        value = charSearch,
+                        onValueChange = { charSearch = it },
+                        modifier = Modifier.weight(1f).padding(vertical = 8.dp),
+                        textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 12.sp),
+                        singleLine = true,
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        decorationBox = { inner ->
+                            if (charSearch.isEmpty()) {
+                                Text(t("搜索角色名 / 代号…"), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                            }
+                            inner()
+                        },
+                    )
+                    if (charSearch.isNotEmpty()) {
+                        Text(
+                            t("清空"),
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 11.sp,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable { charSearch = "" }
+                                .padding(horizontal = 4.dp, vertical = 2.dp),
+                        )
+                    }
+                }
+                // 命中数：搜完立刻知道还剩几位候选
+                if (charSearch.isNotEmpty()) {
+                    Text(
+                        tf("找到 {0} 个角色", filteredCharacters.size),
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+                Spacer(Modifier.height(4.dp))
+                // 搜索时把列表矮一点：多出来的两行（搜索框 + 命中数）要让给软键盘，避免弹窗被顶穿
+                val listHeight = if (charSearch.isEmpty()) 220.dp else 180.dp
+                LazyColumn(modifier = Modifier.height(listHeight), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    if (filteredCharacters.isEmpty()) {
+                        item {
+                            Text(
+                                tf("未找到「{0}」相关的干员", charSearch.trim()),
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(vertical = 8.dp),
+                            )
+                        }
+                    }
+                    // key 用角色 id：过滤前后同一角色复用同一条 item，滚动位置与状态不被过滤打乱
+                    items(filteredCharacters, key = { it.id }) { char ->
                         Row(
                             Modifier
                                 .fillMaxWidth()

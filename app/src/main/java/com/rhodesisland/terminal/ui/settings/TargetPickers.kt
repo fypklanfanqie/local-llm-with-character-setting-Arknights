@@ -45,17 +45,38 @@ import com.rhodesisland.terminal.ui.theme.fieldTextColor
  * 多选版供世界书多目标绑定使用。
  */
 
-/** 角色单选列表：按名称/代号/id 过滤；内置与自定义统一列出（自定义带徽标）。 */
+/**
+ * 角色搜索命中判定：名称 / 代号 / id / **角色定位行**。
+ *
+ * 为什么带上 [Character.role]：384 位干员里按名字滚动找人不现实，
+ * 用户更常按「术师」「医疗」「狙击」这类定位词筛人；定位行本身也展示不出来，
+ * 不参与匹配的话这个词就完全搜索不到。
+ *
+ * 单独抽成函数是为了四个选择器（世界观/世界书/群聊/朋友圈）判定口径完全一致。
+ */
+internal fun characterMatchesQuery(char: Character, q: String): Boolean =
+    char.name.contains(q, true) ||
+        char.code.contains(q, true) ||
+        char.id.contains(q, true) ||
+        char.role.contains(q, true)
+
+/**
+ * 选择器通用搜索框：玻璃风容器 + 放大镜 + 命中数 + 清空按钮。
+ *
+ * 为什么在文件内抽一个：角色单选/多选、群聊单选/多选四处原本各抄一份搜索框，
+ * 加「命中数」时四份要同步改；集中成一个后视觉与交互只有一处定义。
+ * [hitTemplate] 让角色列表与群聊列表各自说清「找到了几个什么」。
+ */
 @Composable
-internal fun CharacterPickerList(
-    characters: List<Character>,
-    selectedId: String,
-    onSelect: (String) -> Unit,
+private fun PickerSearchField(
+    value: TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit,
+    placeholder: String,
+    hitTemplate: String,
+    hitCount: Int,
 ) {
     val scheme = MaterialTheme.colorScheme
-    var search by remember { mutableStateOf(TextFieldValue("")) }
     Column {
-        // 搜索框（复用输入框 token 色）
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -67,25 +88,66 @@ internal fun CharacterPickerList(
             Icon(Icons.Filled.Search, contentDescription = null, tint = scheme.onSurfaceVariant, modifier = Modifier.size(14.dp))
             Spacer(Modifier.width(6.dp))
             androidx.compose.foundation.text.BasicTextField(
-                value = search,
-                onValueChange = { search = it },
+                value = value,
+                onValueChange = onValueChange,
                 modifier = Modifier.weight(1f).padding(vertical = 8.dp),
                 textStyle = TextStyle(color = fieldTextColor(), fontSize = 12.sp),
                 singleLine = true,
                 cursorBrush = androidx.compose.ui.graphics.SolidColor(scheme.primary),
                 decorationBox = { inner ->
-                    if (search.text.isEmpty()) {
-                        Text(t("搜索角色名 / 代号…"), color = fieldPlaceholderColor(), fontSize = 12.sp)
+                    if (value.text.isEmpty()) {
+                        Text(placeholder, color = fieldPlaceholderColor(), fontSize = 12.sp)
                     }
                     inner()
                 },
             )
+            // 有关键词才出现「清空」：没输入时多一个按钮只是噪音
+            if (value.text.isNotEmpty()) {
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    t("清空"),
+                    color = scheme.error,
+                    fontSize = 11.sp,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable { onValueChange(TextFieldValue("")) }
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                )
+            }
         }
+        // 命中数：过滤后立刻知道「还剩几个」，避免以为角色不见了
+        if (value.text.isNotEmpty()) {
+            Text(
+                tf(hitTemplate, hitCount),
+                color = scheme.onSurfaceVariant,
+                fontSize = 10.sp,
+                modifier = Modifier.padding(start = 2.dp, top = 2.dp),
+            )
+        }
+    }
+}
+
+/** 角色单选列表：按名称/代号/id/定位过滤；内置与自定义统一列出（自定义带徽标）。 */
+@Composable
+internal fun CharacterPickerList(
+    characters: List<Character>,
+    selectedId: String,
+    onSelect: (String) -> Unit,
+) {
+    var search by remember { mutableStateOf(TextFieldValue("")) }
+    Column {
         val q = search.text.trim()
+        // 选中集合由调用方持有，过滤只影响「显示哪些行」，不影响已选中的角色
         val filtered = remember(characters, q) {
-            if (q.isEmpty()) characters
-            else characters.filter { it.name.contains(q, true) || it.code.contains(q, true) || it.id.contains(q, true) }
+            if (q.isEmpty()) characters else characters.filter { characterMatchesQuery(it, q) }
         }
+        PickerSearchField(
+            value = search,
+            onValueChange = { search = it },
+            placeholder = t("搜索角色名 / 代号…"),
+            hitTemplate = "找到 {0} 个角色",
+            hitCount = filtered.size,
+        )
         LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
@@ -112,39 +174,20 @@ internal fun CharacterMultiPickerList(
     selectedIds: Set<String>,
     onToggle: (String) -> Unit,
 ) {
-    val scheme = MaterialTheme.colorScheme
-    var search by remember { mutableStateOf(TextFieldValue("")) }
     Column {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(scheme.surface.copy(alpha = 0.6f))
-                .padding(horizontal = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(Icons.Filled.Search, contentDescription = null, tint = scheme.onSurfaceVariant, modifier = Modifier.size(14.dp))
-            Spacer(Modifier.width(6.dp))
-            androidx.compose.foundation.text.BasicTextField(
-                value = search,
-                onValueChange = { search = it },
-                modifier = Modifier.weight(1f).padding(vertical = 8.dp),
-                textStyle = TextStyle(color = fieldTextColor(), fontSize = 12.sp),
-                singleLine = true,
-                cursorBrush = androidx.compose.ui.graphics.SolidColor(scheme.primary),
-                decorationBox = { inner ->
-                    if (search.text.isEmpty()) {
-                        Text(t("搜索角色名 / 代号…"), color = fieldPlaceholderColor(), fontSize = 12.sp)
-                    }
-                    inner()
-                },
-            )
-        }
+        var search by remember { mutableStateOf(TextFieldValue("")) }
         val q = search.text.trim()
+        // 已勾选但被搜索过滤掉的角色仍在 selectedIds 里 —— 过滤只影响列表显示
         val filtered = remember(characters, q) {
-            if (q.isEmpty()) characters
-            else characters.filter { it.name.contains(q, true) || it.code.contains(q, true) || it.id.contains(q, true) }
+            if (q.isEmpty()) characters else characters.filter { characterMatchesQuery(it, q) }
         }
+        PickerSearchField(
+            value = search,
+            onValueChange = { search = it },
+            placeholder = t("搜索角色名 / 代号…"),
+            hitTemplate = "找到 {0} 个角色",
+            hitCount = filtered.size,
+        )
         LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
@@ -170,39 +213,20 @@ internal fun GroupPickerList(
     selectedId: String,
     onSelect: (Conversation) -> Unit,
 ) {
-    val scheme = MaterialTheme.colorScheme
     var search by remember { mutableStateOf(TextFieldValue("")) }
     Column {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(scheme.surface.copy(alpha = 0.6f))
-                .padding(horizontal = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(Icons.Filled.Search, contentDescription = null, tint = scheme.onSurfaceVariant, modifier = Modifier.size(14.dp))
-            Spacer(Modifier.width(6.dp))
-            androidx.compose.foundation.text.BasicTextField(
-                value = search,
-                onValueChange = { search = it },
-                modifier = Modifier.weight(1f).padding(vertical = 8.dp),
-                textStyle = TextStyle(color = fieldTextColor(), fontSize = 12.sp),
-                singleLine = true,
-                cursorBrush = androidx.compose.ui.graphics.SolidColor(scheme.primary),
-                decorationBox = { inner ->
-                    if (search.text.isEmpty()) {
-                        Text(t("搜索群聊名称…"), color = fieldPlaceholderColor(), fontSize = 12.sp)
-                    }
-                    inner()
-                },
-            )
-        }
         val q = search.text.trim()
         val filtered = remember(groups, q) {
             if (q.isEmpty()) groups
             else groups.filter { it.title.contains(q, true) }
         }
+        PickerSearchField(
+            value = search,
+            onValueChange = { search = it },
+            placeholder = t("搜索群聊名称…"),
+            hitTemplate = "找到 {0} 个群聊",
+            hitCount = filtered.size,
+        )
         if (filtered.isEmpty()) {
             EmptyGroupsHint(groups.isNotEmpty())
         }
@@ -226,39 +250,20 @@ internal fun GroupMultiPickerList(
     selectedIds: Set<String>,
     onToggle: (Conversation) -> Unit,
 ) {
-    val scheme = MaterialTheme.colorScheme
     var search by remember { mutableStateOf(TextFieldValue("")) }
     Column {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(scheme.surface.copy(alpha = 0.6f))
-                .padding(horizontal = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(Icons.Filled.Search, contentDescription = null, tint = scheme.onSurfaceVariant, modifier = Modifier.size(14.dp))
-            Spacer(Modifier.width(6.dp))
-            androidx.compose.foundation.text.BasicTextField(
-                value = search,
-                onValueChange = { search = it },
-                modifier = Modifier.weight(1f).padding(vertical = 8.dp),
-                textStyle = TextStyle(color = fieldTextColor(), fontSize = 12.sp),
-                singleLine = true,
-                cursorBrush = androidx.compose.ui.graphics.SolidColor(scheme.primary),
-                decorationBox = { inner ->
-                    if (search.text.isEmpty()) {
-                        Text(t("搜索群聊名称…"), color = fieldPlaceholderColor(), fontSize = 12.sp)
-                    }
-                    inner()
-                },
-            )
-        }
         val q = search.text.trim()
         val filtered = remember(groups, q) {
             if (q.isEmpty()) groups
             else groups.filter { it.title.contains(q, true) }
         }
+        PickerSearchField(
+            value = search,
+            onValueChange = { search = it },
+            placeholder = t("搜索群聊名称…"),
+            hitTemplate = "找到 {0} 个群聊",
+            hitCount = filtered.size,
+        )
         if (filtered.isEmpty()) {
             EmptyGroupsHint(groups.isNotEmpty())
         }

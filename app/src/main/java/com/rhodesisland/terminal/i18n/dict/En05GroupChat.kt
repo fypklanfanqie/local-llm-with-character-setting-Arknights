@@ -40,6 +40,10 @@ internal val En05GroupChatEntries: List<Pair<String, String>> = listOf(
     "群名称（选填，默认「群聊」）" to "Group name (optional, defaults to \"Group chat\")",
     "选择成员（已选 {0}，2–{1} 人）" to "Select members ({0} selected, 2–{1} people)",
     "搜索角色名 / ID（如 能天使 / exusiai）" to "Search name / ID (e.g. Exusiai)",
+    // 角色选择器的共用搜索文案（群成员 / @ 提及 / 世界观目标 / 朋友圈代发四处共用）
+    "搜索角色名 / 代号…" to "Search character name / codename…",
+    "找到 {0} 个角色" to "Found {0} characters",
+    "找到 {0} 个群聊" to "Found {0} group chats",
     "最多选择 {0} 名成员" to "You can select at most {0} members",
     "至少选择 2 名成员" to "Select at least 2 members",
     "封面保存失败" to "Failed to save the cover",

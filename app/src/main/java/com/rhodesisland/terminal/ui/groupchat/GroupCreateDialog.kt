@@ -25,7 +25,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -54,6 +57,7 @@ import com.rhodesisland.terminal.i18n.L10nRuntime
 import com.rhodesisland.terminal.i18n.t
 import com.rhodesisland.terminal.i18n.tf
 import com.rhodesisland.terminal.ui.glass.frostedGlass
+import com.rhodesisland.terminal.ui.settings.characterMatchesQuery
 import com.rhodesisland.terminal.ui.theme.GlassShapes
 import com.rhodesisland.terminal.ui.theme.fieldTextColor
 import com.rhodesisland.terminal.util.GroupCoverStore
@@ -176,30 +180,61 @@ fun GroupCreateDialog(
                         Text(t("清空"), color = scheme.error, fontSize = 12.sp)
                     }
                 }
-                // 搜索：按中文名 / 英文 ID 快速筛选全量干员与自定义角色。
-                BasicTextField(
-                    value = memberSearch,
-                    onValueChange = { memberSearch = it },
-                    singleLine = true,
-                    textStyle = TextStyle(color = textColor, fontSize = 13.sp),
-                    cursorBrush = SolidColor(scheme.primary),
+                // 搜索：按中文名 / 英文 ID / 角色定位（如「术师」「医疗」）快速筛选全量干员与自定义角色。
+                // 为什么要有它：内置 + 扩展共 384 位干员，只靠滚动列表加成员几乎不可用。
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(10.dp))
                         .background(scheme.surface.copy(alpha = 0.6f))
-                        .padding(horizontal = 10.dp, vertical = 8.dp),
-                    decorationBox = { inner ->
-                        if (memberSearch.isEmpty()) {
-                            Text(t("搜索角色名 / ID（如 能天使 / exusiai）"), color = scheme.onSurfaceVariant, fontSize = 12.sp)
-                        }
-                        inner()
-                    },
-                )
+                        .padding(horizontal = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        Icons.Filled.Search,
+                        contentDescription = null,
+                        tint = scheme.onSurfaceVariant,
+                        modifier = Modifier.size(14.dp),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    BasicTextField(
+                        value = memberSearch,
+                        onValueChange = { memberSearch = it },
+                        singleLine = true,
+                        textStyle = TextStyle(color = textColor, fontSize = 13.sp),
+                        cursorBrush = SolidColor(scheme.primary),
+                        modifier = Modifier.weight(1f).padding(vertical = 8.dp),
+                        decorationBox = { inner ->
+                            if (memberSearch.isEmpty()) {
+                                Text(t("搜索角色名 / ID（如 能天使 / exusiai）"), color = scheme.onSurfaceVariant, fontSize = 12.sp)
+                            }
+                            inner()
+                        },
+                    )
+                    if (memberSearch.isNotEmpty()) {
+                        Text(
+                            t("清空"),
+                            color = scheme.error,
+                            fontSize = 11.sp,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable { memberSearch = "" }
+                                .padding(horizontal = 4.dp, vertical = 2.dp),
+                        )
+                    }
+                }
                 val filteredChars = if (memberSearch.isBlank()) {
                     characters
                 } else {
                     val q = memberSearch.trim()
-                    characters.filter { it.name.contains(q, true) || it.id.contains(q, true) }
+                    characters.filter { characterMatchesQuery(it, q) }
+                }
+                // 命中数只反映「过滤后可见几个」；已选人数仍由上面的 selectedIds.size 决定，两者互不影响
+                if (memberSearch.isNotEmpty()) {
+                    Text(
+                        tf("找到 {0} 个角色", filteredChars.size),
+                        color = scheme.onSurfaceVariant, fontSize = 10.sp,
+                    )
                 }
                 LazyColumn(modifier = Modifier.fillMaxWidth().height(240.dp)) {
                     items(filteredChars, key = { it.id }) { c ->
