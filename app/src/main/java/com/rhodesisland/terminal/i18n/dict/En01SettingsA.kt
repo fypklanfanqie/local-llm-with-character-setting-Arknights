@@ -300,4 +300,9 @@ internal val En01SettingsAEntries: List<Pair<String, String>> = listOf(
     "已更新 {0} 个可用模型" to "Updated: {0} available models",
     "刷新失败：{0}" to "Refresh failed: {0}",
 
+    // ===== 小说：发言后是否自动续写 =====
+    "发言后自动续写" to "Auto-continue after speaking",
+    "发言后手动续写" to "Continue manually",
+    "在小说编辑器里选角色发言后，立即让 AI 顺着这一行推进剧情（关闭则只追加这一行）" to "After you speak as a character in the novel editor, let the AI continue the story from that line right away (off = the line is only appended).",
+
 )

@@ -462,20 +462,8 @@ fun NovelEditorScreen(
                 Modifier.fillMaxWidth().padding(horizontal = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                itemsIndexed(speakerNames) { i, (label, _) ->
-                    val selected = i == sel
-                    Text(
-                        label,
-                        color = if (selected) NOVEL_BG else NOVEL_TEXT,
-                        fontSize = 12.sp,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(if (selected) NOVEL_ACCENT else NOVEL_SURFACE_2)
-                            .clickable { selectedSpeaker = i }
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
-                    )
-                }
-                // 发送后是否让 AI 顺着这一行推进（默认关 = 原逻辑）。用户自己的选择，持久化保存。
+                // 自动续写开关放在**最左端**：这一行可横向滚动，角色一多就会把末尾的控件滚出屏幕，
+                // 放最前才能保证任何阵容下都一眼可见（设置页里也有同一开关）。
                 item {
                     Text(
                         if (autoContinue) t("发送后自动续写") else t("仅添加不续写"),
@@ -492,6 +480,19 @@ fun NovelEditorScreen(
                                 }
                             }
                             .padding(horizontal = 10.dp, vertical = 6.dp),
+                    )
+                }
+                itemsIndexed(speakerNames) { i, (label, _) ->
+                    val selected = i == sel
+                    Text(
+                        label,
+                        color = if (selected) NOVEL_BG else NOVEL_TEXT,
+                        fontSize = 12.sp,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(if (selected) NOVEL_ACCENT else NOVEL_SURFACE_2)
+                            .clickable { selectedSpeaker = i }
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
                     )
                 }
             }

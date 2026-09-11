@@ -162,6 +162,9 @@ fun SettingsScreen(
     /** 上次刷新是否成功（决定提示文案配色；不靠嗅探文案前缀，切语言后依然正确）。 */
     var modelRefreshOk by remember { mutableStateOf(false) }
 
+    /** 小说：发言后是否自动续写（默认关 = 原逻辑；与编辑器里的开关是同一份偏好）。 */
+    val novelAutoContinue by container.settingsRepository.novelAutoContinue.collectAsState(initial = false)
+
     // 模型清单「自动更新」：展开模型下拉时，若本地缓存缺失或已过期（>24h）就静默拉一次最新清单。
     // 静默的理由：这是锦上添花的后台动作，网络/鉴权失败不该弹错误打断用户；失败只写日志，
     // 用户仍可用「刷新模型列表」按钮当场看失败原因。
@@ -308,6 +311,29 @@ fun SettingsScreen(
                 subtitle = t("播放列表 · 本地导入 · 在线搜索"),
                 onClick = onNavigateToMusic,
                 trailing = { Chevron() },
+                showDivider = false,
+            )
+        }
+
+        // ===== 小说 =====
+        // 「发言后自动续写」开关同时出现在两处（此处 + 小说编辑器发言人条最左端）：
+        // 用户找设置的第一直觉是设置页，而在编辑器里当场切换最顺手，两处读写同一份偏好。
+        CollapsibleSection(
+            title = t("小说"),
+            key = "novel",
+            summary = if (novelAutoContinue) t("发言后自动续写") else t("发言后手动续写"),
+        ) {
+            GlassListRow(
+                title = t("发言后自动续写"),
+                subtitle = t("在小说编辑器里选角色发言后，立即让 AI 顺着这一行推进剧情（关闭则只追加这一行）"),
+                trailing = {
+                    Switch(
+                        checked = novelAutoContinue,
+                        onCheckedChange = { enabled ->
+                            scope.launch { container.settingsRepository.setNovelAutoContinue(enabled) }
+                        },
+                    )
+                },
                 showDivider = false,
             )
         }
