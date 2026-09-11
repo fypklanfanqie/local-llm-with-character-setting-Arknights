@@ -106,6 +106,10 @@ class SettingsStore(
         // 会话：角色 -> 当前活跃会话 id
         val ACTIVE_CONVERSATIONS = stringPreferencesKey("active_conversations")  // JSON: Map<String, Long>
 
+        // 小说：用户在编辑器里发言后是否自动让 AI 顺着这一行续写。
+        // 默认 false = 保持原逻辑（发言只追加一行，续写由「AI」按钮手动触发）。
+        val NOVEL_AUTO_CONTINUE = booleanPreferencesKey("novel_auto_continue")
+
         // 音量
         val VOLUME = intPreferencesKey("volume")
 
@@ -540,6 +544,16 @@ class SettingsStore(
 
     suspend fun setTtsAutoRead(enabled: Boolean) {
         dataStore.edit { it[Keys.TTS_AUTO_READ] = enabled }
+    }
+
+    /**
+     * 小说编辑器：发言后是否自动续写（默认关闭 = 原逻辑：发言只追加一行）。
+     * 存成偏好而非页面态，用户选过一次就一直是他的选择。
+     */
+    val novelAutoContinue: Flow<Boolean> = dataStore.data.map { p -> p[Keys.NOVEL_AUTO_CONTINUE] ?: false }
+
+    suspend fun setNovelAutoContinue(enabled: Boolean) {
+        dataStore.edit { it[Keys.NOVEL_AUTO_CONTINUE] = enabled }
     }
 
     val ttsVolume: Flow<Int> = dataStore.data.map { p ->

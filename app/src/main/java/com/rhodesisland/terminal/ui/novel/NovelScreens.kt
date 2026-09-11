@@ -47,6 +47,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -358,8 +360,14 @@ fun NovelEditorScreen(
     )
     val state by viewModel.uiState.collectAsState()
     var inputText by remember { mutableStateOf("") }
-    /** 发送后是否立刻让 AI 顺着这一行推进（默认开；见发言人条上的开关）。 */
-    var autoContinue by remember { mutableStateOf(true) }
+    /**
+     * 发送后是否立刻让 AI 顺着这一行推进。
+     *
+     * 默认关闭 = 保持原逻辑（发言只追加一行，续写由「AI」按钮手动触发）；打开后每次发言都自动续写。
+     * 存成偏好而非页面态：用户选过一次就一直是他的选择，不必每次进编辑器重设。
+     */
+    val autoContinue by container.settingsRepository.novelAutoContinue.collectAsState(initial = false)
+    val autoContinueScope = rememberCoroutineScope()
     // 发言人选择：0 = 旁白；1 = 主控；2.. = 角色
     var selectedSpeaker by remember { mutableStateOf(0) }
     var showChapterSetting by remember { mutableStateOf(false) }
@@ -467,8 +475,7 @@ fun NovelEditorScreen(
                             .padding(horizontal = 12.dp, vertical = 6.dp),
                     )
                 }
-                // 发送后是否让 AI 顺着这一行推进（默认开）。关掉 = 纯手工编辑，只追加不续写——
-                // 连写多句对白时不必每句都触发一次生成。
+                // 发送后是否让 AI 顺着这一行推进（默认关 = 原逻辑）。用户自己的选择，持久化保存。
                 item {
                     Text(
                         if (autoContinue) t("发送后自动续写") else t("仅添加不续写"),
@@ -479,7 +486,11 @@ fun NovelEditorScreen(
                             .background(
                                 if (autoContinue) NOVEL_ACCENT.copy(alpha = 0.18f) else NOVEL_SURFACE_2,
                             )
-                            .clickable { autoContinue = !autoContinue }
+                            .clickable {
+                                autoContinueScope.launch {
+                                    container.settingsRepository.setNovelAutoContinue(!autoContinue)
+                                }
+                            }
                             .padding(horizontal = 10.dp, vertical = 6.dp),
                     )
                 }

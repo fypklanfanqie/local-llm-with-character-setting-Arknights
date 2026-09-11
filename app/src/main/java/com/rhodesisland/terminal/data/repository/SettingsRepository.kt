@@ -336,6 +336,11 @@ class SettingsRepository(private val store: SettingsStore) {
     suspend fun setTtsEngine(engine: TtsEngine) = store.setTtsEngine(engine)
     suspend fun setTtsSystemTemplate(template: SystemVoiceTemplate) = store.setTtsSystemTemplate(template)
     suspend fun setTtsAutoRead(enabled: Boolean) = store.setTtsAutoRead(enabled)
+
+    /** 小说编辑器：发言后是否自动续写（默认关闭 = 保持原逻辑，续写由 AI 按钮手动触发）。 */
+    val novelAutoContinue: Flow<Boolean> = store.novelAutoContinue
+    suspend fun getNovelAutoContinueNow(): Boolean = dataStoreFirst(novelAutoContinue, false)
+    suspend fun setNovelAutoContinue(enabled: Boolean) = store.setNovelAutoContinue(enabled)
     suspend fun setActiveCharacter(id: String) = store.setActiveCharacter(id)
     val activeConversations: Flow<Map<String, Long>> = store.activeConversations
     suspend fun setActiveConversation(characterId: String, conversationId: Long) =
