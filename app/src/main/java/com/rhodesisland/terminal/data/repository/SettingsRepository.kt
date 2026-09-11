@@ -3,8 +3,10 @@ package com.rhodesisland.terminal.data.repository
 import com.rhodesisland.terminal.data.local.LocalInferenceSettings
 import com.rhodesisland.terminal.data.local.SettingsStore
 import com.rhodesisland.terminal.data.model.ApiConfig
+import com.rhodesisland.terminal.data.model.CachedModelList
 import com.rhodesisland.terminal.data.model.Character
 import com.rhodesisland.terminal.data.model.ChatProviderType
+import com.rhodesisland.terminal.data.model.CloudProfile
 import com.rhodesisland.terminal.data.model.GroupChatConfig
 import com.rhodesisland.terminal.data.model.Lorebook
 import com.rhodesisland.terminal.data.model.LorebookGlobalConfig
@@ -254,6 +256,78 @@ class SettingsRepository(private val store: SettingsStore) {
     suspend fun getProviderApiConfigNow(key: String): ApiConfig? =
         dataStoreFirstOrNull(providerApiConfigs.map { it[key] })
     suspend fun setProviderApiConfig(key: String, config: ApiConfig) = store.setProviderApiConfig(key, config)
+
+    // ===== 自定义云端 LLM 配置档（多份保存 + 切换）=====
+
+    val cloudProfiles: Flow<List<CloudProfile>> = store.cloudProfiles
+    val activeCloudProfileId: Flow<String> = store.activeCloudProfileId
+
+    suspend fun getCloudProfilesNow(): List<CloudProfile> = dataStoreFirst(cloudProfiles, emptyList())
+
+    /** 当前生效配置档（未选 / 已被删除 → null）。 */
+    suspend fun getActiveCloudProfileNow(): CloudProfile? {
+        val id = dataStoreFirst(activeCloudProfileId, "")
+        if (id.isBlank()) return null
+        return getCloudProfilesNow().firstOrNull { it.id == id }
+    }
+
+    /**
+     * 保存配置档并立即生效为当前档：id 为空则分配新 id（即「另存为新配置」），
+     * 非空则覆盖同名同 id 的旧档（即「更新当前配置」）。
+     *
+     * 这里同时把该档写入 active ApiConfig：用户点保存的语义就是「以后用这份」，
+     * 分两步（先落档再切换）会让 UI 出现「保存了但没生效」的错觉。
+     */
+    suspend fun saveCloudProfile(profile: CloudProfile): CloudProfile {
+        val id = profile.id.ifBlank { "cp-" + java.util.UUID.randomUUID().toString().take(8) }
+        val saved = profile.copy(id = id, baseUrl = profile.baseUrl.trim(), model = profile.model.trim())
+        val list = getCloudProfilesNow().toMutableList()
+        val idx = list.indexOfFirst { it.id == id }
+        if (idx >= 0) list[idx] = saved else list.add(saved)
+        store.setCloudProfiles(list)
+        store.setActiveCloudProfile(id)
+        setApiConfig(ApiConfig(saved.baseUrl, saved.apiKey, saved.model))
+        // 自定义槽位（providerApiConfigs["custom"]）同步为当前档内容：切到「自定义」时
+        // 旧逻辑仍读该槽位，不写会让两套状态互相打脸。
+        store.setProviderApiConfig(PROVIDER_KEY_CUSTOM, ApiConfig(saved.baseUrl, saved.apiKey, saved.model))
+        return saved
+    }
+
+    /** 删除配置档；删的正好是当前档时把 active 清空（UI 自行决定是否回落到其它档）。 */
+    suspend fun deleteCloudProfile(id: String) {
+        store.setCloudProfiles(getCloudProfilesNow().filterNot { it.id == id })
+        if (dataStoreFirst(activeCloudProfileId, "") == id) store.setActiveCloudProfile("")
+    }
+
+    /** 切换当前配置档并立即生效（聊天下一轮就用新端点）。不存在则忽略。 */
+    suspend fun activateCloudProfile(id: String): CloudProfile? {
+        val profile = getCloudProfilesNow().firstOrNull { it.id == id } ?: return null
+        store.setActiveCloudProfile(id)
+        setApiConfig(ApiConfig(profile.baseUrl, profile.apiKey, profile.model))
+        store.setProviderApiConfig(PROVIDER_KEY_CUSTOM, ApiConfig(profile.baseUrl, profile.apiKey, profile.model))
+        return profile
+    }
+
+    // ===== 远程模型清单（清单不写死：从服务商 /models 拉取并缓存）=====
+
+    val modelListCache: Flow<Map<String, CachedModelList>> = store.modelListCache
+
+    suspend fun getModelListCacheNow(): Map<String, CachedModelList> =
+        dataStoreFirst(modelListCache, emptyMap())
+
+    /** 某服务商/配置档的上次拉取结果（从未拉取 → null）。 */
+    suspend fun getCachedModelList(cacheKey: String): CachedModelList? = getModelListCacheNow()[cacheKey]
+
+    /**
+     * 写入某服务商的模型清单缓存。
+     *
+     * 网络调用按项目既有分层由 UI 层走 `container.directLlmClient.listModels(...)`（与「测试连接」
+     * 同一惯例），仓储只负责落库与读取，避免数据层持有 HTTP 客户端。
+     */
+    suspend fun saveModelListCache(cacheKey: String, models: List<String>) {
+        store.putModelListCache(cacheKey, CachedModelList(System.currentTimeMillis(), models))
+    }
+
     suspend fun setSeedanceConfig(config: SeedanceConfig) = store.setSeedanceConfig(config)
     suspend fun setTtsConfig(config: TtsConfig) = store.setTtsConfig(config)
     suspend fun setTtsLanguage(lang: TtsLanguage) = store.setTtsLanguage(lang)
@@ -520,6 +594,16 @@ class SettingsRepository(private val store: SettingsStore) {
     companion object {
         /** DataStore .first() 超时阈值（ms）。国产 ROM 文件 I/O 被拦截时避免永久挂起。 */
         private const val DATASTORE_TIMEOUT_MS = 5000L
+
+        /** 自定义服务商在 providerApiConfigs 里的固定槽位键（切自定义配置档时同步写入）。 */
+        const val PROVIDER_KEY_CUSTOM = "custom"
+
+        /**
+         * 模型清单缓存键：预设服务商按 id 缓存；自定义端点按**配置档 id** 分开缓存
+         * （不同中转站的模型清单完全不同，共用 key 会互相覆盖）。
+         */
+        fun modelCacheKey(providerId: String?, profileId: String? = null): String =
+            if (providerId.isNullOrBlank()) "custom:${profileId.orEmpty()}" else "preset:$providerId"
 
         /**
          * DataStore 单值读取统一入口（超时 + 异常双兜底）。

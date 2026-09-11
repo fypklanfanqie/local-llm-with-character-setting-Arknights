@@ -50,17 +50,20 @@ import com.rhodesisland.terminal.AppContainer
 import com.rhodesisland.terminal.data.remote.ChatMessageDto
 import com.rhodesisland.terminal.data.model.TokenUsageSnapshot
 import com.rhodesisland.terminal.i18n.AppLanguage
+import com.rhodesisland.terminal.i18n.L10nRuntime
 import com.rhodesisland.terminal.i18n.t
 import com.rhodesisland.terminal.i18n.tf
 import kotlinx.serialization.json.JsonPrimitive
 import com.rhodesisland.terminal.util.BackgroundSurvivalHelper
 import com.rhodesisland.terminal.util.RomDetector
 import com.rhodesisland.terminal.data.model.ApiConfig
+import com.rhodesisland.terminal.data.model.CloudProfile
 import com.rhodesisland.terminal.data.model.TtsConfig
 import com.rhodesisland.terminal.data.model.TtsLanguage
 import com.rhodesisland.terminal.data.model.validationError
 import com.rhodesisland.terminal.data.repository.ChatBackgroundConfig
 import com.rhodesisland.terminal.data.repository.ChatBackgroundRepository
+import com.rhodesisland.terminal.data.repository.SettingsRepository
 import com.rhodesisland.terminal.ui.glass.CollapsibleSection
 import com.rhodesisland.terminal.ui.glass.GlassLargeTitle
 import com.rhodesisland.terminal.ui.glass.GlassListRow
@@ -141,6 +144,55 @@ fun SettingsScreen(
 
     var customBaseUrl by remember(apiConfig) { mutableStateOf(apiConfig.baseUrl) }
     var customModel by remember(apiConfig) { mutableStateOf(apiConfig.model) }
+
+    // ===== 自定义云端 LLM 配置档（可保存多份 + 随时切换）=====
+    // 自定义端点往往不止一个（公司中转站 / 本地 LM Studio / 第三方兼容站），
+    // 单一「自定义」槽位会互相覆盖，故改为命名配置档列表 + 当前生效档。
+    val cloudProfiles by container.settingsRepository.cloudProfiles.collectAsState(initial = emptyList())
+    val activeCloudProfileId by container.settingsRepository.activeCloudProfileId.collectAsState(initial = "")
+    var profileName by remember { mutableStateOf("") }
+    var profileExpanded by remember { mutableStateOf(false) }
+    /** 自定义端点的「已拉到模型清单」下拉展开态（刷新后可直接点选，不必手打模型名）。 */
+    var customModelExpanded by remember { mutableStateOf(false) }
+
+    // 模型清单远程缓存：内置预设的硬编码清单会随服务商发版过期，下拉优先展示实时拉取的清单。
+    val modelListCache by container.settingsRepository.modelListCache.collectAsState(initial = emptyMap())
+    var modelRefreshRunning by remember { mutableStateOf(false) }
+    var modelRefreshNote by remember { mutableStateOf<String?>(null) }
+    /** 上次刷新是否成功（决定提示文案配色；不靠嗅探文案前缀，切语言后依然正确）。 */
+    var modelRefreshOk by remember { mutableStateOf(false) }
+
+    // 模型清单「自动更新」：展开模型下拉时，若本地缓存缺失或已过期（>24h）就静默拉一次最新清单。
+    // 静默的理由：这是锦上添花的后台动作，网络/鉴权失败不该弹错误打断用户；失败只写日志，
+    // 用户仍可用「刷新模型列表」按钮当场看失败原因。
+    LaunchedEffect(modelExpanded, selectedProvider?.id) {
+        val provider = selectedProvider ?: return@LaunchedEffect
+        if (!modelExpanded) return@LaunchedEffect
+        val key = SettingsRepository.modelCacheKey(provider.id)
+        val cached = container.settingsRepository.getCachedModelList(key)
+        val stale = cached == null || System.currentTimeMillis() - cached.fetchedAt > MODEL_LIST_TTL_MS
+        if (!stale) return@LaunchedEffect
+        runCatching {
+            val ids = container.directLlmClient.listModels(
+                baseUrl = provider.baseUrl,
+                apiKey = if (provider.id == "siliconflow-free") "" else apiKey,
+            )
+            container.settingsRepository.saveModelListCache(key, ids)
+        }.onFailure { android.util.Log.w("SettingsScreen", "模型清单自动更新失败（忽略）", it) }
+    }
+
+    // 自定义端点同上（配置档各自独立缓存，避免不同中转站清单互相覆盖）
+    LaunchedEffect(customModelExpanded, activeCloudProfileId) {
+        if (!customModelExpanded) return@LaunchedEffect
+        val key = SettingsRepository.modelCacheKey(null, activeCloudProfileId)
+        val cached = container.settingsRepository.getCachedModelList(key)
+        val stale = cached == null || System.currentTimeMillis() - cached.fetchedAt > MODEL_LIST_TTL_MS
+        if (!stale) return@LaunchedEffect
+        runCatching {
+            val ids = container.directLlmClient.listModels(baseUrl = customBaseUrl, apiKey = apiKey)
+            container.settingsRepository.saveModelListCache(key, ids)
+        }.onFailure { android.util.Log.w("SettingsScreen", "自定义端点模型清单自动更新失败（忽略）", it) }
+    }
 
     var apiSaved by remember { mutableStateOf(false) }
     LaunchedEffect(apiSaved) {
@@ -316,18 +368,24 @@ fun SettingsScreen(
                             val newKey = provider?.id ?: "custom"
                             val stored = container.settingsRepository.getProviderApiConfigNow(newKey)
                             if (provider != null) {
-                                val model = stored?.model?.let { m -> provider.models.find { it.id == m } }
-                                    ?: provider.models.firstOrNull()
+                                // 已存模型优先原样保留：模型清单是可远程更新的，存量 id 可能不在
+                                // 内置预设里（服务商新发模型），此时不能悄悄改成 list.first()。
+                                val modelId = stored?.model?.takeIf { it.isNotBlank() } ?: provider.defaultModel
+                                val model = provider.models.find { it.id == modelId }
+                                    ?: PresetModel(modelId, modelId)
                                 val key = if (provider.id == "siliconflow-free") "" else (stored?.apiKey ?: "")
                                 selectedModel = model
                                 apiKey = key
                                 container.settingsRepository.setApiConfig(
-                                    ApiConfig(provider.baseUrl, key, model?.id ?: provider.defaultModel),
+                                    ApiConfig(provider.baseUrl, key, modelId),
                                 )
                             } else {
-                                customBaseUrl = stored?.baseUrl ?: customBaseUrl
-                                customModel = stored?.model ?: customModel
-                                apiKey = stored?.apiKey ?: apiKey
+                                // 自定义：优先载入当前生效配置档（多档切换的记忆），无档时回落旧单槽位
+                                val active = container.settingsRepository.getActiveCloudProfileNow()
+                                profileName = active?.name.orEmpty()
+                                customBaseUrl = active?.baseUrl ?: stored?.baseUrl ?: customBaseUrl
+                                customModel = active?.model ?: stored?.model ?: customModel
+                                apiKey = active?.apiKey ?: stored?.apiKey ?: apiKey
                                 container.settingsRepository.setApiConfig(
                                     ApiConfig(customBaseUrl, apiKey, customModel),
                                 )
@@ -339,6 +397,13 @@ fun SettingsScreen(
                     FieldLabel(t("模型"))
                     ModelDropdown(
                         provider = selectedProvider!!,
+                        // 远程清单（最新）优先、内置预设兜底、当前选中必在列表内
+                        models = mergeModelList(
+                            provider = selectedProvider!!,
+                            cached = modelListCache[SettingsRepository.modelCacheKey(selectedProvider!!.id)]
+                                ?.models.orEmpty(),
+                            currentModelId = selectedModel?.id ?: apiConfig.model,
+                        ),
                         selectedModel = selectedModel,
                         expanded = modelExpanded,
                         onExpandedChange = { modelExpanded = it },
@@ -348,14 +413,129 @@ fun SettingsScreen(
                         },
                     )
                 } else {
+                    // ===== 自定义云端：命名配置档（多份保存 + 一键切换）=====
+                    FieldLabel(t("配置档"))
+                    CloudProfileDropdown(
+                        profiles = cloudProfiles,
+                        activeId = activeCloudProfileId,
+                        expanded = profileExpanded,
+                        onExpandedChange = { profileExpanded = it },
+                        onSelect = { profile ->
+                            profileExpanded = false
+                            scope.launch {
+                                // 切换即整体生效：baseUrl / key / model 一起换，聊天下一轮就用新端点
+                                val applied = container.settingsRepository.activateCloudProfile(profile.id)
+                                if (applied != null) {
+                                    profileName = applied.name
+                                    customBaseUrl = applied.baseUrl
+                                    customModel = applied.model
+                                    apiKey = applied.apiKey
+                                }
+                            }
+                        },
+                    )
+                    GlassInputField(
+                        value = profileName,
+                        onValueChange = { profileName = it },
+                        placeholder = t("配置名称（如：公司中转站）"),
+                    )
                     GlassInputField(value = customBaseUrl, onValueChange = { customBaseUrl = it }, placeholder = "API BASE URL")
                     GlassInputField(value = customModel, onValueChange = { customModel = it }, placeholder = "MODEL")
+                    // 刷新过模型清单后给出可选列表（仍保留手填：中转站常有未列出的隐藏模型名）
+                    val customModelOptions = modelListCache[
+                        SettingsRepository.modelCacheKey(null, activeCloudProfileId)
+                    ]?.models.orEmpty()
+                    if (customModelOptions.isNotEmpty()) {
+                        FlatModelDropdown(
+                            options = customModelOptions,
+                            selected = customModel,
+                            expanded = customModelExpanded,
+                            onExpandedChange = { customModelExpanded = it },
+                            onSelect = { id ->
+                                customModel = id
+                                customModelExpanded = false
+                            },
+                        )
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        if (activeCloudProfileId.isNotBlank()) {
+                            TextButton(onClick = {
+                                scope.launch {
+                                    container.settingsRepository.deleteCloudProfile(activeCloudProfileId)
+                                    profileName = ""
+                                }
+                            }) { Text(t("删除此配置"), color = scheme.error, fontSize = 12.sp) }
+                        }
+                        TextButton(onClick = {
+                            scope.launch {
+                                // 另存为新配置：清空 active id 即让仓储分配新档，原档原样保留
+                                val saved = container.settingsRepository.saveCloudProfile(
+                                    CloudProfile(
+                                        id = "",
+                                        name = profileName.ifBlank { defaultProfileName(cloudProfiles.size + 1) },
+                                        baseUrl = customBaseUrl,
+                                        apiKey = apiKey,
+                                        model = customModel,
+                                    ),
+                                )
+                                profileName = saved.name
+                            }
+                        }) { Text(t("另存为新配置"), fontSize = 12.sp) }
+                    }
                 }
                 if (isFreeProvider) {
                     // 内置免费服务商：key 由 Cloudflare 代理注入，客户端无需填写
                     PasswordField("API KEY", t("通过云端代理（无需密钥）"), true, {}, {})
                 } else {
                     PasswordField("API KEY", apiKey, showApiKey, { apiKey = it }, { showApiKey = !showApiKey })
+                }
+                // 模型清单不写死：按需从服务商 /models 实时拉取并缓存，下拉优先展示最新清单。
+                val modelRefreshOkTemplate = t("已更新 {0} 个可用模型")
+                val modelRefreshFailTemplate = t("刷新失败：{0}")
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    TextButton(
+                        onClick = {
+                            scope.launch {
+                                modelRefreshRunning = true
+                                modelRefreshNote = null
+                                val baseUrl = if (isCustom) customBaseUrl else selectedProvider?.baseUrl ?: customBaseUrl
+                                val key = if (isFreeProvider) "" else apiKey
+                                // 缓存键按「预设 id / 自定义档 id」分开：不同中转站的清单互不相同
+                                val cacheKey = if (isCustom) {
+                                    SettingsRepository.modelCacheKey(null, activeCloudProfileId)
+                                } else {
+                                    SettingsRepository.modelCacheKey(selectedProvider?.id)
+                                }
+                                val result = runCatching {
+                                    val ids = container.directLlmClient.listModels(baseUrl, key)
+                                    container.settingsRepository.saveModelListCache(cacheKey, ids)
+                                    ids.size
+                                }
+                                // 成功/失败用显式状态位区分（而不是去嗅探提示文案的前缀）：
+                                // 文案会随语言变化，用文案判断颜色在英文/日文下会失效。
+                                modelRefreshOk = result.isSuccess
+                                modelRefreshNote = result.fold(
+                                    onSuccess = { count -> modelRefreshOkTemplate.replace("{0}", count.toString()) },
+                                    onFailure = { error ->
+                                        // 技术异常只写日志；UI 显示可读原因（401/404/超时等）
+                                        android.util.Log.w("SettingsScreen", "模型清单刷新失败", error)
+                                        modelRefreshFailTemplate.replace("{0}", error.toUserErrorMessage())
+                                    },
+                                )
+                                modelRefreshRunning = false
+                            }
+                        },
+                        enabled = !modelRefreshRunning,
+                    ) { Text(if (modelRefreshRunning) t("刷新中…") else t("刷新模型列表"), fontSize = 12.sp) }
+                    modelRefreshNote?.let {
+                        Text(
+                            it,
+                            color = if (modelRefreshOk) scheme.tertiary else scheme.error,
+                            fontSize = 10.sp,
+                            lineHeight = 13.sp,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                 }
                 // 测试连接：用当前输入实时验证（未保存也测）。自定义提供商 400/404/401 当场可见原因。
                 val llmProbeOkTemplate = t("连接成功：{0}")
@@ -406,6 +586,20 @@ fun SettingsScreen(
                     val config = buildCurrentUiConfig()
                     val slotKey = selectedProvider?.id ?: "custom"
                     container.settingsRepository.setProviderApiConfig(slotKey, config)
+                    if (selectedProvider == null) {
+                        // 自定义端点：同时写入当前配置档（无档则新建），保证「保存多份并切换」的语义
+                        // 与独立槽位一致——否则改完不保存档，下次切换配置档会把这次修改丢掉。
+                        val saved = container.settingsRepository.saveCloudProfile(
+                            CloudProfile(
+                                id = activeCloudProfileId,
+                                name = profileName.ifBlank { defaultProfileName(cloudProfiles.size + 1) },
+                                baseUrl = config.baseUrl,
+                                apiKey = config.apiKey,
+                                model = config.model,
+                            ),
+                        )
+                        profileName = saved.name
+                    }
                     container.settingsRepository.setApiConfig(config)
                     apiSaved = true
                 }
@@ -674,8 +868,8 @@ fun SettingsScreen(
                             !p?.zh?.voiceId.isNullOrBlank() || !p?.ja?.voiceId.isNullOrBlank()
                         }
                     } else {
-                        val q = voiceSearch.trim()
-                        voiceCharacters.filter { it.name.contains(q, true) || it.id.contains(q, true) }
+                        // 与其它选择器同一匹配口径（名 / 代号 / id / 定位），按「术师」这类职业词也能筛
+                        voiceCharacters.filter { characterMatchesQuery(it, voiceSearch) }
                     }
                     if (filtered.isEmpty()) {
                         Text(
@@ -1187,6 +1381,8 @@ private fun GreetingSection(container: AppContainer, scope: CoroutineScope) {
 
     var showCharPicker by remember { mutableStateOf(false) }
     var sliderValue by remember(dailyCount) { mutableStateOf(dailyCount.toFloat()) }
+    /** 问候角色选择器搜索词（384 位干员必须能直接搜，不能只靠滚动）。 */
+    var greetingCharSearch by remember { mutableStateOf("") }
     var testScheduled by remember { mutableStateOf(false) }
     LaunchedEffect(testScheduled) {
         if (testScheduled) { delay(12_000); testScheduled = false }
@@ -1450,10 +1646,26 @@ private fun GreetingSection(container: AppContainer, scope: CoroutineScope) {
                             }
                         }) { Text(t("清空"), color = scheme.error, fontSize = 12.sp) }
                     }
+                    GlassInputField(
+                        value = greetingCharSearch,
+                        onValueChange = { greetingCharSearch = it },
+                        placeholder = t("搜索角色名"),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    // 搜索只过滤渲染列表；选中集合 charIds 独立，被过滤掉的已选角色不会丢
+                    val greetingMatches = if (greetingCharSearch.isBlank()) characters
+                        else characters.filter { characterMatchesQuery(it, greetingCharSearch) }
+                    if (greetingCharSearch.isNotBlank()) {
+                        Text(
+                            tf("找到 {0} 个角色", greetingMatches.size),
+                            color = scheme.onSurfaceVariant,
+                            fontSize = 11.sp,
+                        )
+                    }
                     // 固定高度 LazyColumn：AlertDialog 内 verticalScroll + heightIn 在无界约束下不滚动，
                     // 列表会撑满整屏导致下方干员选不到（bug 修复）。
                     LazyColumn(modifier = Modifier.height(360.dp)) {
-                        items(characters, key = { it.id }) { c ->
+                        items(greetingMatches, key = { it.id }) { c ->
                             val checked = c.id in charIds
                             Row(
                                 modifier = Modifier
@@ -1977,6 +2189,12 @@ private fun variantLabel(variant: SeedanceModelVariant): String = when (variant)
 private const val PROBE_TIMEOUT_MS = 10_000L
 
 /**
+ * 模型清单缓存的保鲜期（24h）：超过则下次展开下拉时静默重新拉取。
+ * 服务商上新模型是低频事件，24h 足够新鲜，也避免每次展开都打一次网络。
+ */
+private const val MODEL_LIST_TTL_MS = 24 * 60 * 60 * 1000L
+
+/**
  * “Seedance 对话视频”设置分区（自包含；文件较大故独立成函数）。
  * API Key 密码输入、服务地址、模型（2.0 标准/Fast）、按模型能力动态的分辨率与时长
  * （Fast 仅 480p/720p）、画幅比例、水印、可选背景图
@@ -2228,28 +2446,47 @@ private fun MomentsSection(container: AppContainer, scope: CoroutineScope) {
     }
 
     if (showCharPicker) {
+        var momentCharSearch by remember { mutableStateOf("") }
+        val momentMatches = if (momentCharSearch.isBlank()) characters
+            else characters.filter { characterMatchesQuery(it, momentCharSearch) }
         AlertDialog(
             onDismissRequest = { showCharPicker = false },
             title = { Text(t("选择发圈角色（可多选）"), color = scheme.onSurface) },
             text = {
-                LazyColumn(modifier = Modifier.height(320.dp)) {
-                    items(characters.size) { index ->
-                        val char = characters[index]
-                        val checked = char.id in autoEnabled.characterIds
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    val next = autoEnabled.characterIds.toMutableSet()
-                                    if (checked) next.remove(char.id) else next.add(char.id)
-                                    scope.launch { settings.setMomentAutoConfig(autoEnabled.copy(characterIds = next)) }
-                                }
-                                .padding(vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            androidx.compose.material3.Checkbox(checked = checked, onCheckedChange = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text(char.name, color = scheme.onSurface, fontSize = 14.sp)
+                Column {
+                    GlassInputField(
+                        value = momentCharSearch,
+                        onValueChange = { momentCharSearch = it },
+                        placeholder = t("搜索角色名"),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    if (momentCharSearch.isNotBlank()) {
+                        Text(
+                            tf("找到 {0} 个角色", momentMatches.size),
+                            color = scheme.onSurfaceVariant,
+                            fontSize = 11.sp,
+                        )
+                    }
+                    // 搜索只过滤渲染列表；已勾选集合 autoEnabled.characterIds 独立，不随过滤丢失。
+                    // key 用角色 id（原先用下标，过滤后行身份会错位导致勾选状态串行）。
+                    LazyColumn(modifier = Modifier.height(320.dp)) {
+                        items(momentMatches, key = { it.id }) { char ->
+                            val checked = char.id in autoEnabled.characterIds
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        val next = autoEnabled.characterIds.toMutableSet()
+                                        if (checked) next.remove(char.id) else next.add(char.id)
+                                        scope.launch { settings.setMomentAutoConfig(autoEnabled.copy(characterIds = next)) }
+                                    }
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                androidx.compose.material3.Checkbox(checked = checked, onCheckedChange = null)
+                                Spacer(Modifier.width(8.dp))
+                                Text(char.name, color = scheme.onSurface, fontSize = 14.sp)
+                            }
                         }
                     }
                 }
@@ -2260,7 +2497,7 @@ private fun MomentsSection(container: AppContainer, scope: CoroutineScope) {
 
     if (showReplyPicker) {
         var search by remember { mutableStateOf("") }
-        val filtered = characters.filter { it.name.contains(search.trim(), ignoreCase = true) }
+        val filtered = characters.filter { characterMatchesQuery(it, search) }
         AlertDialog(
             onDismissRequest = { showReplyPicker = false },
             title = { Text(t("选择互动角色（可多选）"), color = scheme.onSurface) },
@@ -2784,6 +3021,7 @@ private fun <T> SeedanceDropdown(
 @Composable
 private fun ModelDropdown(
     provider: ModelProvider,
+    models: List<PresetModel>,
     selectedModel: PresetModel?,
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
@@ -2823,7 +3061,7 @@ private fun ModelDropdown(
             onDismissRequest = { onExpandedChange(false) },
             modifier = Modifier.background(scheme.surfaceContainerHigh),
         ) {
-            provider.models.forEach { model ->
+            models.forEach { model ->
                 DropdownMenuItem(
                     text = {
                         Column {
@@ -2834,6 +3072,180 @@ private fun ModelDropdown(
                         }
                     },
                     onClick = { onModelSelected(model) },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 合并「远程实时模型清单」与「内置预设清单」，供模型下拉展示。
+ *
+ * 优先级：远程清单决定**顺序与新增项**（服务商新发模型第一时间可选），预设条目负责补上
+ * 展示名与说明（远程清单只有裸 id）；最后保证当前生效模型一定在列表里——否则用户切走再回来
+ * 会因为「选中项不在列表」而被静默改成首个模型。
+ */
+private fun mergeModelList(
+    provider: ModelProvider,
+    cached: List<String>,
+    currentModelId: String,
+): List<PresetModel> {
+    val presetById = provider.models.associateBy { it.id }
+    val merged = LinkedHashMap<String, PresetModel>()
+    cached.forEach { id ->
+        // 远程清单里的已知模型沿用预设展示名/说明；未知模型用裸 id 当展示名
+        merged[id] = presetById[id] ?: PresetModel(id, id)
+    }
+    provider.models.forEach { merged.putIfAbsent(it.id, it) }
+    if (currentModelId.isNotBlank()) {
+        merged.putIfAbsent(currentModelId, presetById[currentModelId] ?: PresetModel(currentModelId, currentModelId))
+    }
+    return merged.values.toList()
+}
+
+/** 未命名配置档的默认名（按序号，避免出现多个同名档难以分辨）。 */
+private fun defaultProfileName(index: Int): String =
+    L10nRuntime.format("自定义配置 {0}", index.toString())
+
+/**
+ * 自定义云端 LLM 配置档下拉：列出已保存的多份配置 + 当前生效档标记。
+ *
+ * 选择即切换（调用方负责把该档写入 active ApiConfig），空列表时只显示提示行。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CloudProfileDropdown(
+    profiles: List<CloudProfile>,
+    activeId: String,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    onSelect: (CloudProfile) -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val active = profiles.firstOrNull { it.id == activeId }
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = onExpandedChange,
+    ) {
+        BasicTextField(
+            value = active?.name?.takeIf { it.isNotBlank() }
+                ?: if (profiles.isEmpty()) t("尚未保存配置") else t("选择配置档"),
+            onValueChange = {},
+            readOnly = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor()
+                .clip(RoundedCornerShape(12.dp))
+                .background(scheme.surface.copy(alpha = 0.6f))
+                .clickable { onExpandedChange(true) }
+                .padding(12.dp),
+            textStyle = TextStyle(
+                color = if (active != null) scheme.onSurface else scheme.onSurfaceVariant,
+                fontSize = 14.sp,
+            ),
+            singleLine = true,
+            decorationBox = { innerTextField ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    innerTextField()
+                    Text(if (expanded) "▲" else "▼", color = scheme.onSurfaceVariant, fontSize = 10.sp)
+                }
+            },
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { onExpandedChange(false) },
+            modifier = Modifier.background(scheme.surfaceContainerHigh),
+        ) {
+            profiles.forEach { profile ->
+                DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text(
+                                profile.name.ifBlank { t("未命名配置") },
+                                color = if (profile.id == activeId) scheme.primary else scheme.onSurface,
+                                fontSize = 13.sp,
+                            )
+                            if (profile.model.isNotBlank()) {
+                                Text(
+                                    "${profile.model} · ${profile.baseUrl}",
+                                    color = scheme.onSurfaceVariant,
+                                    fontSize = 10.sp,
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    },
+                    onClick = { onSelect(profile) },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 纯字符串模型清单下拉（自定义端点用）：刷新 `/models` 后直接点选模型名。
+ * 与 [ModelDropdown] 的差别是没有供应商预设说明，因为远程清单只有 id。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun FlatModelDropdown(
+    options: List<String>,
+    selected: String,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    onSelect: (String) -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = onExpandedChange,
+    ) {
+        BasicTextField(
+            value = tf("从服务商清单中选择（{0} 个）", options.size),
+            onValueChange = {},
+            readOnly = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor()
+                .clip(RoundedCornerShape(12.dp))
+                .background(scheme.surface.copy(alpha = 0.6f))
+                .clickable { onExpandedChange(true) }
+                .padding(12.dp),
+            textStyle = TextStyle(color = scheme.onSurfaceVariant, fontSize = 13.sp),
+            singleLine = true,
+            decorationBox = { innerTextField ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    innerTextField()
+                    Text(if (expanded) "▲" else "▼", color = scheme.onSurfaceVariant, fontSize = 10.sp)
+                }
+            },
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { onExpandedChange(false) },
+            modifier = Modifier.background(scheme.surfaceContainerHigh),
+        ) {
+            options.forEach { id ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            id,
+                            color = if (id == selected) scheme.primary else scheme.onSurface,
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        )
+                    },
+                    onClick = { onSelect(id) },
                 )
             }
         }

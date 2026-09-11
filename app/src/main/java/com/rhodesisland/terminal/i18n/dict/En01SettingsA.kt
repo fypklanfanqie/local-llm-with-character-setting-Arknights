@@ -285,4 +285,19 @@ internal val En01SettingsAEntries: List<Pair<String, String>> = listOf(
     "保存 Seedance 设置" to "Save Seedance settings",
     "背景图保存失败" to "Failed to save the background image",
 
+    // ===== 自定义云端 LLM 配置档 / 模型清单刷新 =====
+    "配置档" to "Profile",
+    "配置名称（如：公司中转站）" to "Profile name (e.g. company relay)",
+    "删除此配置" to "Delete this profile",
+    "另存为新配置" to "Save as new profile",
+    "尚未保存配置" to "No saved profile yet",
+    "选择配置档" to "Select a profile",
+    "未命名配置" to "Unnamed profile",
+    "自定义配置 {0}" to "Custom profile {0}",
+    "从服务商清单中选择（{0} 个）" to "Pick from the provider list ({0})",
+    "刷新模型列表" to "Refresh model list",
+    "刷新中…" to "Refreshing…",
+    "已更新 {0} 个可用模型" to "Updated: {0} available models",
+    "刷新失败：{0}" to "Refresh failed: {0}",
+
 )

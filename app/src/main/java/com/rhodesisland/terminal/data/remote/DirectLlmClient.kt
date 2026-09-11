@@ -260,6 +260,92 @@ class DirectLlmClient(
         }
     }
 
+    /**
+     * 拉取供应商可用模型清单（OpenAI 兼容 `GET {base}/models`）。
+     *
+     * 内置预设的模型清单会随服务商发版过期，因此模型下拉支持「远程刷新」：这里只负责取回 id 列表，
+     * 缓存与展示交给上层（SettingsRepository / 设置页）。baseUrl 归一化与 [buildEndpoint] 同一套口径：
+     *  - 已含 `/chat/completions` → 先剥掉该后缀（中转站常把完整端点直接粘进来）
+     *  - Anthropic 端点（/v1/messages）→ 走 `{base}/v1/models` 且用 x-api-key 鉴权
+     *  - 其余 → `{base}/models`
+     *
+     * 失败一律抛异常（含 HTTP 状态与响应片段），由调用方决定提示文案；不做静默回退，
+     * 避免用户以为「刷新成功但没变化」。
+     */
+    suspend fun listModels(baseUrl: String, apiKey: String): List<String> = withContext(Dispatchers.IO) {
+        val endpoint = buildModelsEndpoint(baseUrl)
+        val request = if (isAnthropicEndpoint(baseUrl)) {
+            Request.Builder()
+                .url(endpoint)
+                .header("x-api-key", apiKey.trim())
+                .header("anthropic-version", ANTHROPIC_VERSION)
+                .header("Accept", "application/json")
+                .get()
+                .build()
+        } else {
+            Request.Builder()
+                .url(endpoint)
+                .header("Authorization", "Bearer ${apiKey.trim()}")
+                .header("Accept", "application/json")
+                .get()
+                .build()
+        }
+        val response = client.newCall(request).execute()
+        response.use { res ->
+            val body = res.body?.string().orEmpty()
+            if (!res.isSuccessful) {
+                throw IOException("HTTP ${res.code}: ${body.take(200)}")
+            }
+            parseModelIds(body)
+        }
+    }
+
+    /** `{base}/models` 端点归一化（见 [listModels] 注释）。 */
+    private fun buildModelsEndpoint(baseUrl: String): String {
+        var base = baseUrl.trim().trimEnd('/')
+        // 中转站常把完整的 /chat/completions 端点直接粘进来：先剥掉再拼 /models，否则会 404
+        if (base.endsWith("/chat/completions", ignoreCase = true)) {
+            base = base.dropLast("/chat/completions".length).trimEnd('/')
+        }
+        return if (isAnthropicEndpoint(baseUrl)) {
+            when {
+                base.endsWith("/v1/messages") -> base.removeSuffix("/messages") + "/models"
+                base.endsWith("/v1") -> "$base/models"
+                else -> "$base/v1/models"
+            }
+        } else {
+            "$base/models"
+        }
+    }
+
+    /**
+     * 解析 `/models` 响应：标准 OpenAI 为 `{"data":[{"id":"..."}]}`；
+     * 少数中转站用 `{"models":[...]}` 或裸数组，这里都兼容；同时剥掉 `models/` 前缀
+     * （部分网关按 `models/gpt-4o` 形式返回，直接拿去请求会被判非法模型名）。
+     */
+    private fun parseModelIds(body: String): List<String> {
+        val root = runCatching { json.parseToJsonElement(body) }.getOrNull() ?: return emptyList()
+        val array = when (root) {
+            is JsonArray -> root
+            is JsonObject -> root["data"]?.jsonArray
+                ?: root["models"]?.jsonArray
+                ?: return emptyList()
+            else -> return emptyList()
+        }
+        return array.mapNotNull { element ->
+            // 少数网关把 id 写成对象/数字等非字符串形态：逐项容错，坏数据跳过而不是炸掉整个刷新
+            val raw = runCatching {
+                when (element) {
+                    is JsonPrimitive -> element.contentOrNull
+                    is JsonObject -> element["id"]?.jsonPrimitive?.contentOrNull
+                        ?: element["name"]?.jsonPrimitive?.contentOrNull
+                    else -> null
+                }
+            }.getOrNull()
+            raw?.trim()?.removePrefix("models/")?.takeIf { it.isNotBlank() }
+        }.distinct()
+    }
+
     private fun buildBody(
         model: String,
         messages: List<ChatMessageDto>,

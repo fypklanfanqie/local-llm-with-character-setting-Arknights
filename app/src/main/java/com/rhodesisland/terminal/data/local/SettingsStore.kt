@@ -21,6 +21,8 @@ import com.rhodesisland.terminal.data.model.SeedanceModelVariant
 import com.rhodesisland.terminal.data.model.SeedanceRatio
 import com.rhodesisland.terminal.data.model.SeedanceResolution
 import com.rhodesisland.terminal.data.model.SystemVoiceTemplate
+import com.rhodesisland.terminal.data.model.CachedModelList
+import com.rhodesisland.terminal.data.model.CloudProfile
 import com.rhodesisland.terminal.data.model.ThemeMode
 import com.rhodesisland.terminal.data.model.TokenUsageSnapshot
 import com.rhodesisland.terminal.data.model.TtsConfig
@@ -72,6 +74,12 @@ class SettingsStore(
         val API_MODEL = stringPreferencesKey("api_model")
         // 每服务商独立保存的 API 配置（key = 预设 id 或 "custom"），切换服务商互不串 key/model/baseUrl。
         val PROVIDER_API_CONFIGS = stringPreferencesKey("provider_api_configs")
+        // 用户自定义云端 LLM 配置档列表（JSON: List<CloudProfile>）+ 当前生效档 id。
+        // 自定义端点常有多个（公司中转站 / 本地 LM Studio / 第三方兼容站），单槽位会互相覆盖。
+        val CLOUD_PROFILES = stringPreferencesKey("cloud_profiles")
+        val ACTIVE_CLOUD_PROFILE = stringPreferencesKey("active_cloud_profile")
+        // 每服务商的远程模型清单缓存（JSON: Map<key, CachedModelList>，key = 预设 id / "custom:<profileId>"）。
+        val MODEL_LIST_CACHE = stringPreferencesKey("model_list_cache")
 
         // TTS
         val TTS_API_KEY = stringPreferencesKey("tts_api_key")
@@ -287,6 +295,47 @@ class SettingsStore(
                 runCatching { providerApiJson.decodeFromString<Map<String, ApiConfig>>(raw) }.getOrDefault(emptyMap())
             } ?: emptyMap()
             p[Keys.PROVIDER_API_CONFIGS] = providerApiJson.encodeToString(current + (key to config))
+        }
+    }
+
+    // ===== 自定义云端 LLM 配置档（多份保存 + 切换）=====
+
+    /** 全部自定义配置档（损坏/缺键 → 空列表，不抛异常）。 */
+    val cloudProfiles: Flow<List<CloudProfile>> = dataStore.data.map { p ->
+        p[Keys.CLOUD_PROFILES]?.let { raw ->
+            runCatching { providerApiJson.decodeFromString<List<CloudProfile>>(raw) }.getOrDefault(emptyList())
+        } ?: emptyList()
+    }
+
+    /** 当前生效的自定义配置档 id（空串 = 未选）。 */
+    val activeCloudProfileId: Flow<String> = dataStore.data.map { p ->
+        p[Keys.ACTIVE_CLOUD_PROFILE] ?: ""
+    }
+
+    /** 覆盖整份配置档列表（删除即写回过滤后的列表）。 */
+    suspend fun setCloudProfiles(list: List<CloudProfile>) {
+        dataStore.edit { p -> p[Keys.CLOUD_PROFILES] = providerApiJson.encodeToString(list) }
+    }
+
+    suspend fun setActiveCloudProfile(id: String) {
+        dataStore.edit { p -> p[Keys.ACTIVE_CLOUD_PROFILE] = id }
+    }
+
+    // ===== 远程模型清单缓存（按服务商键）=====
+
+    val modelListCache: Flow<Map<String, CachedModelList>> = dataStore.data.map { p ->
+        p[Keys.MODEL_LIST_CACHE]?.let { raw ->
+            runCatching { providerApiJson.decodeFromString<Map<String, CachedModelList>>(raw) }.getOrDefault(emptyMap())
+        } ?: emptyMap()
+    }
+
+    /** 键为 [modelCacheKey] 的模型清单缓存；原子读改写避免与其它服务商的刷新互相覆盖。 */
+    suspend fun putModelListCache(key: String, entry: CachedModelList) {
+        dataStore.edit { p ->
+            val current = p[Keys.MODEL_LIST_CACHE]?.let { raw ->
+                runCatching { providerApiJson.decodeFromString<Map<String, CachedModelList>>(raw) }.getOrDefault(emptyMap())
+            } ?: emptyMap()
+            p[Keys.MODEL_LIST_CACHE] = providerApiJson.encodeToString(current + (key to entry))
         }
     }
 

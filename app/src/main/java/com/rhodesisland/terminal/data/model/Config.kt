@@ -15,6 +15,39 @@ data class ApiConfig(
 )
 
 /**
+ * 用户自定义云端 LLM 配置档（可保存多份并随时切换）。
+ *
+ * 预设服务商各有固定槽位（providerApiConfigs），但自定义端点往往不止一个
+ * （公司中转站 / 本地 LM Studio / 各家第三方兼容站），单一「自定义」槽位会互相覆盖，
+ * 因此自定义端点改为「命名配置档列表 + 当前生效档」：切换配置档即整体切换
+ * baseUrl / apiKey / model，互不污染。
+ */
+@Serializable
+data class CloudProfile(
+    /** 稳定 id（空串表示尚未落库的新档，由仓储层补 UUID）。 */
+    val id: String = "",
+    /** 用户可读名称（如「公司中转站」「本地 11434」）。 */
+    val name: String = "",
+    val baseUrl: String = "",
+    val apiKey: String = "",
+    val model: String = "",
+)
+
+/**
+ * 某服务商「模型清单」的远程拉取缓存（GET {baseUrl}/models 的结果）。
+ *
+ * 内置预设的模型清单会随服务商发版而过期，硬编码清单等于逼迫用户手打模型名；
+ * 这里按服务商键缓存上次拉取结果与时间，下拉优先展示缓存（含用户手动刷新）。
+ */
+@Serializable
+data class CachedModelList(
+    /** 拉取时间戳（ms）；0 = 从未拉取过。 */
+    val fetchedAt: Long = 0L,
+    /** 上游返回的模型 id 列表（已去重、保序）。 */
+    val models: List<String> = emptyList(),
+)
+
+/**
  * TTS 配置（火山引擎）
  * 对齐网页版 storage.getTtsConfig()
  * apiKey 为火山引擎控制台 API Key 管理中的 key；
