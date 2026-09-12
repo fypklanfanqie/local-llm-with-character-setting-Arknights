@@ -160,4 +160,5 @@ internal val En08NovelEntries: List<Pair<String, String>> = listOf(
     "上移" to "Move up",
     "下移" to "Move down",
     "移动后可点 AI 从新位置续写" to "Tap AI afterwards to continue from the new position",
+    "点按任意一行可编辑、上移/下移、删除；改完点 AI 从当前位置续写" to "Tap any line to edit, move up/down, or delete; tap AI afterwards to continue from there",
 )

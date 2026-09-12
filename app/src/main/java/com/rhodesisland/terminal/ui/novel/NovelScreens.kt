@@ -427,6 +427,17 @@ fun NovelEditorScreen(
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                // 操作提示常驻列表首位：点行 = 编辑/上移/下移/删除。没有它用户根本不知道行可以操作
+                if (state.lines.isNotEmpty()) {
+                    item(key = "line_hints") {
+                        Text(
+                            t("点按任意一行可编辑、上移/下移、删除；改完点 AI 从当前位置续写"),
+                            color = NOVEL_TEXT_DIM.copy(alpha = 0.75f),
+                            fontSize = 11.sp,
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                        )
+                    }
+                }
                 items(state.lines, key = { it.id }) { line ->
                     NovelLineRow(line = line, onClick = { editTarget = line })
                 }
