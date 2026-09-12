@@ -38,3 +38,8 @@ backup/
 __pycache__/
 *.pyc
 .wrangler/
+
+# 正式签名密钥与密码：绝不入库（丢了=无法再更新，务必备份到云盘/网盘）
+keystore.properties
+keystore/*.jks
+keystore/*.keystore

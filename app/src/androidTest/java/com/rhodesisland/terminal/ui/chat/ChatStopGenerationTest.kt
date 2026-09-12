@@ -3,9 +3,10 @@ package com.rhodesisland.terminal.ui.chat
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.test.assertDoesNotExist
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -48,6 +49,7 @@ class ChatStopGenerationTest {
                 onPickFile = {},
                 onRemoveImage = {},
                 onRemoveFile = {},
+                onOpenGifts = {},
             )
         }
     }
@@ -58,7 +60,7 @@ class ChatStopGenerationTest {
         var stopClicks = 0
         chatInputBar(isStreaming = false, stopRequested = false, onSend = { sendClicks++ }, onStop = { stopClicks++ })
         rule.onNodeWithContentDescription("发送").assertExists()
-        rule.onNodeWithContentDescription("停止生成").assertDoesNotExist()
+        rule.onAllNodesWithContentDescription("停止生成").assertCountEquals(0)
         rule.onNodeWithContentDescription("发送").performClick()
         rule.waitForIdle()
         assertEquals(1, sendClicks)
@@ -84,16 +86,17 @@ class ChatStopGenerationTest {
                 onPickFile = {},
                 onRemoveImage = {},
                 onRemoveFile = {},
+                onOpenGifts = {},
             )
         }
-        rule.onNodeWithContentDescription("发送").assertDoesNotExist()
+        rule.onAllNodesWithContentDescription("发送").assertCountEquals(0)
         rule.onNodeWithContentDescription("停止生成").assertExists().performClick()
         rule.waitForIdle()
         // 点击一次 -> onStop 恰好一次；之后进入「正在停止」并禁用，避免重复触发。
         assertEquals(1, stopClicks)
         assertEquals(0, sendClicks)
         rule.onNodeWithContentDescription("正在停止").assertExists().assertIsNotEnabled()
-        rule.onNodeWithContentDescription("停止生成").assertDoesNotExist()
+        rule.onAllNodesWithContentDescription("停止生成").assertCountEquals(0)
     }
 
     @Test
@@ -122,6 +125,7 @@ class ChatStopGenerationTest {
                 onPickFile = {},
                 onRemoveImage = {},
                 onRemoveFile = {},
+                onOpenGifts = {},
             )
         }
         rule.onNodeWithContentDescription("停止生成").assertExists()
@@ -129,6 +133,6 @@ class ChatStopGenerationTest {
         isStreaming = false
         rule.waitForIdle()
         rule.onNodeWithContentDescription("发送").assertExists()
-        rule.onNodeWithContentDescription("停止生成").assertDoesNotExist()
+        rule.onAllNodesWithContentDescription("停止生成").assertCountEquals(0)
     }
 }

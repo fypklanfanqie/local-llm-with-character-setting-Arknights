@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -28,6 +30,33 @@ android {
     // 注意：cpu_sys_jni（CPU 频率/拓扑只读 JNI，性能浮窗用）始终编译，故 CMake 始终启用。
     val mnnDir: String? = providers.gradleProperty("MNN_DIR").orNull
 
+    // ===== 正式签名（keystore.properties，已 gitignore，勿提交）=====
+    // Android Studio「Generate Signed APK」用的是用户自己的 keystore；命令行 release 构建读取
+    // 同一份配置，保证签名一致——否则覆盖安装报「程序包与现有程序包冲突」（debug 密钥每台
+    // 机器不同）。文件缺失 / storeFile 无效（如还是模板占位）时回退 debug 签名并打印告警。
+    val keystorePropsFile = rootProject.file("keystore.properties")
+    val releaseSigningConfig = if (keystorePropsFile.exists()) {
+        val props = Properties().apply {
+            runCatching { keystorePropsFile.inputStream().use { stream -> load(stream) } }
+        }
+        val storePath = props.getProperty("storeFile")?.trim().orEmpty()
+        val store = storePath.takeIf { it.isNotBlank() && !it.startsWith("请填入") }
+            ?.let { rootProject.file(it) }?.takeIf { it.exists() }
+        if (store == null) {
+            println("WARN: keystore.properties 存在但 storeFile 未配置/不存在，release 回退 debug 签名")
+            signingConfigs.getByName("debug")
+        } else {
+            signingConfigs.create("releaseSigning") {
+                storeFile = store
+                storePassword = props.getProperty("storePassword")
+                keyAlias = props.getProperty("keyAlias")
+                keyPassword = props.getProperty("keyPassword")
+            }
+        }
+    } else {
+        signingConfigs.getByName("debug")
+    }
+
     defaultConfig {
         applicationId = "com.rhodesisland.terminal"
         minSdk = 24
@@ -54,8 +83,9 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             isDebuggable = false
-            // 测试期间先用 debug 签名；正式发布前请配置 release signingConfig
-            signingConfig = signingConfigs.getByName("debug")
+            // 正式签名：keystore.properties 配好即用用户的 keystore（与 Android Studio 导出一致）；
+            // 未配置时回退 debug 签名（此时分发的包与历史安装包签名可能冲突，见上方注释）。
+            signingConfig = releaseSigningConfig
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

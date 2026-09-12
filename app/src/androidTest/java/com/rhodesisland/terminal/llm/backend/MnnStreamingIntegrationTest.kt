@@ -75,7 +75,7 @@ class MnnStreamingIntegrationTest {
                         variant = RuntimeVariant.CPU_OPTIMIZED,
                         backendType = "cpu",
                         threadNum = 4,
-                        cachePath = File(context.cacheDir, "mnn_cache_integration.bin").absolutePath,
+                        tmpPath = File(context.cacheDir, "mnn_cache_integration.bin").absolutePath,
                         contextTokens = 2048,
                         lookahead = false,
                         temperature = 0.8f,

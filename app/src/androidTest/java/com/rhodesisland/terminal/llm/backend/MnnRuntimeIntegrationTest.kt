@@ -31,6 +31,7 @@ import org.junit.BeforeClass
 import org.junit.Test
 import org.junit.runner.RunWith
 import com.chatbyyourside.llm.backend.MnnBridge
+import com.chatbyyourside.llm.backend.MnnRuntimeInfo
 
 /**
  * MNN 运行时权威集成测试（Task 16 Step 3；Task 1 v2 场景追加）。
@@ -249,7 +250,7 @@ class MnnRuntimeIntegrationTest {
         assertEquals(
             "native 摘要 callbackBytes ≠ Kotlin 拼接字节数",
             summary!!.callbackBytes,
-            sb.toByteArray(Charsets.UTF_8).size.toLong(),
+            sb.toString().toByteArray(Charsets.UTF_8).size.toLong(),
         )
     }
 
