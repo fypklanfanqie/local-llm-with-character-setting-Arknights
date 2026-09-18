@@ -4,17 +4,21 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Checkbox
@@ -37,11 +41,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import com.rhodesisland.terminal.data.model.Character
 import com.rhodesisland.terminal.data.repository.NovelRepository
 import com.rhodesisland.terminal.i18n.t
 import com.rhodesisland.terminal.i18n.tf
-import com.rhodesisland.terminal.ui.glass.GlassSheet
 import com.rhodesisland.terminal.ui.glass.GlassTextField
 
 /**
@@ -54,15 +58,19 @@ import com.rhodesisland.terminal.ui.glass.GlassTextField
  * （见 resolveRoles）。单一事实来源，避免删角色后定位表里残留幽灵 key。
  */
 
-/** 阵容草稿：本次编辑中的成员 / NPC / 主角 key。 */
+/** 阵容草稿：本次编辑中的成员 / NPC / 主角 key 集合（可 0 个主角，也可多主角）。 */
 private data class CastDraft(
     val memberIds: List<String> = emptyList(),
     val npcs: List<NovelRepository.CustomNpc> = emptyList(),
-    val protagonistKey: String? = null,
+    val protagonistKeys: Set<String> = emptySet(),
+    val relations: String = "",
 )
 
 /**
- * 阵容管理弹窗（底部抽屉）。
+ * 阵容管理弹窗（**居中弹窗**，非底部抽屉）。
+ *
+ * 为什么改成 Dialog：底部抽屉高度小，编辑 NPC 设定等场景一弹键盘就会把输入区整个挡住；
+ * 居中弹窗浮在键盘之上（imePadding 随键盘上浮），输入不被遮挡。
  *
  * 用来在写作过程中随时改主角/配角、增删应用角色与自定义 NPC；
  * 保存走 [NovelRepository.updateStoryCast] 整包写库，下一次 AI 续写即用新阵容。
@@ -73,11 +81,13 @@ fun CastManagerSheet(
     memberIds: List<String>,
     npcs: List<NovelRepository.CustomNpc>,
     castRoles: Map<String, String>,
+    castRelations: String,
     onDismiss: () -> Unit,
     onSave: (
         memberIds: List<String>,
         npcs: List<NovelRepository.CustomNpc>,
         castRoles: Map<String, String>,
+        castRelations: String,
     ) -> Unit,
 ) {
     /**
@@ -88,19 +98,21 @@ fun CastManagerSheet(
      */
     fun currentKey(id: String, name: String): String = id.ifBlank { name }
 
-    val initialProtagonist = (memberIds.firstOrNull { castRoles[it] == NovelRepository.ROLE_PROTAGONIST }
-        ?: npcs.firstOrNull { castRoles[it.name.trim()] == NovelRepository.ROLE_PROTAGONIST }?.name?.trim())
-        ?: memberIds.firstOrNull()
-        ?: npcs.firstOrNull()?.name?.trim()
+    /** 已保存过的阵容里的主角集合（可 0..N 个；从未设置过则空集，保存时按空集落库=群像）。 */
+    val initialProtagonists = buildSet {
+        memberIds.filter { castRoles[it] == NovelRepository.ROLE_PROTAGONIST }.forEach { add(it) }
+        npcs.filter { castRoles[it.name.trim()] == NovelRepository.ROLE_PROTAGONIST }.forEach { add(it.name.trim()) }
+    }
 
     // 草稿用整体替换（copy-on-write）而非可变集合：改可变集合不会触发重组，点选将毫无反应
     val draftState = remember {
         mutableStateOf(
             CastDraft(
                 memberIds = memberIds,
-                // 定位统一落到 protagonistKey 上：清掉 NPC 内嵌旧值，避免两个来源打架
+                // 定位统一落到 protagonistKeys 上：清掉 NPC 内嵌旧值，避免两个来源打架
                 npcs = npcs.map { it.copy(role = null) },
-                protagonistKey = initialProtagonist,
+                protagonistKeys = initialProtagonists,
+                relations = castRelations,
             ),
         )
     }
@@ -110,32 +122,25 @@ fun CastManagerSheet(
     var npcPersona by remember { mutableStateOf("") }
 
     fun isProtagonistOf(id: String, name: String): Boolean =
-        draft.protagonistKey == currentKey(id, name)
+        currentKey(id, name) in draft.protagonistKeys
 
-    /** 草稿 → 定位表：主角一位，其余全部配角（含 NPC）。保存时重算，中间态不会渗进库里。 */
+    /** 草稿 → 定位表：在主角集合里的标主角，其余全部配角（含 NPC）。 */
     fun resolveRoles(): Map<String, String> {
         val result = LinkedHashMap<String, String>()
         draft.memberIds.forEach { id -> result[id] = NovelRepository.ROLE_SUPPORTING }
         draft.npcs.forEach { npc -> result[npc.name.trim()] = NovelRepository.ROLE_SUPPORTING }
-        val key = draft.protagonistKey
-        if (key != null && result.containsKey(key)) result[key] = NovelRepository.ROLE_PROTAGONIST
+        draft.protagonistKeys.forEach { key ->
+            if (result.containsKey(key)) result[key] = NovelRepository.ROLE_PROTAGONIST
+        }
         return result
     }
-
-    /** 主角被删时的继任者：顺位顶上，避免阵容退化成「无主角」而让提示词阵容段整段失效。 */
-    fun successorKey(excludingMember: String? = null, excludingNpc: String? = null): String? =
-        draft.memberIds.firstOrNull { it != excludingMember }
-            ?: draft.npcs.firstOrNull { it.name.trim() != excludingNpc }?.name?.trim()
 
     fun toggleMember(id: String, name: String) {
         val key = currentKey(id, name)
         draftState.value = if (id in draft.memberIds) {
-            draft.copy(
-                memberIds = draft.memberIds - id,
-                protagonistKey = if (draft.protagonistKey == key) successorKey(excludingMember = id) else draft.protagonistKey,
-            )
+            draft.copy(memberIds = draft.memberIds - id, protagonistKeys = draft.protagonistKeys - key)
         } else {
-            draft.copy(memberIds = draft.memberIds + id, protagonistKey = draft.protagonistKey ?: key)
+            draft.copy(memberIds = draft.memberIds + id)
         }
     }
 
@@ -145,12 +150,11 @@ fun CastManagerSheet(
         draftState.value = if (draft.npcs.any { it.name.trim() == trimmed }) {
             draft.copy(
                 npcs = draft.npcs.filterNot { it.name.trim() == trimmed },
-                protagonistKey = if (draft.protagonistKey == trimmed) successorKey(excludingNpc = trimmed) else draft.protagonistKey,
+                protagonistKeys = draft.protagonistKeys - trimmed,
             )
         } else {
             draft.copy(
                 npcs = draft.npcs + NovelRepository.CustomNpc(name = trimmed, persona = "", role = null),
-                protagonistKey = draft.protagonistKey ?: trimmed,
             )
         }
     }
@@ -168,151 +172,185 @@ fun CastManagerSheet(
         }
     }
 
-    GlassSheet(onDismissRequest = onDismiss) {
-        Text(
-            t("角色阵容"),
-            color = MaterialTheme.colorScheme.onSurface, fontSize = 17.sp, fontWeight = FontWeight.Bold,
-        )
-        Text(
-            t("设定主角与配角，写作中随时可以增删角色；改动会在下一次 AI 续写时生效"),
-            color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp, lineHeight = 15.sp,
-            modifier = Modifier.padding(top = 2.dp),
-        )
-
-        LazyColumn(
-            modifier = Modifier.fillMaxWidth().height(420.dp).padding(top = 8.dp),
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .imePadding()
+                .clip(RoundedCornerShape(18.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                .padding(18.dp)
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            item {
-                Text(
-                    t("当前阵容"),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp,
-                    modifier = Modifier.padding(bottom = 2.dp),
-                )
-            }
-            if (draft.memberIds.isEmpty() && draft.npcs.isEmpty()) {
+            Text(
+                t("角色阵容"),
+                color = MaterialTheme.colorScheme.onSurface, fontSize = 17.sp, fontWeight = FontWeight.Bold,
+            )
+            Text(
+                t("主角可选多个或都不选；设定主角之间的关系，写作中随时可增删角色"),
+                color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp, lineHeight = 15.sp,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth().height(380.dp).padding(top = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
                 item {
                     Text(
-                        t("阵容为空，请从下方添加角色"),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp,
-                        modifier = Modifier.padding(vertical = 8.dp),
+                        t("当前阵容"),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp,
+                        modifier = Modifier.padding(bottom = 2.dp),
                     )
                 }
-            }
-            draft.memberIds.forEach { id ->
-                val name = characters.firstOrNull { it.id == id }?.name ?: return@forEach
-                val key = currentKey(id, name)
-                item(key = "member_$id") {
-                    CastMemberRow(
-                        label = name,
-                        isProtagonist = isProtagonistOf(id, name),
-                        onMarkProtagonist = { draftState.value = draft.copy(protagonistKey = key) },
-                        onMarkSupporting = {
-                            // 取消主角必须有继任者：否则阵容退化成「无主角」，提示词阵容段整段失效
-                            if (isProtagonistOf(id, name)) {
-                                draftState.value = draft.copy(protagonistKey = successorKey(excludingMember = id))
-                            }
-                        },
-                        onRemove = { toggleMember(id, name) },
-                    )
-                }
-            }
-            draft.npcs.forEachIndexed { index, npc ->
-                val key = npc.name.trim()
-                item(key = "npc_${index}_$key") {
-                    CastMemberRow(
-                        label = npc.name,
-                        isProtagonist = isProtagonistOf("", npc.name),
-                        onMarkProtagonist = { draftState.value = draft.copy(protagonistKey = key) },
-                        onMarkSupporting = {
-                            if (isProtagonistOf("", npc.name)) {
-                                draftState.value = draft.copy(protagonistKey = successorKey(excludingNpc = key))
-                            }
-                        },
-                        onRemove = { toggleNpc(npc.name) },
-                    )
-                }
-            }
-
-            item { CastSectionLabel(t("添加角色")) }
-            item {
-                GlassTextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = t("搜索角色"),
-                    singleLine = true,
-                )
-            }
-            items(shownMembers, key = { it.id }) { char ->
-                val selected = char.id in draft.memberIds
-                val isLead = isProtagonistOf(char.id, char.name)
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable { toggleMember(char.id, char.name) }
-                        .padding(horizontal = 6.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Checkbox(checked = selected, onCheckedChange = null)
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        char.name,
-                        color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp,
-                        modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    )
-                    if (selected) {
+                if (draft.memberIds.isEmpty() && draft.npcs.isEmpty()) {
+                    item {
                         Text(
-                            if (isLead) t("主角") else t("配角"),
-                            color = if (isLead) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 10.sp,
+                            t("阵容为空，请从下方添加角色"),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp,
+                            modifier = Modifier.padding(vertical = 8.dp),
                         )
+                    }
+                }
+                draft.memberIds.forEach { id ->
+                    val name = characters.firstOrNull { it.id == id }?.name ?: return@forEach
+                    val key = currentKey(id, name)
+                    item(key = "member_$id") {
+                        CastMemberRow(
+                            label = name,
+                            isProtagonist = isProtagonistOf(id, name),
+                            onToggleProtagonist = {
+                                draftState.value = draft.copy(
+                                    protagonistKeys = if (key in draft.protagonistKeys) {
+                                        draft.protagonistKeys - key
+                                    } else {
+                                        draft.protagonistKeys + key
+                                    },
+                                )
+                            },
+                            onMarkSupporting = {
+                                draftState.value = draft.copy(protagonistKeys = draft.protagonistKeys - key)
+                            },
+                            onRemove = { toggleMember(id, name) },
+                        )
+                    }
+                }
+                draft.npcs.forEachIndexed { index, npc ->
+                    val key = npc.name.trim()
+                    item(key = "npc_${index}_$key") {
+                        CastMemberRow(
+                            label = npc.name,
+                            isProtagonist = isProtagonistOf("", npc.name),
+                            onToggleProtagonist = {
+                                draftState.value = draft.copy(
+                                    protagonistKeys = if (key in draft.protagonistKeys) {
+                                        draft.protagonistKeys - key
+                                    } else {
+                                        draft.protagonistKeys + key
+                                    },
+                                )
+                            },
+                            onMarkSupporting = {
+                                draftState.value = draft.copy(protagonistKeys = draft.protagonistKeys - key)
+                            },
+                            onRemove = { toggleNpc(npc.name) },
+                        )
+                    }
+                }
+
+                item { CastSectionLabel(t("添加角色")) }
+                item {
+                    GlassTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = t("搜索角色"),
+                        singleLine = true,
+                    )
+                }
+                items(shownMembers, key = { it.id }) { char ->
+                    val selected = char.id in draft.memberIds
+                    val isLead = isProtagonistOf(char.id, char.name)
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { toggleMember(char.id, char.name) }
+                            .padding(horizontal = 6.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(checked = selected, onCheckedChange = null)
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            char.name,
+                            color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp,
+                            modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
+                        if (selected) {
+                            Text(
+                                if (isLead) t("主角") else t("配角"),
+                                color = if (isLead) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 10.sp,
+                            )
+                        }
+                    }
+                }
+
+                item { CastSectionLabel(t("自定义 NPC（可选）")) }
+                item {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        CastDraftField(t("名字"), npcName, Modifier.weight(0.34f)) { npcName = it }
+                        CastDraftField(t("设定"), npcPersona, Modifier.weight(0.44f)) { npcPersona = it }
+                        TextButton(
+                            enabled = npcName.isNotBlank(),
+                            onClick = {
+                                toggleNpc(npcName)
+                                npcName = ""
+                                npcPersona = ""
+                            },
+                        ) { Text(t("添加")) }
                     }
                 }
             }
 
-            item { CastSectionLabel(t("自定义 NPC（可选）")) }
-            item {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    CastDraftField(t("名字"), npcName, Modifier.weight(0.34f)) { npcName = it }
-                    CastDraftField(t("设定"), npcPersona, Modifier.weight(0.44f)) { npcPersona = it }
-                    TextButton(
-                        enabled = npcName.isNotBlank(),
-                        onClick = {
-                            toggleNpc(npcName)
-                            npcName = ""
-                            npcPersona = ""
-                        },
-                    ) { Text(t("添加")) }
-                }
+            // 主角关系：≥1 个主角时才需要描述关系；没有主角时这段对提示词没有意义
+            if (draft.protagonistKeys.isNotEmpty()) {
+                CastSectionLabel(t("主角之间的关系（可选）"))
+                GlassTextField(
+                    value = draft.relations,
+                    onValueChange = { draftState.value = draft.copy(relations = it) },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = t("如：师徒 / 宿敌 / 互相暗恋但嘴硬"),
+                    singleLine = true,
+                )
             }
-        }
 
-        Row(
-            Modifier.fillMaxWidth().padding(top = 10.dp),
-            horizontalArrangement = Arrangement.End,
-        ) {
-            TextButton(onClick = onDismiss) { Text(t("取消")) }
-            Spacer(Modifier.width(4.dp))
-            TextButton(
-                // 不因阵容为空而禁用：用户把角色全删掉就是想清空阵容，
-                // 续写侧对空阵容本就有兜底（只有旁白可写），这里不该拦住他保存。
-                onClick = { onSave(draft.memberIds, draft.npcs, resolveRoles()) },
-            ) { Text(t("保存阵容"), fontWeight = FontWeight.Bold) }
+            Row(
+                Modifier.fillMaxWidth().padding(top = 10.dp),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                TextButton(onClick = onDismiss) { Text(t("取消")) }
+                Spacer(Modifier.width(4.dp))
+                TextButton(
+                    // 不因阵容为空而禁用：用户把角色全删掉就是想清空阵容，
+                    // 续写侧对空阵容本就有兜底（只有旁白可写），这里不该拦住他保存。
+                    onClick = { onSave(draft.memberIds, draft.npcs, resolveRoles(), draft.relations) },
+                ) { Text(t("保存阵容"), fontWeight = FontWeight.Bold) }
+            }
         }
     }
 }
 
-/** 阵容成员行：名字 + 主角/配角切换 + 移除。 */
+/** 阵容成员行：名字 + 主角/配角切换（可多主角/无主角） + 移除。 */
 @Composable
 private fun CastMemberRow(
     label: String,
     isProtagonist: Boolean,
-    onMarkProtagonist: () -> Unit,
+    onToggleProtagonist: () -> Unit,
     onMarkSupporting: () -> Unit,
     onRemove: () -> Unit,
 ) {
@@ -330,7 +368,7 @@ private fun CastMemberRow(
             color = scheme.onSurface, fontSize = 13.sp,
             modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
         )
-        RoleChip(t("主角"), isProtagonist, onMarkProtagonist)
+        RoleChip(t("主角"), isProtagonist, onToggleProtagonist)
         Spacer(Modifier.width(4.dp))
         RoleChip(t("配角"), !isProtagonist, onMarkSupporting)
         IconButton(onClick = onRemove, modifier = Modifier.size(30.dp)) {
@@ -404,7 +442,7 @@ private fun filterCharacters(characters: List<Character>, query: String): List<C
     return characters.filter { it.name.contains(keyword, ignoreCase = true) }
 }
 
-/** 阵容摘要（如「阿米娅：主角 · 配角 2 人」）：故事页给玩家一眼看到当前阵容。 */
+/** 阵容摘要（如「阿米娅、羽毛笔：主角 · 配角 2 人」；多主角全列出，无主角显示群像）：故事页一眼看到当前阵容。 */
 @Composable
 fun castSummaryText(
     characters: List<Character>,
@@ -412,14 +450,17 @@ fun castSummaryText(
     npcs: List<NovelRepository.CustomNpc>,
     castRoles: Map<String, String>,
 ): String {
-    val lead = memberIds.firstOrNull { castRoles[it] == NovelRepository.ROLE_PROTAGONIST }
-        ?.let { id -> characters.firstOrNull { it.id == id }?.name }
-        ?: npcs.firstOrNull { castRoles[it.name.trim()] == NovelRepository.ROLE_PROTAGONIST }?.name
+    val leads = buildList {
+        memberIds.filter { castRoles[it] == NovelRepository.ROLE_PROTAGONIST }.forEach { id ->
+            characters.firstOrNull { it.id == id }?.name?.let { add(it) }
+        }
+        npcs.filter { castRoles[it.name.trim()] == NovelRepository.ROLE_PROTAGONIST }.forEach { add(it.name) }
+    }
     val total = memberIds.size + npcs.size
-    val supporting = (total - if (lead != null) 1 else 0).coerceAtLeast(0)
+    val supporting = (total - leads.size).coerceAtLeast(0)
     return when {
         total == 0 -> t("阵容为空，请从下方添加角色")
-        lead == null -> tf("{0} 名角色", total)
-        else -> tf("{0}：主角 · 配角 {1} 人", lead, supporting)
+        leads.isEmpty() -> tf("群像 · {0} 名角色", total)
+        else -> tf("{0}：主角 · 配角 {1} 人", leads.joinToString("、"), supporting)
     }
 }
