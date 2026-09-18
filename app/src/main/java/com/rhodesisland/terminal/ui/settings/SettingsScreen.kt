@@ -165,6 +165,9 @@ fun SettingsScreen(
     /** 小说：发言后是否自动续写（默认关 = 原逻辑；与编辑器里的开关是同一份偏好）。 */
     val novelAutoContinue by container.settingsRepository.novelAutoContinue.collectAsState(initial = false)
 
+    /** 单聊：AI 回复分句成多个气泡（微信式，默认关）。 */
+    val chatSplitReplies by container.settingsRepository.chatSplitReplies.collectAsState(initial = false)
+
     // 模型清单「自动更新」：展开模型下拉时，若本地缓存缺失或已过期（>24h）就静默拉一次最新清单。
     // 静默的理由：这是锦上添花的后台动作，网络/鉴权失败不该弹错误打断用户；失败只写日志，
     // 用户仍可用「刷新模型列表」按钮当场看失败原因。
@@ -723,7 +726,13 @@ fun SettingsScreen(
         }
 
         // ===== 对话 =====
-        CollapsibleSection(title = t("对话"), summary = if (deepThinking) t("深度思考开") else t("深度思考关")) {
+        CollapsibleSection(
+            title = t("对话"),
+            summary = buildString {
+                if (deepThinking) append(t("深度思考开")) else append(t("深度思考关"))
+                if (chatSplitReplies) append(" · ").append(t("分句气泡"))
+            },
+        ) {
             GlassListRow(
                 title = t("深度思考模式"),
                 subtitle = t("展示并折叠模型推理过程"),
@@ -731,6 +740,16 @@ fun SettingsScreen(
                     Switch(
                         checked = deepThinking,
                         onCheckedChange = { scope.launch { container.settingsRepository.setDeepThinking(it) } },
+                    )
+                },
+            )
+            GlassListRow(
+                title = t("回复分句成多个气泡"),
+                subtitle = t("像微信一样把一次回复拆成多条短消息（单聊）"),
+                trailing = {
+                    Switch(
+                        checked = chatSplitReplies,
+                        onCheckedChange = { scope.launch { container.settingsRepository.setChatSplitReplies(it) } },
                     )
                 },
                 showDivider = false,

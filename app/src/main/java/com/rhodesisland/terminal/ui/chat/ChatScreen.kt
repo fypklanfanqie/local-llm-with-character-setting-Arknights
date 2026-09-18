@@ -511,6 +511,9 @@ fun ChatScreen(
                     ) {
                         ChatMessageList(
                             state = state,
+                            // 微信式分句：一次回复按句拆成多个连续短气泡（设置 → 对话 可开关）
+                            splitReplies = container.settingsRepository.chatSplitReplies
+                                .collectAsState(initial = false).value,
                             onTts = { viewModel.playTts(it) },
                             onDelete = { viewModel.deleteMessage(it.databaseId) },
                             modifier = Modifier.fillMaxSize(),
@@ -1083,6 +1086,8 @@ internal fun MessageBubble(
     onExportVideo: (() -> Unit)? = null,
     onCancelVideo: (() -> Unit)? = null,
     onRetryVideo: (() -> Unit)? = null,
+    /** 微信式分句时同一条消息的后续气泡：顶部贴上前一段、首角改小圆角，视觉上连成一串。 */
+    compact: Boolean = false,
 ) {
     val scheme = MaterialTheme.colorScheme
     val glass = chatGlass()
@@ -1092,11 +1097,17 @@ internal fun MessageBubble(
     LaunchedEffect(copied) {
         if (copied) { kotlinx.coroutines.delay(1200); copied = false }
     }
-    // 气泡：用户=紫罗兰实心 + 紫辉光（iOS 用户气泡）；AI=磨砂玻璃（采样模糊背板）
-    val bubbleShape: Shape = if (isUser) {
-        RoundedCornerShape(topStart = BubbleRadius, topEnd = BubbleRadius, bottomStart = BubbleRadius, bottomEnd = BubbleTailRadius)
-    } else {
-        RoundedCornerShape(topStart = BubbleRadius, topEnd = BubbleRadius, bottomStart = BubbleTailRadius, bottomEnd = BubbleRadius)
+    // 气泡：用户=紫罗兰实心 + 紫辉光（iOS 用户气泡）；AI=磨砂玻璃（采样模糊背板）。
+    // compact（分句的后续气泡）把首侧圆角改小，与上一段连成一串。
+    val bubbleShape: Shape = when {
+        isUser && !compact ->
+            RoundedCornerShape(topStart = BubbleRadius, topEnd = BubbleRadius, bottomStart = BubbleRadius, bottomEnd = BubbleTailRadius)
+        isUser ->
+            RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp, bottomStart = BubbleRadius, bottomEnd = BubbleTailRadius)
+        !compact ->
+            RoundedCornerShape(topStart = BubbleRadius, topEnd = BubbleRadius, bottomStart = BubbleTailRadius, bottomEnd = BubbleRadius)
+        else ->
+            RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp, bottomStart = BubbleTailRadius, bottomEnd = BubbleRadius)
     }
     val bubbleContentColor = if (isUser) scheme.onPrimary else scheme.onSurface
 

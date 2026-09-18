@@ -341,6 +341,10 @@ class SettingsRepository(private val store: SettingsStore) {
     val novelAutoContinue: Flow<Boolean> = store.novelAutoContinue
     suspend fun getNovelAutoContinueNow(): Boolean = dataStoreFirst(novelAutoContinue, false)
     suspend fun setNovelAutoContinue(enabled: Boolean) = store.setNovelAutoContinue(enabled)
+
+    /** 单聊：AI 回复是否按句拆成多个气泡（微信式，默认关闭）。 */
+    val chatSplitReplies: Flow<Boolean> = store.chatSplitReplies
+    suspend fun setChatSplitReplies(enabled: Boolean) = store.setChatSplitReplies(enabled)
     suspend fun setActiveCharacter(id: String) = store.setActiveCharacter(id)
     val activeConversations: Flow<Map<String, Long>> = store.activeConversations
     suspend fun setActiveConversation(characterId: String, conversationId: Long) =

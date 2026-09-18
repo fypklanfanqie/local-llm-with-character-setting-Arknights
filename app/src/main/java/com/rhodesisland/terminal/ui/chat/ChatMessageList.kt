@@ -30,8 +30,11 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.rhodesisland.terminal.data.model.DisplayMessage
+import com.rhodesisland.terminal.data.model.MessageCompletionState
+import com.rhodesisland.terminal.data.model.MessageSegment
 import com.rhodesisland.terminal.data.model.SeedanceVideo
 import com.rhodesisland.terminal.i18n.t
+import com.rhodesisland.terminal.util.ReplyBubbleSplitter
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -51,6 +54,8 @@ fun ChatMessageList(
     state: ChatUiState,
     onTts: (DisplayMessage) -> Unit,
     modifier: Modifier = Modifier,
+    /** 微信式分句：true 时把 AI 的整段回复按句拆成多个连续短气泡（流式中/含代码块的消息不拆）。 */
+    splitReplies: Boolean = false,
     onDelete: (DisplayMessage) -> Unit = {},
     onPlayVideo: ((SeedanceVideo) -> Unit)? = null,
     onFullScreenVideo: ((SeedanceVideo) -> Unit)? = null,
@@ -122,21 +127,30 @@ fun ChatMessageList(
             contentPadding = PaddingValues(vertical = 10.dp),
         ) {
             items(state.messages, key = { it.id }) { msg ->
-                MessageBubble(
-                    message = msg,
-                    state = state,
-                    characterImage = state.characterImage,
-                    characterName = state.characterName,
-                    userImage = state.userImage,
-                    onTts = { onTts(msg) },
-                    onDelete = { onDelete(msg) },
-                    // 视频卡回调仅在对应助手消息附带视频时注入（Task 8 接播放/全屏/导出，Task 7 接取消/重试）。
-                    onPlayVideo = msg.video?.let { video -> onPlayVideo?.let { cb -> { cb(video) } } },
-                    onFullScreenVideo = msg.video?.let { video -> onFullScreenVideo?.let { cb -> { cb(video) } } },
-                    onExportVideo = msg.video?.let { video -> onExportVideo?.let { cb -> { cb(video) } } },
-                    onCancelVideo = msg.video?.let { video -> { onCancelVideo(video) } },
-                    onRetryVideo = msg.video?.let { video -> { onRetryVideo(video) } },
-                )
+                val bubbles = if (splitReplies) splitReplyBubbles(msg) else listOf(msg)
+                // 分句时多个气泡纵向紧排（间距收紧），首段承载完整信息（TTS/视频卡等），其余为纯文本气泡
+                bubbles.forEachIndexed { index, bubble ->
+                    MessageBubble(
+                        message = bubble,
+                        state = state,
+                        characterImage = state.characterImage,
+                        characterName = state.characterName,
+                        userImage = state.userImage,
+                        onTts = { onTts(msg) },
+                        onDelete = { onDelete(msg) },
+                        // 视频卡回调仅在对应助手消息附带视频时注入（Task 8 接播放/全屏/导出，Task 7 接取消/重试）。
+                        onPlayVideo = msg.video?.let { video -> onPlayVideo?.let { cb -> { cb(video) } } },
+                        onFullScreenVideo = msg.video?.let { video -> onFullScreenVideo?.let { cb -> { cb(video) } } },
+                        onExportVideo = msg.video?.let { video -> onExportVideo?.let { cb -> { cb(video) } } },
+                        onCancelVideo = msg.video?.let { video -> { onCancelVideo(video) } },
+                        onRetryVideo = msg.video?.let { video -> { onRetryVideo(video) } },
+                        // 分句的后续气泡视觉上属于同一条消息：去掉顶部圆角并收紧间距
+                        compact = index > 0,
+                    )
+                    if (index < bubbles.lastIndex) {
+                        androidx.compose.foundation.layout.Spacer(Modifier.padding(vertical = 2.dp))
+                    }
+                }
             }
             if (state.showTyping) {
                 item {
@@ -183,3 +197,25 @@ private val BOTTOM_BUTTON_COLOR = Color(0xCC333333)
 
 /** LazyColumn testTag（instrumentation 滚动测试定位用）。 */
 const val CHAT_LIST_TAG = "chat_message_list"
+
+/**
+ * 把一条消息拆成渲染气泡：仅单聊开启分句、助手消息已完成、且全部分段都是纯文本时才拆
+ * （含代码块/公式/表格的 Markdown 消息拆开会破坏排版；流式中的消息不拆）。
+ * 只有一个气泡时返回单元素列表，渲染与不拆完全一致。
+ */
+private fun splitReplyBubbles(msg: DisplayMessage): List<DisplayMessage> {
+    val splittable = msg.role == "assistant" &&
+        !msg.isStreaming &&
+        msg.completionState == MessageCompletionState.COMPLETE &&
+        msg.segments.isNotEmpty() &&
+        msg.segments.all { it is MessageSegment.Text }
+    if (!splittable) return listOf(msg)
+    val parts = ReplyBubbleSplitter.split(msg.content)
+    if (parts.size <= 1) return listOf(msg)
+    return parts.map { part ->
+        msg.copy(
+            content = part,
+            segments = listOf(MessageSegment.Text(part)),
+        )
+    }
+}

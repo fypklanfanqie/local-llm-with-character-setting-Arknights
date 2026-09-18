@@ -110,6 +110,9 @@ class SettingsStore(
         // 默认 false = 保持原逻辑（发言只追加一行，续写由「AI」按钮手动触发）。
         val NOVEL_AUTO_CONTINUE = booleanPreferencesKey("novel_auto_continue")
 
+        // 单聊：AI 回复是否按句拆成多个气泡（微信式，默认关闭 = 一整段一个气泡）。
+        val CHAT_SPLIT_REPLIES = booleanPreferencesKey("chat_split_replies")
+
         // 音量
         val VOLUME = intPreferencesKey("volume")
 
@@ -554,6 +557,15 @@ class SettingsStore(
 
     suspend fun setNovelAutoContinue(enabled: Boolean) {
         dataStore.edit { it[Keys.NOVEL_AUTO_CONTINUE] = enabled }
+    }
+
+    // ===== 单聊：AI 回复分句成多个气泡（微信式）=====
+
+    /** 单聊 AI 回复是否按句拆成多个气泡（默认关闭 = 一整段一个气泡）。 */
+    val chatSplitReplies: Flow<Boolean> = dataStore.data.map { p -> p[Keys.CHAT_SPLIT_REPLIES] ?: false }
+
+    suspend fun setChatSplitReplies(enabled: Boolean) {
+        dataStore.edit { it[Keys.CHAT_SPLIT_REPLIES] = enabled }
     }
 
     val ttsVolume: Flow<Int> = dataStore.data.map { p ->
