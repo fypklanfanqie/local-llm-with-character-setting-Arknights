@@ -126,18 +126,7 @@ fun GroupChatScreen(
 
         // 群聊发言直接调用已配置的云端 LLM，与聊天页的本地/云端切换解耦（未配置时发送会提示）
 
-        // @ 提醒：很多人不知道 @ 可以点名回答——常驻一行轻量提示（输入法弹起时随输入栏一起上浮）
-        if (state.members.isNotEmpty()) {
-            Text(
-                t("输入 @ 可指定某位成员回答"),
-                color = scheme.onSurfaceVariant.copy(alpha = 0.75f),
-                fontSize = 11.sp,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 2.dp),
-            )
-        }
-
+        // @ 提醒并入输入框占位符（浅灰）：常驻但轻量，不占额外一行
         GroupChatInputBar(
             text = state.inputText,
             isStreaming = state.isStreaming,
@@ -341,7 +330,11 @@ private fun GroupChatInputBar(
             cursorBrush = SolidColor(scheme.primary),
             decorationBox = { inner ->
                 if (text.isEmpty()) {
-                    Text(t("发消息到群聊…"), color = scheme.onSurfaceVariant, fontSize = 14.5.sp)
+                    // 占位符即 @ 教学位：@ 可点名，且可 @ 多人（谁被 @ 谁回答）
+                    Text(
+                        t("发消息到群聊…（输入 @ 可指定成员回答，可 @ 多人）"),
+                        color = scheme.onSurfaceVariant, fontSize = 14.5.sp,
+                    )
                 }
                 inner()
             },

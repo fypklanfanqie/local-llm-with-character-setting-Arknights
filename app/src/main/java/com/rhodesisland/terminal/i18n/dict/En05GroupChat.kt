@@ -57,6 +57,7 @@ internal val En05GroupChatEntries: List<Pair<String, String>> = listOf(
     "至少保留 2 名成员" to "Keep at least 2 members",
     "已达成员上限（{0} 人）" to "Member limit reached ({0})",
     "输入 @ 可指定某位成员回答" to "Type @ to have a specific member answer",
+    "发消息到群聊…（输入 @ 可指定成员回答，可 @ 多人）" to "Message the group… (type @ to have specific members answer, @ several at once)",
     "群封面" to "Group cover",
     "群名称" to "Group name",
     "删除群聊" to "Delete group chat",
