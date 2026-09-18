@@ -37,8 +37,11 @@ data class NovelStoryEntity(
      *
      * 默认 '{}' 表示「尚未设置」：读取端按成员顺序推导（第一位成员视为主角），
      * 不写回库——老故事因此无需迁移即可获得合理默认阵容。
+     * 主角**可以多个也可以没有**（多主角群像 / 无主角群像都合法）。
      */
     val castRolesJson: String = "{}",
+    /** 主角之间的关系描述（自由文本，如「师徒」「敌对多年」）；空 = 未填写。 */
+    val castRelations: String = "",
     /** 主控显示名（空 = 无主控，脚本无 user 行）。 */
     val protagonistName: String = "",
     val protagonistPersona: String = "",

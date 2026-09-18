@@ -46,6 +46,8 @@ class NovelRepository(
         protagonistPersona: String,
         /** 角色阵容定位（角色 id / NPC 名 → 主角|配角）；空 = 未指定，读取端按成员顺序推导。 */
         castRoles: Map<String, String> = emptyMap(),
+        /** 主角之间的关系描述（自由文本）；空 = 未填写。 */
+        castRelations: String = "",
     ): Long {
         require(title.isNotBlank()) { L10nRuntime.t("故事名不能为空") }
         val now = System.currentTimeMillis()
@@ -56,6 +58,7 @@ class NovelRepository(
                 memberIdsJson = json.encodeToString(memberIds),
                 customNpcsJson = json.encodeToString(customNpcs),
                 castRolesJson = encodeCastRoles(castRoles),
+                castRelations = castRelations.trim(),
                 protagonistName = protagonistName.trim(),
                 protagonistPersona = protagonistPersona.trim(),
                 createdAt = now,
@@ -82,6 +85,8 @@ class NovelRepository(
         memberIds: List<String>,
         npcs: List<CustomNpc>,
         castRoles: Map<String, String>,
+        /** 主角之间的关系描述（自由文本）；空 = 未填写。 */
+        castRelations: String = "",
     ) {
         val story = dao.getStory(storyId) ?: throw IllegalStateException(L10nRuntime.t("故事不存在"))
         val cleanMembers = memberIds.distinct()
@@ -94,6 +99,7 @@ class NovelRepository(
                 memberIdsJson = json.encodeToString(cleanMembers),
                 customNpcsJson = json.encodeToString(cleanNpcs),
                 castRolesJson = encodeCastRoles(normalized),
+                castRelations = castRelations.trim(),
                 updatedAt = System.currentTimeMillis(),
             ),
         )
@@ -133,6 +139,12 @@ class NovelRepository(
         memberIds: List<String>,
         npcs: List<CustomNpc>,
         castRoles: Map<String, String>,
+        /**
+         * 用户是否显式编辑过阵容（保存过阵容弹窗）：
+         * true = 尊重原样——**允许零主角（群像）与多主角**，不再自动顶替；
+         * false = 从未设置，老故事按成员顺序推导一位主角兜底。
+         */
+        explicit: Boolean = false,
     ): Map<String, String> {
         val result = LinkedHashMap<String, String>()
         memberIds.forEach { id ->
@@ -144,7 +156,7 @@ class NovelRepository(
                 result[name] = castRoles[name] ?: normalizeRole(npc.role)
             }
         }
-        if (result.isNotEmpty() && result.values.none { it == ROLE_PROTAGONIST }) {
+        if (!explicit && result.isNotEmpty() && result.values.none { it == ROLE_PROTAGONIST }) {
             val firstMember = memberIds.firstOrNull()
             if (firstMember != null) {
                 result[firstMember] = ROLE_PROTAGONIST
@@ -157,9 +169,18 @@ class NovelRepository(
         return result
     }
 
+    /**
+     * 用户是否显式设置过阵容：castRolesJson 落过整份定位表（非迁移默认的 '{}'）即算。
+     *
+     * 为什么不能只看「有没有主角」：允许零主角后，全配角也是用户的有意选择，
+     * 自动顶替会把它改回单主角——必须区分「没设置过」与「设置了但没有主角」。
+     */
+    fun hasExplicitCastRoles(story: NovelStoryEntity): Boolean =
+        story.castRolesJson.trim().let { it.isNotEmpty() && it != "{}" }
+
     /** 便利封装：[resolveCastRoles] 的「从故事读取」版本。 */
     fun resolveCastRoles(story: NovelStoryEntity): Map<String, String> =
-        resolveCastRoles(decodeMemberIds(story), decodeCustomNpcs(story), decodeCastRoles(story))
+        resolveCastRoles(decodeMemberIds(story), decodeCustomNpcs(story), decodeCastRoles(story), hasExplicitCastRoles(story))
 
     /** 一步读全阵容（成员 / NPC / 定位），UI 与提示词构建共用，避免三处各解一次 JSON。 */
     fun decodeCast(story: NovelStoryEntity): StoryCast {
@@ -168,7 +189,7 @@ class NovelRepository(
         return StoryCast(
             memberIds = memberIds,
             npcs = npcs,
-            roles = resolveCastRoles(memberIds, npcs, decodeCastRoles(story)),
+            roles = resolveCastRoles(memberIds, npcs, decodeCastRoles(story), hasExplicitCastRoles(story)),
         )
     }
 
