@@ -21,8 +21,9 @@ object NovelPromptBuilder {
     /**
      * 组装 system（稳定区：故事设置不变则逐字节稳定）。
      *
-     * @param castProtagonists 主角显示名（应用角色名或自定义 NPC 名），可多个
+     * @param castProtagonists 主角显示名（应用角色名或自定义 NPC 名），**可多个也可为空**（群像）
      * @param castSupporting 配角显示名
+     * @param castRelations 主角之间的关系描述（自由文本；空 = 未填写）
      */
     fun buildSystem(
         background: String,
@@ -31,6 +32,7 @@ object NovelPromptBuilder {
         protagonistPersona: String,
         castProtagonists: List<String> = emptyList(),
         castSupporting: List<String> = emptyList(),
+        castRelations: String = "",
     ): String = buildString {
         append(STYLE_CONTRACT)
         if (background.isNotBlank()) {
@@ -55,7 +57,7 @@ object NovelPromptBuilder {
             append(protagonistName.trim())
             append("：」开头输出。")
         }
-        appendCastSection(castProtagonists, castSupporting)
+        appendCastSection(castProtagonists, castSupporting, castRelations)
         append(OutputLanguage.current())
     }
 
@@ -69,6 +71,7 @@ object NovelPromptBuilder {
     private fun StringBuilder.appendCastSection(
         castProtagonists: List<String>,
         castSupporting: List<String>,
+        castRelations: String = "",
     ) {
         val leads = castProtagonists.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
         val rests = castSupporting.map { it.trim() }.filter { it.isNotEmpty() && it !in leads }.distinct()
@@ -76,16 +79,27 @@ object NovelPromptBuilder {
 
         append("\n\n[角色阵容]")
         if (leads.isNotEmpty()) {
+            // 多主角合法（双主/群像）：叙述视角在主角间轮换，主线共同推动
             append("\n- 【主角】")
             append(leads.joinToString("、"))
-            append("：叙事以他为中心，环境、动作与心理描写尽量从他的视角展开，主线由他推动，")
-            append("每次续写都要有他的行动或感受。")
+            append("：叙事以他们为中心，环境、动作与心理描写尽量从他们的视角展开，主线由他们共同推动，")
+            append("每次续写都要有他们的行动或感受。")
         }
         if (rests.isNotEmpty()) {
             append("\n- 【配角】")
             append(rests.joinToString("、"))
             append("：服务于主线，可以推动情节、提供信息或制造冲突，但戏份克制，")
             append("不要喧宾夺主，不要替主角做决定。")
+        }
+        // 用户明确选择「不设主角」：群像推进，禁止 AI 自行虚构一个主导角色
+        if (leads.isEmpty()) {
+            append("\n- 【群像】本篇不设单一主角：各角色按人设轮流推动剧情，戏份均衡，不要虚构新的主导角色。")
+        }
+        val relations = castRelations.trim()
+        if (relations.isNotEmpty() && leads.isNotEmpty()) {
+            append("\n- 【主角关系】")
+            append(relations)
+            append("：写对手戏时体现这层关系带来的默契、张力与分寸。")
         }
     }
 
@@ -146,25 +160,29 @@ object NovelPromptBuilder {
     /**
      * 用户在编辑器里**亲自写下**的一行（含发言人身份）。
      *
-     * 为什么需要它：用户选角色发言的意图是「按这个角色的路子把剧情推下去」，
-     * 而不是「往正文里塞一行字」。只把这一行混在 [已有正文] 里，模型既可能当作
-     * 普通上下文一笔带过，也可能 OOC 地让这个角色马上改口——所以单独成段给出推进要求。
+     * 为什么需要它：用户选角色发言的意图是「让剧情顺着这句话走」，
+     * 而不是「往正文里塞一行字」。单独成段给出推进要求，模型才不会无视它
+     * 或 OOC 地替这个角色继续发挥。
      */
     data class DirectedLine(
         /** narration | user | character（与 NovelLineEntity.speakerType 同口径）。 */
         val speakerType: String,
         val speakerName: String,
         val content: String,
-        /** 该发言人在阵容里的定位：protagonist / supporting / null（未设定阵容）。 */
+        /** 该发言人在阵容里的定位：protagonist / supporting / null（未设置或群像）。 */
         val speakerRole: String? = null,
+        /** 用户用 @ 点名要回应的角色名（仅主控/我 发言时使用；未被点名者不出声）。 */
+        val mentioned: List<String> = emptyList(),
     )
 
     /**
-     * 「用户主导的一步」段落：把用户这一行变成推进剧情的起点，并按发言身份给出差异化要求。
+     * 「用户主导的一步」段落。
      *
-     * 三种身份语义不同：角色发言要贴人设（用户选 A 就按 A 的写法走）、旁白是场景指令
-     * （当作既成事实）、主控是用户自己的行动（角色按人设回应）。配角额外提醒不要抢主线，
-     * 与 system 里的 [角色阵容] 主次约定一致。
+     * 核心规则（用户需求）：**AI 绝不代写用户刚发出的那个声音**——
+     * - 用户以角色 A 发言：A 这句话是既定表态，AI 只写其他角色与旁白如何接话推进；
+     * - 用户以主控（我）发言：AI 只写其他角色的回应；@ 点名谁就只有谁出声，其他角色沉默；
+     * - 用户写旁白：当作既成事实的场景指令。
+     * 角色 A 的人设依然约束「别人如何反应」，但 A 本身不再被 AI 代笔。
      */
     private fun StringBuilder.appendDirectedLine(line: DirectedLine) {
         val content = line.content.trim()
@@ -177,16 +195,19 @@ object NovelPromptBuilder {
         append("\n推进要求：")
         when (line.speakerType) {
             "character" -> {
-                append("\n- 这一行是「")
+                append("\n- 「")
                 append(line.speakerName)
-                append("」亲口说的，是他的既定立场：他后续的言行必须严格贴合其人设")
-                append("（性格、语气、立场、说话习惯），不得 OOC、不得自相矛盾，也不要让他马上改口或反悔。")
-                append("\n- 让剧情由这一行往下走：其他角色按各自人设做出反应（赞同、反对、追问、沉默皆可），")
-                append("并引出新的行动、信息或冲突，而不是原地重复当前气氛。")
+                append("」由用户亲自扮演：接下来**绝对不要替 ")
+                append(line.speakerName)
+                append(" 写任何新的台词、动作或心理**，这一行就是他的全部表态。")
+                append("\n- 只写其他角色与旁白：他们按各自人设对这句话做出反应（赞同、反对、追问、沉默皆可），")
+                append("并引出新的行动、信息或冲突。反应的分寸要与 ")
+                append(line.speakerName)
+                append(" 的身份立场相称。")
                 if (line.speakerRole == "supporting") {
                     append("\n- 他是本作配角：推进时戏份保持克制，不要抢主角的主导权，但要让主线确实向前一步。")
                 } else if (line.speakerRole == "protagonist") {
-                    append("\n- 他是本作主角：剧情重心与描写视角围绕他展开，这一行应当成为本段推进的主轴。")
+                    append("\n- 他是本作主角：主线仍围绕他的处境展开，但此刻通过其他角色与环境来体现，不要用他的台词填充篇幅。")
                 }
             }
             "narration" -> {
@@ -194,9 +215,54 @@ object NovelPromptBuilder {
                 append("\n- 角色按各自人设对这个场景变化做出反应，推动剧情前进。")
             }
             else -> {
-                append("\n- 这一行是主控（用户本人）说的/做的：各角色按各自人设回应，围绕他的行动推进主线。")
+                append("\n- 这一行是主控（用户本人）说的/做的：接下来**绝对不要替主控写任何新的台词或行动**，")
+                append("不要输出任何以「")
+                append(line.speakerName)
+                append("：」开头的新行。")
+                if (line.mentioned.isNotEmpty()) {
+                    append("\n- 只有被 @ 点名的角色出声回应本行：")
+                    append(line.mentioned.joinToString("、"))
+                    append("。未被点名的角色保持沉默（可以以在场动作/表情存在，但不得说话推动剧情）。")
+                } else {
+                    append("\n- 各角色按各自人设回应主控，围绕他的行动推进主线。")
+                }
             }
         }
         append("\n- 不要复述用户这一行，不要解释或总结它；直接写接下来的新内容。")
+    }
+
+    /**
+     * 主控推荐回复：围绕当前剧情生成 4 条「我」可能的发言供用户挑选。
+     *
+     * 用户需求：AI 不主动替主控写台词——只有用户主动点「推荐」时才生成候选，
+     * 且生成的是**候选文本**（不落库），用户选中后以主控身份插入。
+     */
+    fun buildReplySuggestions(
+        protagonistName: String,
+        protagonistPersona: String,
+        script: List<NovelScriptParser.ScriptLine>,
+    ): String = buildString {
+        append("以下是互动小说的当前剧情，主控角色（用户本人）是「")
+        append(protagonistName.trim())
+        append("」。")
+        if (protagonistPersona.isNotBlank()) {
+            append("主控设定：")
+            append(protagonistPersona.trim())
+            append("。")
+        }
+        append("\n\n[已有剧情]")
+        script.takeLast(AppConfig.Novel.MAX_CONTEXT_LINES).forEach {
+            append("\n")
+            append(it.speakerName)
+            append("：")
+            append(it.content)
+        }
+        append("\n\n请站在主控的视角，生成 4 条「")
+        append(protagonistName)
+        append("」接下来最可能的发言：")
+        append("\n- 每条一行，以「1.」「2.」「3.」「4.」开头，编号后直接是要说的话")
+        append("\n- 每条不超过 40 字，第一人称，贴合主控设定与当前剧情情境")
+        append("\n- 4 条风格要有差异（如推进剧情 / 谨慎试探 / 幽默缓和 / 强硬表态）")
+        append("\n- 只输出这 4 条，不要解释，不要写其他角色的反应，不要续写剧情")
     }
 }

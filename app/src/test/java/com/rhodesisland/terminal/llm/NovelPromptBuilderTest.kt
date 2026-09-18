@@ -85,11 +85,11 @@ class NovelPromptBuilderTest {
         // 用户这一行要单独成段，而不是只混在正文里
         assertTrue(user.contains("[用户刚写下的一行"))
         assertTrue(user.contains("阿米娅：我们该出发了"))
-        // 核心要求：贴人设、不 OOC、不马上改口
-        assertTrue(user.contains("人设"))
-        assertTrue(user.contains("OOC"))
+        // 核心要求：AI 不代写用户亲自扮演的角色，只写其他角色与旁白的反应
+        assertTrue(user.contains("由用户亲自扮演"))
+        assertTrue(user.contains("绝对不要替"))
         assertTrue(user.contains("不要复述"))
-        // 主角定位：主轴围绕他展开
+        // 主角定位：主线围绕他的处境展开
         assertTrue(user.contains("主角"))
         // 明确「从哪一行之后接着写」，避免把用户这行当上下文复述
         assertTrue(user.contains("之后接着写"))
@@ -131,5 +131,23 @@ class NovelPromptBuilderTest {
         val user = NovelPromptBuilder.buildUser("t", "", "", "", emptyList())
         assertFalse(user.contains("[用户刚写下的一行"))
         assertTrue(user.contains("从新内容开始"))
+    }
+
+    @Test
+    fun user_directedLine_withMentions_restrictsResponders() {
+        // 主控发言 + @ 点名：只有被点名的角色回应，AI 绝不代写主控台词
+        val user = NovelPromptBuilder.buildUser(
+            chapterTitle = "第 1 话", summary = "", opening = "", requirements = "", script = emptyList(),
+            directed = NovelPromptBuilder.DirectedLine(
+                speakerType = NovelScriptParser.TYPE_USER,
+                speakerName = "博士",
+                content = "你们谁去查一下？@甲2",
+                mentioned = listOf("甲2"),
+            ),
+        )
+        assertTrue(user.contains("只有被 @ 点名的角色"))
+        assertTrue(user.contains("甲2"))
+        assertTrue(user.contains("绝对不要替主控"))
+        assertTrue(user.contains("不要输出任何以「博士：」开头的新行"))
     }
 }

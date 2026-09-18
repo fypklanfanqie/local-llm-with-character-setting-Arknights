@@ -11,6 +11,7 @@ import com.rhodesisland.terminal.data.local.NovelLineEntity
 import com.rhodesisland.terminal.data.local.NovelStoryEntity
 import com.rhodesisland.terminal.data.model.ChatMessage
 import com.rhodesisland.terminal.data.model.ChatProviderType
+import com.rhodesisland.terminal.data.remote.ChatMessageDto
 import com.rhodesisland.terminal.data.repository.NovelRepository
 import com.rhodesisland.terminal.llm.NovelPromptBuilder
 import com.rhodesisland.terminal.llm.NovelScriptParser
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * 小说模式 - 故事列表页 VM：故事流 + 新建故事。
@@ -45,11 +47,14 @@ class NovelHomeViewModel(
         protagonistName: String,
         protagonistPersona: String,
         castRoles: Map<String, String> = emptyMap(),
+        castRelations: String = "",
         onCreated: (Long) -> Unit,
     ) {
         viewModelScope.launch {
             try {
-                val id = repo.createStory(title, background, memberIds, npcs, protagonistName, protagonistPersona, castRoles)
+                val id = repo.createStory(
+                    title, background, memberIds, npcs, protagonistName, protagonistPersona, castRoles, castRelations,
+                )
                 onCreated(id)
             } catch (e: Exception) {
                 errorMessage.value = e.message ?: L10nRuntime.t("创建失败")
@@ -121,9 +126,10 @@ class NovelStoryViewModel(
         memberIds: List<String>,
         npcs: List<NovelRepository.CustomNpc>,
         castRoles: Map<String, String>,
+        castRelations: String = "",
     ) {
         viewModelScope.launch {
-            runCatching { repo.updateStoryCast(storyId, memberIds, npcs, castRoles) }
+            runCatching { repo.updateStoryCast(storyId, memberIds, npcs, castRoles, castRelations) }
                 .onFailure { castError.value = it.message ?: L10nRuntime.t("保存失败") }
         }
     }
@@ -333,6 +339,11 @@ class NovelEditorViewModel(
                         hint.speakerName in cast.supporting() -> "supporting"
                         else -> null
                     },
+                    // 主控发言里用 @ 点名的角色：只有他们出声回应（其他人沉默）
+                    mentioned = if (hint.speakerType != "user") emptyList() else extractMentions(
+                        hint.content,
+                        speakerNames,
+                    ),
                 )
 
                 val existingLines = repo.getLines(chapterId)
@@ -350,6 +361,7 @@ class NovelEditorViewModel(
                                 protagonistPersona = story.protagonistPersona,
                                 castProtagonists = cast.protagonists(),
                                 castSupporting = cast.supporting(),
+                                castRelations = story.castRelations,
                             ),
                         ),
                     )
@@ -372,7 +384,21 @@ class NovelEditorViewModel(
                 val raw = provider.chat(apiMessages, onChunk = { accumulated ->
                     generating.value = accumulated to true
                 })
-                val parsed = NovelScriptParser.parse(raw, speakerNames, protagonistName)
+                val parsedAll = NovelScriptParser.parse(raw, speakerNames, protagonistName)
+                // 兜底过滤：提示词禁止之外，解析后硬性剔除「AI 替用户代笔」的行——
+                // 用户发言的角色 / 主控（我）在本次续写里不允许出现新台词；@ 点名时未点名者也不留。
+                val parsed = if (directedResolved == null) parsedAll else parsedAll.filter { line ->
+                    when (directedResolved.speakerType) {
+                        "character" -> line.speakerName != directedResolved.speakerName
+                        "user" -> when {
+                            line.speakerName == protagonistName -> false
+                            directedResolved.mentioned.isEmpty() -> true
+                            line.speakerType == NovelScriptParser.TYPE_NARRATION -> true
+                            else -> line.speakerName in directedResolved.mentioned
+                        }
+                        else -> true
+                    }
+                }
                 if (parsed.isEmpty()) throw IllegalStateException(L10nRuntime.t("AI 没有产出有效剧情，请重试"))
                 // 解析行落库：已知角色名回填 characterId
                 val entities = parsed.map { line ->
@@ -399,11 +425,115 @@ class NovelEditorViewModel(
         }
     }
 
+    /** 从用户输入里提取 @ 点名的角色名（按阵容名单精确匹配，未匹配到的忽略）。 */
+    private fun extractMentions(text: String, speakerNames: Set<String>): List<String> =
+        Regex("@([^\\s@，。！？,!?；;：:]+)").findAll(text)
+            .mapNotNull { m -> speakerNames.firstOrNull { it == m.groupValues[1].trim() } }
+            .distinct()
+            .toList()
+
     /** 停止续写（保留已生成部分不落库——与聊天停止语义一致：半截内容不静默入库）。 */
     fun stopGenerating() {
         generateJob?.cancel()
         generateJob = null
         generating.value = "" to false
+    }
+
+    // ===== 推荐回复（用户主动点击才生成；AI 不主动替主控写台词）=====
+
+    private val replySuggestions = MutableStateFlow<List<String>>(emptyList())
+
+    /** 当前可选择的推荐回复（非空时编辑器弹选择框）。 */
+    val suggestions: StateFlow<List<String>> = replySuggestions
+
+    private val suggesting = MutableStateFlow(false)
+
+    /** 推荐回复生成中。 */
+    val suggestionsLoading: StateFlow<Boolean> = suggesting
+
+    private var suggestJob: Job? = null
+
+    /**
+     * 生成 4 条主控可能的发言供用户挑选。
+     *
+     * 这是用户主动触发的例外路径：平时 AI 不代写主控；这里生成的也只是**候选文本**，
+     * 不直接落库——用户选中某条后经 [useSuggestion] 以主控身份插入。
+     */
+    fun suggestReplies() {
+        if (suggestJob?.isActive == true) return
+        suggestJob = viewModelScope.launch {
+            if (!container.settingsRepository.isCloudApiReady()) {
+                errorMessage.value = L10nRuntime.t("请先在设置中配置云端 AI API")
+                return@launch
+            }
+            suggesting.value = true
+            try {
+                val chapter = repo.getChapter(chapterId)
+                    ?: throw IllegalStateException(L10nRuntime.t("章节不存在"))
+                val story = repo.getStory(chapter.storyId)
+                    ?: throw IllegalStateException(L10nRuntime.t("故事不存在"))
+                if (story.protagonistName.isBlank()) {
+                    errorMessage.value = L10nRuntime.t("请先在阵容里设置主控名字，才能生成推荐回复")
+                    return@launch
+                }
+                val script = repo.getLines(chapterId).map {
+                    NovelScriptParser.ScriptLine(it.speakerType, it.speakerName, it.characterId, it.content)
+                }
+                val cfg = container.settingsRepository.getApiConfigNow()
+                val raw = container.directLlmClient.chatOnce(
+                    baseUrl = cfg.baseUrl,
+                    apiKey = cfg.apiKey,
+                    model = cfg.model,
+                    messages = listOf(
+                        ChatMessageDto(
+                            "user",
+                            JsonPrimitive(
+                                NovelPromptBuilder.buildReplySuggestions(
+                                    protagonistName = story.protagonistName,
+                                    protagonistPersona = story.protagonistPersona,
+                                    script = script,
+                                ),
+                            ),
+                        ),
+                    ),
+                )
+                val clean = raw.replace(Regex("<think>[\\s\\S]*?</think>"), "").trim()
+                val options = Regex("(?m)^\\s*[1-9一二三四][.、．）)]\\s*(.+)$").findAll(clean)
+                    .map { it.groupValues[1].trim() }
+                    .filter { it.isNotBlank() }
+                    .take(4)
+                    .toList()
+                replySuggestions.value = options
+                if (options.isEmpty()) {
+                    errorMessage.value = L10nRuntime.t("没有生成可用的推荐回复，请重试")
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                errorMessage.value = e.message ?: L10nRuntime.t("生成失败，请稍后再试")
+            } finally {
+                suggesting.value = false
+            }
+        }
+    }
+
+    /** 用户选中某条推荐：以主控身份插入（走 addLine，遵循自动续写开关）。 */
+    fun useSuggestion(text: String, continueAfter: Boolean) {
+        replySuggestions.value = emptyList()
+        viewModelScope.launch {
+            val chapter = repo.getChapter(chapterId)
+            val story = chapter?.let { repo.getStory(it.storyId) }
+            val name = story?.protagonistName.orEmpty()
+            if (name.isBlank()) {
+                errorMessage.value = L10nRuntime.t("请先在阵容里设置主控名字")
+                return@launch
+            }
+            addLine(speakerType = "user", speakerName = name, characterId = null, text = text, continueAfter = continueAfter)
+        }
+    }
+
+    fun dismissSuggestions() {
+        replySuggestions.value = emptyList()
     }
 
     /**
@@ -416,12 +546,13 @@ class NovelEditorViewModel(
         memberIds: List<String>,
         npcs: List<NovelRepository.CustomNpc>,
         castRoles: Map<String, String>,
+        castRelations: String = "",
     ) {
         viewModelScope.launch {
             runCatching {
                 val chapter = repo.getChapter(chapterId)
                     ?: throw IllegalStateException(L10nRuntime.t("章节不存在"))
-                repo.updateStoryCast(chapter.storyId, memberIds, npcs, castRoles)
+                repo.updateStoryCast(chapter.storyId, memberIds, npcs, castRoles, castRelations)
             }.onFailure { errorMessage.value = it.message ?: L10nRuntime.t("保存失败") }
         }
     }
