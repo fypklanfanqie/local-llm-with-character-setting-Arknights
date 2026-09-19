@@ -199,8 +199,12 @@ private val BOTTOM_BUTTON_COLOR = Color(0xCC333333)
 const val CHAT_LIST_TAG = "chat_message_list"
 
 /**
- * 把一条消息拆成渲染气泡：仅单聊开启分句、助手消息已完成、且全部分段都是纯文本时才拆
- * （含代码块/公式/表格的 Markdown 消息拆开会破坏排版；流式中的消息不拆）。
+ * 把一条消息拆成渲染气泡：仅单聊开启分句、助手消息已完成时才拆。
+ *
+ * 深度思考兼容：segments 里的 [MessageSegment.Think]（可折叠推理块）**不参与拆分**，
+ * 原样挂在第一个气泡上——拆的只是正文文本。否则思考块的存在会让整条消息被排除，
+ * 出现「开深度思考就不能分句」的不一致（用户实测反馈）。
+ * 含代码块/公式/表格等富分段的 Markdown 消息拆开会破坏排版，仍不拆；流式中的消息不拆。
  * 只有一个气泡时返回单元素列表，渲染与不拆完全一致。
  */
 private fun splitReplyBubbles(msg: DisplayMessage): List<DisplayMessage> {
@@ -208,14 +212,22 @@ private fun splitReplyBubbles(msg: DisplayMessage): List<DisplayMessage> {
         !msg.isStreaming &&
         msg.completionState == MessageCompletionState.COMPLETE &&
         msg.segments.isNotEmpty() &&
-        msg.segments.all { it is MessageSegment.Text }
+        msg.segments.all { it is MessageSegment.Text || it is MessageSegment.Think }
     if (!splittable) return listOf(msg)
-    val parts = ReplyBubbleSplitter.split(msg.content)
+    // 思考块之外的可见正文：拆分只作用于它
+    val visibleText = msg.segments.filterIsInstance<MessageSegment.Text>()
+        .joinToString("") { it.content }
+    val parts = ReplyBubbleSplitter.split(visibleText)
     if (parts.size <= 1) return listOf(msg)
-    return parts.map { part ->
+    val thinkSegs = msg.segments.filterIsInstance<MessageSegment.Think>()
+    return parts.mapIndexed { index, part ->
         msg.copy(
             content = part,
-            segments = listOf(MessageSegment.Text(part)),
+            segments = buildList {
+                // 思考块只挂第一个气泡：折叠推理 UI 保留且不重复
+                if (index == 0) addAll(thinkSegs)
+                add(MessageSegment.Text(part))
+            },
         )
     }
 }
